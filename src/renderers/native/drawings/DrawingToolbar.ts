@@ -121,20 +121,12 @@ export class DrawingToolbar {
     private styleRoot(): void {
         const t = this.theme;
         applyChromeTokens(this.root, t);
-        // Docked (default): pinned over the renderer's left gutter — width must match the
-        // host's gutter reservation. Static: a normal column child (a workspace's
-        // shared bar) — the host's own layout places it. Collapsed, the bar narrows to a
-        // slim strip carrying only the expand chevron (the stylesheet hides the rest).
         const width = this.collapsed ? TOOLBAR_COLLAPSED_WIDTH : this.width;
-        this.root.dataset.collapsed = this.collapsed ? '1' : '';
-        const placement = this.dock === 'absolute'
-            ? `position:absolute;left:0;top:0;height:100%;width:${width}px;z-index:21;`
-            : `position:relative;height:100%;width:${width}px;flex:none;`;
-        this.root.style.cssText =
-            placement +
-            `display:${this.visible ? 'flex' : 'none'};flex-direction:column;gap:4px;` +
-            `padding:6px 0;box-sizing:border-box;background:${t.background};border-right:1px solid ${this.borderColor};color:var(--vela-fg-muted);` + // no h-padding → buttons span the bar width
-            `pointer-events:auto;overflow-y:auto;overflow-x:hidden;`;
+        this.root.dataset.collapsed = this.collapsed ? "1" : "";
+        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const leftPx = isLeft ? 64 : 0;
+        const placement = this.dock === "absolute" ? `position:absolute;left:${leftPx}px;top:0;height:100%;width:${width}px;z-index:21;` : `position:relative;height:100%;width:${width}px;flex:none;`;
+        this.root.style.cssText = placement + `display:${this.visible ? "flex" : "none"};flex-direction:column;gap:4px;padding:6px 0;box-sizing:border-box;background:${t.background};border-right:1px solid ${this.borderColor};color:var(--vela-fg-muted);pointer-events:auto;overflow-y:auto;overflow-x:hidden;`;
     }
 
     setDefinition(def: ToolbarDefinition): void {

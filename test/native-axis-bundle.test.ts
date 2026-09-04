@@ -69,21 +69,26 @@ describe('percent-scale ticks + labels (item 14a)', () => {
     });
 });
 
-describe('timezone helpers (item 14d)', () => {
-    it('UTC offset is zero', () => {
-        expect(tzOffsetMs(Date.UTC(2024, 0, 15, 12), 'UTC')).toBe(0);
+describe('timezone helpers (item 14d) — Aether contract', () => {
+    // AetherTrade's bar store carries New York WALL-CLOCK time as epoch seconds (09:30 ET is the
+    // epoch whose UTC fields read 09:30). The fork therefore treats America/New_York as the zero
+    // offset and expresses every other zone RELATIVE to New York, not to UTC.
+    const H = 3600000;
+    it('America/New_York and an empty zone are zero in every season', () => {
+        expect(tzOffsetMs(Date.UTC(2024, 0, 15, 12), 'America/New_York')).toBe(0);
+        expect(tzOffsetMs(Date.UTC(2024, 6, 15, 12), 'America/New_York')).toBe(0);
         expect(tzOffsetMs(Date.UTC(2024, 0, 15, 12), '')).toBe(0);
     });
 
-    it('America/New_York is -5h in winter (EST), -4h in summer (EDT)', () => {
-        const H = 3600000;
-        expect(tzOffsetMs(Date.UTC(2024, 0, 15, 12), 'America/New_York')).toBe(-5 * H);
-        expect(tzOffsetMs(Date.UTC(2024, 6, 15, 12), 'America/New_York')).toBe(-4 * H);
+    it('other zones are relative to New York: UTC is +5h in winter (EST), +4h in summer (EDT)', () => {
+        expect(tzOffsetMs(Date.UTC(2024, 0, 15, 12), 'UTC')).toBe(5 * H);
+        expect(tzOffsetMs(Date.UTC(2024, 6, 15, 12), 'UTC')).toBe(4 * H);
+        expect(tzOffsetMs(Date.UTC(2024, 0, 15, 12), 'Asia/Tokyo')).toBe(14 * H);
     });
 
-    it('zonedDate reads local wall-clock via getUTC* accessors', () => {
-        const d = zonedDate(Date.UTC(2024, 0, 15, 12), 'America/New_York'); // 12:00Z → 07:00 EST
-        expect(d.getUTCHours()).toBe(7);
+    it('zonedDate leaves a New York epoch untouched (it already IS wall-clock)', () => {
+        const d = zonedDate(Date.UTC(2024, 0, 15, 12), 'America/New_York');
+        expect(d.getUTCHours()).toBe(12);
         expect(d.getUTCDate()).toBe(15);
     });
 

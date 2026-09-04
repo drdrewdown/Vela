@@ -25,7 +25,7 @@ export const MAX_BAR_SPACING = 1000;
 
 /** Default zoom/pan before any data is loaded. */
 export function defaultViewport(): ViewportState {
-    return { barSpacing: 8, rightOffset: 6 };
+    return { barSpacing: 8, rightOffset: 20 };
 }
 
 export function clampBarSpacing(spacing: number): number {

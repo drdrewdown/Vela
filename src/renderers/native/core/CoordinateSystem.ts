@@ -32,6 +32,8 @@ export interface PaneBounds {
 export class CoordinateSystem {
     private widthPx = 0;
     private dataHeightPx = 0;
+    /** Aether: left price-scale gutter width (px) when the scale is docked on the left; 0 otherwise. */
+    leftOffsetPx = 0;
     private devicePixelRatio = 1;
     private viewport: ViewportState = defaultViewport();
     private pitchScale = 1;
@@ -39,10 +41,11 @@ export class CoordinateSystem {
     private intervalMs = 0;
 
     // ── geometry inputs (owned by the renderer) ──
-    setSize(width: number, dataHeight: number, dpr: number): void {
+    setSize(width: number, dataHeight: number, dpr: number, leftOffset = 0): void {
         this.widthPx = width;
         this.dataHeightPx = dataHeight;
         this.devicePixelRatio = dpr > 0 ? dpr : 1;
+        this.leftOffsetPx = leftOffset;
     }
 
     setBars(times: readonly number[]): void {
@@ -130,11 +133,13 @@ export class CoordinateSystem {
 
     // ── X axis: logical bar index ↔ pixel (via the effective pitch = zoom × spacing multiplier) ──
     logicalToX(logical: number): number {
-        return this.widthPx - (this.rightEdgeLogical - logical) * this.pxPerBar();
+        const leftOff = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left" && this.leftOffsetPx ? this.leftOffsetPx : 0;
+        return leftOff + this.widthPx - (this.rightEdgeLogical - logical) * this.pxPerBar();
     }
 
     xToLogical(x: number): number {
-        return this.rightEdgeLogical - (this.widthPx - x) / this.pxPerBar();
+        const leftOff = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left" && this.leftOffsetPx ? this.leftOffsetPx : 0;
+        return this.rightEdgeLogical - (this.widthPx - (x - leftOff)) / this.pxPerBar();
     }
 
     // ── bar time ↔ logical ↔ pixel ──

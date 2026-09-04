@@ -57,7 +57,7 @@ export class IndicatorDrawingSlices {
      */
     prepare(scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, ref: HTMLCanvasElement): Map<string, DrawingSlice[]> {
         this.tips = [];
-        const out = new Map<string, DrawingSlice[]>();
+        const out = /* @__PURE__ */ new Map();
         if (ref.width === 0 || ref.height === 0) {
             this.sliceCache.clear();
             return out;
@@ -68,35 +68,30 @@ export class IndicatorDrawingSlices {
                 const b = scene.bars[Math.round(logical)];
                 return b ? { high: b.high, low: b.low } : null;
             },
-            theme,
+            theme
         });
         const dpr = coords.dpr;
         const dataW = coords.width;
-
-        // Bucket the models' drawing sets by `paneId|beforeZ`. Own models iterate in
-        // ascending z (their relative stacking inside a shared canvas), force_overlay
-        // sets append last — they paint over the price pane's whole pile, as before.
-        const buckets = new Map<string, { paneId: string; beforeZ: number; entries: SliceEntry[] }>();
-        const add = (paneId: string, beforeZ: number, entry: SliceEntry): void => {
+        const buckets = /* @__PURE__ */ new Map();
+        const add = (paneId: string, beforeZ: number, entry: any) => {
             const key = `${paneId}|${beforeZ}`;
             const bucket = buckets.get(key);
             if (bucket) bucket.entries.push(entry);
             else buckets.set(key, { paneId, beforeZ, entries: [entry] });
         };
         for (const pane of scene.orderedPanes()) {
-            if (pane.collapsed) continue; // collapsed strip: legend only, no drawings
+            if (pane.collapsed) continue;
             const boundaries = scene.seriesBoundaries(pane.id);
             for (const m of scene.orderedIndicatorsForPane(pane.id)) {
                 const set = modelDrawingSet(m, false);
                 const tables = (m.tables ?? []).filter((t) => !t.overlay);
                 if (drawingSetEmpty(set) && tables.length === 0) continue;
-                // A merged (own-scale) indicator's drawings follow its own scale column.
                 const sc = scene.scaleFor(m, pane);
                 const mp = sc === pane.scale ? pane : { ...pane, scale: sc };
                 const beforeZ = indicatorSliceKey(scene.zOf(m.id), boundaries);
                 add(pane.id, beforeZ, { set, tables, pane: mp, indexOffset: scene.offsetOf(m.id) });
             }
-            if (pane.kind === 'price') {
+            if (pane.kind === "price") {
                 for (const m of scene.indicators.values()) {
                     const set = modelDrawingSet(m, true);
                     const tables = (m.tables ?? []).filter((t) => t.overlay === true);
@@ -105,18 +100,47 @@ export class IndicatorDrawingSlices {
                 }
             }
         }
-
+        if (typeof window === "undefined" || window.__VELA_LABEL_MERGE__ !== false) {
+            for (const pane of scene.orderedPanes()) {
+                const allPaneLabels = [];
+                for (const [bKey, b] of buckets) {
+                    if (b.paneId === pane.id) {
+                        for (const e of b.entries) {
+                            if (e.set && e.set.labels && e.set.labels.length > 0) {
+                                allPaneLabels.push(...e.set.labels);
+                                e.set = { ...e.set, labels: [] };
+                            }
+                        }
+                    }
+                }
+                if (allPaneLabels.length > 0) {
+                    const topKey = `${pane.id}|Infinity`;
+                    const topBucket = buckets.get(topKey);
+                    if (topBucket && topBucket.entries.length > 0) {
+                        const lastEntry = topBucket.entries[topBucket.entries.length - 1];
+                        lastEntry.set = { ...lastEntry.set, labels: [...(lastEntry.set.labels || []), ...allPaneLabels] };
+                    } else {
+                        add(pane.id, Infinity, {
+                            set: { lines: [], boxes: [], labels: allPaneLabels, polylines: [], linefills: [] },
+                            tables: [],
+                            pane,
+                            indexOffset: 0
+                        });
+                    }
+                }
+            }
+        }
         for (const [key, { paneId, beforeZ, entries }] of buckets) {
             let canvas = this.sliceCache.get(key);
             if (!canvas) {
-                canvas = document.createElement('canvas');
+                canvas = document.createElement("canvas");
                 this.sliceCache.set(key, canvas);
             }
             if (canvas.width !== ref.width || canvas.height !== ref.height) {
                 canvas.width = ref.width;
                 canvas.height = ref.height;
             }
-            const ctx = canvas.getContext('2d');
+            const ctx = canvas.getContext("2d");
             if (!ctx) continue;
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
@@ -125,23 +149,27 @@ export class IndicatorDrawingSlices {
             slices.push({ beforeZ, canvas });
             out.set(paneId, slices);
         }
-        for (const key of [...this.sliceCache.keys()]) if (!buckets.has(key)) this.sliceCache.delete(key); // drop stale layers
-        for (const slices of out.values()) slices.sort((a, b) => a.beforeZ - b.beforeZ);
+        for (const key of [...this.sliceCache.keys()]) if (!buckets.has(key)) this.sliceCache.delete(key);
+        for (const slices of out.values()) slices.sort((a: any, b: any) => a.beforeZ - b.beforeZ);
         return out;
     }
 
     private paintEntry(ctx: CanvasRenderingContext2D, e: SliceEntry, coords: CoordinateSystem, dataW: number, theme: VelaTheme): void {
+        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const fullW = ctx.canvas.width / coords.dpr;
+        const axisW = fullW - dataW;
+        const clipX = isLeft ? axisW : 0;
         const { pane } = e;
         const paneTips: LabelTipRegion[] = [];
         ctx.save();
         ctx.translate(0, pane.bounds.top); // pane-relative space (drawings use [0, H])
         ctx.beginPath();
-        ctx.rect(0, 0, dataW, pane.bounds.height);
+        ctx.rect(clipX, 0, dataW, pane.bounds.height);
         ctx.clip();
         this.drawScene.setSet(e.set, e.indexOffset);
         this.drawScene.render(
             ctx,
-            dataW,
+            isLeft ? fullW : dataW,
             pane.bounds.height,
             (l) => coords.logicalToX(l),
             (price) => coords.priceToY(price, pane.scale, pane.bounds) - pane.bounds.top,
@@ -179,6 +207,6 @@ export function mergeSlices(
     const out = new Map<string, DrawingSlice[]>();
     for (const [paneId, slices] of indicator) out.set(paneId, [...slices]);
     for (const [paneId, slices] of user) out.set(paneId, [...(out.get(paneId) ?? []), ...slices]);
-    for (const slices of out.values()) slices.sort((a, b) => a.beforeZ - b.beforeZ); // stable: ties keep indicator-first
+    for (const slices of out.values()) slices.sort((a: any, b: any) => a.beforeZ - b.beforeZ); // stable: ties keep indicator-first
     return out;
 }

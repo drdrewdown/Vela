@@ -15,8 +15,8 @@ export const ACCENT_BRIGHT = '#38c0fd';
 
 /** Bullish/bearish reference pair — the dark theme's candle colors, reused wherever a
  *  fixed directional color is needed outside a theme (volume profiles, baseline defaults). */
-export const BULLISH = '#089981';
-export const BEARISH = '#f23645';
+export const BULLISH = "#5aa1ff";
+export const BEARISH = "#ff709a";
 
 /** Neutral gray for de-emphasized geometry (unstyled level lines, gann 1/1 diagonals). */
 export const NEUTRAL = '#787b86';

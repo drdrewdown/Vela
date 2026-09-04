@@ -1193,22 +1193,25 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
      * that never mounts (mirrors addIndicator). Built-in types: `'volume'`, `'vpvr'`.
      */
     addNativeIndicator(type: string, options: { inputs?: Record<string, InputValue> } = {}): IndicatorHandle {
-        const existing = this.registry.all().find((r) => r.native?.type === type);
-        if (existing) return this.handles.get(existing.id) ?? new IndicatorHandleImpl(existing.id, existing.title, this);
-
+        const isSingle = type === "volume" || type === "vpvr";
+        if (isSingle) {
+            const existing = this.registry.all().find((r) => r.native?.type === type);
+            if (existing) return this.handles.get(existing.id) ?? new IndicatorHandleImpl(existing.id, existing.title, this);
+        }
         const descriptor = getNativeIndicator(type);
-        const id = this.registry.nextId('native');
+        const id = this.registry.nextId("native");
         const title = descriptor?.title ?? type;
         const handle = new IndicatorHandleImpl(id, title, this);
         this.handles.set(id, handle);
         if (!descriptor) {
-            console.warn(`[vela] addNativeIndicator("${type}") — no native indicator registered for this type.`);
+            console.warn(`[vela] addNativeIndicator("${type}") \u2014 no native indicator registered for this type.`);
             return handle;
         }
-        const inputValues = { ...descriptor.defaultInputs(), ...(options.inputs ?? {}) };
+        const inputValues = { ...descriptor.defaultInputs(), ...options.inputs ?? {} };
         this.registry.add({ id, title, source: type, inputValues, propValues: {}, native: { type, instance: descriptor.create(), descriptor } });
         handle.setSchema(descriptor.inputsSchema());
         void this.startNativeIndicator(id, handle);
+        if (typeof window !== "undefined" && window.__AETHER_SYNC_INDICATORS__) window.__AETHER_SYNC_INDICATORS__(this);
         return handle;
     }
 
@@ -1233,6 +1236,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
             nativeIndicatorDescriptors().map(async (d) => ({
                 type: d.type,
                 title: d.title,
+                category: d.category || "General",
                 supported: await this.isNativeSupported(d, symbol),
                 present: present.has(d.type),
                 beta: d.beta,
@@ -1272,6 +1276,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
         if (record.session) record.session.update(record.inputValues);
         else if (record.native && !record.hidden) record.native.instance.setInputs(record.inputValues);
         this.events.emit('indicator:inputs', { id });
+        if (typeof window !== "undefined" && window.__AETHER_SYNC_INDICATORS__) window.__AETHER_SYNC_INDICATORS__(this);
     }
 
     /** IndicatorController: the CURRENT stored input values (defaults merged with edits). */
@@ -1298,6 +1303,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
         record.pendingCause = 'inputs';
         record.session.update(record.inputValues, record.propValues);
         this.events.emit('indicator:inputs', { id });
+        if (typeof window !== "undefined" && window.__AETHER_SYNC_INDICATORS__) window.__AETHER_SYNC_INDICATORS__(this);
     }
 
     /** IndicatorController: tear down an indicator and (if now empty) its pane. */
@@ -1330,6 +1336,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
             this.events.emit('pane:changed', undefined);
         }
         this.events.emit('indicator:removed', { id });
+        if (typeof window !== "undefined" && window.__AETHER_SYNC_INDICATORS__) window.__AETHER_SYNC_INDICATORS__(this);
     }
 
     /**

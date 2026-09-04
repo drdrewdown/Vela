@@ -88,9 +88,9 @@ function lineCoversWindow(a: number, b: number, extend: DrawingExtend, lo: numbe
     const minX = Math.min(a, b);
     const maxX = Math.max(a, b);
     if (a === b) return a >= lo && a <= hi;
-    if (extend === 'both') return true;
-    if (extend === 'left') return maxX >= lo;
-    if (extend === 'right') return minX <= hi;
+    if (extend === "both") return true;
+    if (extend === "left") return maxX >= lo;
+    if (extend === "right") return minX <= hi;
     return maxX >= lo && minX <= hi;
 }
 
@@ -145,6 +145,9 @@ export class DrawingSceneRenderer {
         this.tipRegions = [];
         if (this.isEmpty()) return;
         ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, W, H);
+        ctx.clip();
         this.drawLinefills(ctx, W, H, xOf, yOf);
         this.drawBoxes(ctx, W, H, xOf, yOf);
         this.drawPolylines(ctx, W, xOf, yOf);
@@ -249,14 +252,11 @@ export class DrawingSceneRenderer {
             const y1 = yOf(ln.y1);
             const y2 = yOf(ln.y2);
             if (y1 === null || y2 === null) continue;
-
-            const extL = ln.extend === 'left' || ln.extend === 'both';
-            const extR = ln.extend === 'right' || ln.extend === 'both';
+            const extL = ln.extend === "left" || ln.extend === "both";
+            const extR = ln.extend === "right" || ln.extend === "both";
             if (!extL && !extR && (Math.max(x1, x2) < 0 || Math.min(x1, x2) > W)) continue;
-
             const [ax, ay, bx, by] = extendEndpoints(x1, y1, x2, y2, ln.extend, W, H);
             const color = ln.color ?? this.deps.theme.textColor;
-
             ctx.beginPath();
             ctx.moveTo(ax, ay);
             ctx.lineTo(bx, by);
@@ -265,14 +265,20 @@ export class DrawingSceneRenderer {
             ctx.setLineDash(dashPattern(ln.style, ln.width));
             ctx.stroke();
             ctx.setLineDash([]);
-
+            if (ln.tooltip) {
+                const minX = Math.min(ax, bx);
+                const maxX = Math.max(ax, bx);
+                const minY = Math.min(ay, by) - 4;
+                const maxY = Math.max(ay, by) + 4;
+                this.tipRegions.push({ left: minX, right: maxX, top: minY, bottom: maxY, text: ln.tooltip });
+            }
             const p2Right = x2 >= x1;
             if (ln.arrowRight) {
-                const tip = (p2Right ? extR : extL) ? (p2Right ? [bx, by] : [ax, ay]) : [x2, y2];
+                const tip = (p2Right ? extR : extL) ? p2Right ? [bx, by] : [ax, ay] : [x2, y2];
                 this.drawArrow(ctx, tip[0]!, tip[1]!, x1, y1, ln.width, color);
             }
             if (ln.arrowLeft) {
-                const tip = (p2Right ? extL : extR) ? (p2Right ? [ax, ay] : [bx, by]) : [x1, y1];
+                const tip = (p2Right ? extL : extR) ? p2Right ? [ax, ay] : [bx, by] : [x1, y1];
                 this.drawArrow(ctx, tip[0]!, tip[1]!, x2, y2, ln.width, color);
             }
         }
@@ -339,7 +345,6 @@ export class DrawingSceneRenderer {
                 if (p[0] > maxX) maxX = p[0];
             }
             if (maxX < 0 || minX > W) continue;
-
             ctx.beginPath();
             if (pl.curved) this.curvedPath(ctx, pts, pl.closed);
             else {
@@ -347,7 +352,6 @@ export class DrawingSceneRenderer {
                 for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i]![0], pts[i]![1]);
             }
             if (pl.closed) ctx.closePath();
-
             if (pl.fillColor) {
                 ctx.fillStyle = pl.fillColor;
                 ctx.fill();
@@ -358,12 +362,11 @@ export class DrawingSceneRenderer {
                 ctx.setLineDash(dashPattern(pl.lineStyle, pl.lineWidth));
                 ctx.stroke();
                 ctx.setLineDash([]);
-
                 if (pl.arrowLeft || pl.arrowRight) {
                     const segs = pl.closed ? pts.length : pts.length - 1;
                     for (let i = 0; i < segs; i += 1) {
-                        const a = pts[i]!;
-                        const b = pts[(i + 1) % pts.length]!;
+                        const a = pts[i];
+                        const b = pts[(i + 1) % pts.length];
                         if (pl.arrowRight) this.drawArrow(ctx, b[0], b[1], a[0], a[1], pl.lineWidth, pl.lineColor);
                         if (pl.arrowLeft) this.drawArrow(ctx, a[0], a[1], b[0], b[1], pl.lineWidth, pl.lineColor);
                     }
@@ -425,6 +428,7 @@ export class DrawingSceneRenderer {
                 ctx.setLineDash([]);
             }
             if (bx.text) this.drawBoxText(ctx, bx, left, top, w, h);
+            if (bx.tooltip) this.tipRegions.push({ left, top, right, bottom, text: bx.tooltip });
         }
     }
 
@@ -510,27 +514,170 @@ export class DrawingSceneRenderer {
 
     // ── labels ───────────────────────────────────────────────────────────────
     private drawLabels(ctx: CanvasRenderingContext2D, W: number, H: number, xOf: (l: number) => number, yOf: (p: number) => number | null): void {
+        const rawList = [];
         for (const lb of this.set.labels) {
-            const px = xOf(this.logicalOf(lb.xloc, lb.x));
-            if (px < -50 || px > W + 50) continue;
-
-            let py: number | null;
-            if (lb.yloc === 'price') {
+            let px = xOf(this.logicalOf(lb.xloc, lb.x));
+            let py;
+            if (lb.yloc === "price") {
                 py = yOf(lb.y);
-            } else if (lb.yloc === 'top') {
+            } else if (lb.yloc === "top") {
                 py = 14;
-            } else if (lb.yloc === 'bottom') {
+            } else if (lb.yloc === "bottom") {
                 py = H - 14;
             } else {
                 const bar = this.deps.barAt(this.logicalOf(lb.xloc, lb.x));
                 if (!bar) continue;
-                const base = yOf(lb.yloc === 'abovebar' ? bar.high : bar.low);
-                py = base === null ? null : base + (lb.yloc === 'abovebar' ? -14 : 14);
+                const base = yOf(lb.yloc === "abovebar" ? bar.high : bar.low);
+                py = base === null ? null : base + (lb.yloc === "abovebar" ? -14 : 14);
             }
             if (py === null) continue;
+            // Respect visible range: price & bar-relative labels MUST disappear when off-screen vertically (no clamping to canvas edge)
+            if ((lb.yloc === "price" || lb.yloc === "abovebar" || lb.yloc === "belowbar") && (py < -30 || py > H + 30)) continue;
 
-            const color = lb.color ?? this.deps.theme.textColor;
             const fontPx = fontSizePx(lb.size);
+            rawList.push({ lb, px, py, color: lb.color ?? this.deps.theme.textColor, fontPx });
+        }
+
+        const doMerge = typeof window === "undefined" || window.__VELA_LABEL_MERGE__ !== false;
+        let renderList = [];
+
+        if (!doMerge || rawList.length <= 1) {
+            renderList = rawList;
+        } else {
+            // Separate into pinned right margin price chips vs on-chart anchored labels
+            const pinnedChips = [];
+            const restLabels = [];
+
+            for (const item of rawList) {
+                if (item.lb.style === "label_left" && item.lb.yloc === "price") {
+                    pinnedChips.push(item);
+                } else {
+                    restLabels.push(item);
+                }
+            }
+
+            // 1. Process Pinned Price Chips (AetherTrade parity label merge)
+            // Group chips within MERGE_PX (18px) vertically — ticker-agnostic & zoom-adaptive
+            pinnedChips.sort((a, b) => a.py - b.py);
+            const MERGE_PX = 20;
+            let a = 0;
+            while (a < pinnedChips.length) {
+                let b = a + 1;
+                while (b < pinnedChips.length && pinnedChips[b].py - pinnedChips[a].py <= MERGE_PX) b++;
+                const grp = pinnedChips.slice(a, b);
+
+                if (grp.length === 1) {
+                    renderList.push(grp[0]);
+                } else {
+                    // Tokenize label tags (remove trailing price)
+                    const tok = (s) => (s || "").split("\n")[0].replace(/\s*[\d.,]+\s*$/, "").trim() || s;
+
+                    // Priority hierarchy for merged chip style & color:
+                    // Trade signals/orders > Key Levels / 777 > ICT Time / Liquidity / VP
+                    grp.sort((g1, g2) => {
+                        const getPriority = (g) => {
+                            const id = g.lb.id || "";
+                            if (id.startsWith("lbl_active_") || id.startsWith("trade_")) return 10;
+                            if (id.startsWith("kl_") || id.startsWith("s777_") || id.startsWith("aether_")) return 8;
+                            if (id.startsWith("ict_lbl_ny") || id.startsWith("ict_lbl_london")) return 6;
+                            if (id.startsWith("ict_") || id.startsWith("vp_")) return 5;
+                            return 1;
+                        };
+                        return getPriority(g2) - getPriority(g1);
+                    });
+                    const primary = grp[0];
+
+                    // Tags joined by middle dot '·'
+                    // Deduplicate tags while preserving order
+                    const seenTags = new Set();
+                    const tags = [];
+                    for (const g of grp) {
+                        const t = tok(g.lb.text);
+                        if (t && !seenTags.has(t)) {
+                            seenTags.add(t);
+                            tags.push(t);
+                        }
+                    }
+                    const mergedTag = tags.join("·");
+
+                    // Price string: primary's price
+                    const priceMatch = (primary.lb.text || "").match(/[\d.,]+\s*$/);
+                    const priceStr = priceMatch ? priceMatch[0].trim() : "";
+                    const mergedText = priceStr ? `${mergedTag} ${priceStr}` : mergedTag;
+
+                    // Merge tooltips with separator
+                    const mergedTooltip = grp.map((g) => g.lb.tooltip).filter(Boolean).join("\n──────\n");
+
+                    const avgY = Math.round(grp.reduce((sum, g) => sum + g.py, 0) / grp.length);
+                    const avgPx = Math.round(grp.reduce((sum, g) => sum + g.px, 0) / grp.length);
+
+                    const mergedLb = {
+                        ...primary.lb,
+                        id: `merge_${grp.map((g) => g.lb.id).join("_")}`,
+                        text: mergedText,
+                        tooltip: mergedTooltip,
+                        color: primary.color,
+                    };
+
+                    renderList.push({
+                        lb: mergedLb,
+                        px: avgPx,
+                        py: avgY,
+                        color: primary.color,
+                        fontPx: primary.fontPx,
+                    });
+                }
+                a = b;
+            }
+
+            // 2. Process Rest (on-chart anchored labels)
+            if (restLabels.length > 0) {
+                const unmerged = [...restLabels];
+                while (unmerged.length > 0) {
+                    const pivot = unmerged.shift();
+                    const cluster = [pivot];
+                    for (let i = unmerged.length - 1; i >= 0; i--) {
+                        if (Math.abs(unmerged[i].px - pivot.px) <= 25 && Math.abs(unmerged[i].py - pivot.py) <= 15) {
+                            cluster.push(unmerged.splice(i, 1)[0]);
+                        }
+                    }
+                    if (cluster.length === 1) {
+                        renderList.push(cluster[0]);
+                    } else {
+                        const tok = (s) => (s || "").split("\n")[0].replace(/\s*[\d.,]+\s*$/, "").trim() || s;
+                        const mergedTag = cluster.map((g) => tok(g.lb.text)).join("·");
+                        const primary = cluster[0];
+                        const mergedTooltip = cluster.map((g) => g.lb.tooltip).filter(Boolean).join("\n──────\n");
+                        renderList.push({
+                            lb: {
+                                ...primary.lb,
+                                text: mergedTag,
+                                tooltip: mergedTooltip,
+                            },
+                            px: Math.round(cluster.reduce((s, g) => s + g.px, 0) / cluster.length),
+                            py: Math.round(cluster.reduce((s, g) => s + g.py, 0) / cluster.length),
+                            color: primary.color,
+                            fontPx: primary.fontPx,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Now render items with right-margin clamping
+        for (const item of renderList) {
+            let { lb, px, py, color, fontPx } = item;
+
+            // Pinned margin price chips: keep on-canvas near right pane edge
+            if (lb.style === "label_left" && lb.yloc === "price") {
+                const estW = Math.max(45, (lb.text?.length || 6) * (fontPx * 0.65) + 16);
+                if (px + estW + 14 > W) {
+                    px = W - estW - 14;
+                }
+                if (px < -50) continue;
+            } else {
+                if (px < -50 || px > W + 50) continue;
+            }
 
             if (this.isPointShape(lb.style)) {
                 if (!lb.noFill) this.drawLabelShape(ctx, lb.style, px, py, fontPx, color);
@@ -539,21 +686,18 @@ export class DrawingSceneRenderer {
                     const r = Math.max(4, fontPx * 0.6) + 3;
                     this.tipRegions.push({ left: px - r, top: py - r, right: px + r, bottom: py + r, text: lb.tooltip });
                 }
-            } else if (lb.style === 'none' || lb.style === 'text_outline') {
+            } else if (lb.style === "none" || lb.style === "text_outline") {
                 if (lb.text) {
-                    this.drawLabelText(ctx, lb, px, py, fontPx, lb.style === 'text_outline');
+                    this.drawLabelText(ctx, lb, px, py, fontPx, lb.style === "text_outline");
                     if (lb.tooltip) this.tipRegions.push(this.textRegion(ctx, lb, px, py, fontPx, lb.tooltip));
                 }
             } else {
-                // noFill (na color) keeps the bubble style's geometry — drawBubble
-                // places the text as if the bubble were there and skips the fill.
                 const r = this.drawBubble(ctx, lb, px, py, fontPx, color);
                 if (lb.tooltip) this.tipRegions.push({ left: r.x, top: r.y, right: r.x + r.w, bottom: r.y + r.h, text: lb.tooltip });
             }
         }
     }
 
-    /** Canvas font for a label's text — family + Pine `text_formatting` (bold/italic). */
     private labelFont(lb: DrawingLabel, fontPx: number): string {
         const family = lb.fontFamily === 'monospace' ? 'monospace' : this.deps.theme.fontFamily || 'sans-serif';
         return `${lb.italic ? 'italic ' : ''}${lb.bold ? 'bold ' : ''}${fontPx}px ${family}`;

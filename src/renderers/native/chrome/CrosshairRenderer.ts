@@ -32,29 +32,23 @@ export class CrosshairRenderer {
         const ctx = this.ctx;
         const canvas = this.canvas;
         if (!ctx || !canvas) return;
-
         const dpr = coords.dpr;
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
-
-        // Pane-separator hover affordance — drawn before the crosshair-presence guard so it
-        // shows even while a resize drag has the crosshair sitting right on the boundary.
         if (separatorHoverY !== null) this.drawSeparatorHover(ctx, canvas.width / dpr, theme, separatorHoverY);
-
-        // External (synced) ghost — drawn dimmer and FIRST, so a real local pointer
-        // paints over it, and drawn regardless of the local-crosshair presence guard.
         if (external) this.drawExternal(ctx, external, scene, coords, theme);
-
         const ch = scene.crosshair;
         const dataW = coords.width;
         const dataH = coords.height;
-        if (!ch || ch.x < 0 || ch.x > dataW || ch.y < 0 || ch.y > dataH) return;
-
+        const fullW = canvas.width / dpr;
+        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const axisW = fullW - dataW;
+        const minX = isLeft ? axisW : 0;
+        const maxX = isLeft ? fullW : dataW;
+        if (!ch || ch.x < minX || ch.x > maxX || ch.y < 0 || ch.y > dataH) return;
         const cs = scene.style.crosshair;
         ctx.font = `${scene.style.fontSize}px ${theme.fontFamily}`;
-        ctx.textBaseline = 'middle';
-
-        // snap the vertical line to the nearest bar center
+        ctx.textBaseline = "middle";
         const logical = Math.round(coords.xToLogical(ch.x));
         const x = Math.round(coords.logicalToX(logical)) + 0.5;
         ctx.strokeStyle = cs.color ?? theme.textColor;
@@ -64,17 +58,13 @@ export class CrosshairRenderer {
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, dataH);
-        ctx.moveTo(0, Math.round(ch.y) + 0.5);
-        ctx.lineTo(dataW, Math.round(ch.y) + 0.5);
+        ctx.moveTo(minX, Math.round(ch.y) + 0.5);
+        ctx.lineTo(maxX, Math.round(ch.y) + 0.5);
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.lineWidth = 1;
         ctx.globalAlpha = 1;
-
-        // price chip on the right axis for the pane under the cursor. Linear scan
-        // over the pane map (no sort/alloc) — panes don't overlap in Y, and this
-        // runs on the hot Cursor-tier path on every pointer move.
-        let pane: PaneNode | undefined;
+        let pane;
         for (const p of scene.panes.values()) {
             if (ch.y >= p.bounds.top && ch.y <= p.bounds.top + p.bounds.height) {
                 pane = p;
@@ -82,13 +72,13 @@ export class CrosshairRenderer {
             }
         }
         const chipBg = cs.labelBackground ?? theme.borderColor;
-        // An unscaled pane (axisFormat 'none') has no value axis, so no value chip either.
-        if (pane && pane.axisFormat !== 'none') {
+        if (pane && pane.axisFormat !== "none") {
             const price = coords.yToPrice(ch.y, pane.scale, pane.bounds);
-            this.chip(ctx, dataW + 1, ch.y, formatAxisValue(pane.scale, pane.bounds.height, price, percentScaleFor(scene, pane), scene.priceMintick, pane.axisFormat), chipBg, 'left', false, theme.background);
+            const chipX = isLeft ? axisW - 1 : dataW + 1;
+            const chipAlign = isLeft ? "right" : "left";
+            this.chip(ctx, chipX, ch.y, formatAxisValue(pane.scale, pane.bounds.height, price, percentScaleFor(scene, pane), scene.priceMintick, pane.axisFormat), chipBg, chipAlign, false, theme.background);
         }
-        // time chip on the bottom axis
-        this.chip(ctx, x, dataH + 1, formatTimeStamp(coords.logicalToTime(logical), scene.timezone, coords.barInterval), chipBg, 'center', true, theme.background);
+        this.chip(ctx, x, dataH + 1, formatTimeStamp(coords.logicalToTime(logical), scene.timezone, coords.barInterval), chipBg, "center", true, theme.background);
     }
 
     destroy(): void {
@@ -106,41 +96,46 @@ export class CrosshairRenderer {
         const cs = scene.style.crosshair;
         const dataW = coords.width;
         const dataH = coords.height;
+        const fullW = ctx.canvas.width / coords.dpr;
+        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const axisW = fullW - dataW;
+        const minX = isLeft ? axisW : 0;
+        const maxX = isLeft ? fullW : dataW;
         const x = Math.round(ext.x) + 0.5;
-        if (x < 0 || x > dataW) return;
+        if (x < minX || x > maxX) return;
         ctx.font = `${scene.style.fontSize}px ${theme.fontFamily}`;
-        ctx.textBaseline = 'middle';
+        ctx.textBaseline = "middle";
         ctx.strokeStyle = cs.color ?? theme.textColor;
         ctx.lineWidth = cs.width;
-        ctx.globalAlpha = cs.opacity * 0.55; // a ghost — dimmer than the local crosshair
+        ctx.globalAlpha = cs.opacity * 0.55;
         setDash(ctx, cs.style);
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, dataH);
         if (ext.y != null) {
-            ctx.moveTo(0, Math.round(ext.y) + 0.5);
-            ctx.lineTo(dataW, Math.round(ext.y) + 0.5);
+            ctx.moveTo(minX, Math.round(ext.y) + 0.5);
+            ctx.lineTo(maxX, Math.round(ext.y) + 0.5);
         }
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.lineWidth = 1;
-        ctx.globalAlpha = 0.8; // chips stay readable but still read as foreign
+        ctx.globalAlpha = 0.8;
         const chipBg = cs.labelBackground ?? theme.borderColor;
         if (ext.y != null && ext.price != null) {
-            // Same chip the local crosshair puts on the axis, at the ghost's level —
-            // formatted on the pane under the line (the price pane, by construction).
-            let pane: PaneNode | undefined;
+            let pane;
             for (const p of scene.panes.values()) {
                 if (ext.y >= p.bounds.top && ext.y <= p.bounds.top + p.bounds.height) {
                     pane = p;
                     break;
                 }
             }
-            if (pane && pane.axisFormat !== 'none') {
-                this.chip(ctx, dataW + 1, ext.y, formatAxisValue(pane.scale, pane.bounds.height, ext.price, percentScaleFor(scene, pane), scene.priceMintick, pane.axisFormat), chipBg, 'left', false, theme.background);
+            if (pane && pane.axisFormat !== "none") {
+                const chipX = isLeft ? axisW - 1 : dataW + 1;
+                const chipAlign = isLeft ? "right" : "left";
+                this.chip(ctx, chipX, ext.y, formatAxisValue(pane.scale, pane.bounds.height, ext.price, percentScaleFor(scene, pane), scene.priceMintick, pane.axisFormat), chipBg, chipAlign, false, theme.background);
             }
         }
-        this.chip(ctx, x, dataH + 1, formatTimeStamp(ext.time, scene.timezone, coords.barInterval), chipBg, 'center', true, theme.background);
+        this.chip(ctx, x, dataH + 1, formatTimeStamp(ext.time, scene.timezone, coords.barInterval), chipBg, "center", true, theme.background);
         ctx.globalAlpha = 1;
     }
 
@@ -157,17 +152,17 @@ export class CrosshairRenderer {
         ctx.globalAlpha = 1;
     }
 
-    private chip(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, bg: string, align: 'left' | 'center', below = false, over = '#000000'): void {
+    private chip(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, bg: string, align: "left" | "center" | "right", below = false, over = '#000000'): void {
         const w = ctx.measureText(text).width + 8;
         const h = 16;
-        const rx = align === 'left' ? x : x - w / 2;
+        const rx = align === "left" ? x : (align === "right" ? x - w : x - w / 2);
         const ry = below ? y : y - h / 2;
         ctx.fillStyle = bg;
         ctx.fillRect(rx, ry, w, h);
-        ctx.fillStyle = readableText(bg, over); // legible whatever the chip color is (light or dark)
-        ctx.textAlign = 'center';
+        ctx.fillStyle = readableText(bg, over);
+        ctx.textAlign = "center";
         ctx.fillText(text, rx + w / 2, ry + h / 2 + (below ? 2 : 0));
-        ctx.textAlign = 'start';
+        ctx.textAlign = "start";
     }
 }
 

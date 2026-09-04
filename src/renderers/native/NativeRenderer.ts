@@ -2426,29 +2426,27 @@ export class NativeRenderer implements IChartRenderer {
             this.scene.crosshair = null;
             this.hoverSeparatorY = null;
             this.lastPointer = null;
-            this.scheduler.invalidate(InvalidateLevel.Cursor);
-            this.hoverLogical = null; // off the plot ⇒ the readout falls back to the latest bar
-            const empty: CrosshairEvent = { time: null, price: null, paneKind: null, values: new Map(), ohlc: null };
+            this.scheduler.invalidate(1 /* Cursor */);
+            this.hoverLogical = null;
+            const empty = { time: null, price: null, paneKind: null, values: /* @__PURE__ */ new Map(), ohlc: null };
             for (const cb of this.crosshairCbs) cb(empty);
             return;
         }
-        const inData = x >= 0 && y >= 0 && x <= this.coords.width && y <= this.coords.height;
+        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const leftOff = isLeft && this.coords.leftOffsetPx ? this.coords.leftOffsetPx : 0;
+        const minX = isLeft ? leftOff : 0;
+        const maxX = isLeft ? leftOff + this.coords.width : this.coords.width;
+        const inData = x >= minX && y >= 0 && x <= maxX && y <= this.coords.height;
         this.scene.crosshair = inData ? { x, y } : null;
         this.lastPointer = inData ? { x, y } : null;
-        // The separator spans data + gutter, so its hover highlight tracks the full width (not just
-        // the data area) — the divider stays a visible, grabbable handle over the scale too.
-        this.hoverSeparatorY = x >= 0 && y >= 0 && y <= this.coords.height ? this.separatorHoverY(y) : null;
-        // Cursor tier: repaint only the crosshair overlay, not the data layer.
-        this.scheduler.invalidate(InvalidateLevel.Cursor);
-
-        // Only report a time/value when the cursor is over a real bar (not the
-        // right-offset whitespace) — matches LWC emitting null off any data point.
+        this.hoverSeparatorY = x >= minX && y >= 0 && y <= this.coords.height ? this.separatorHoverY(y) : null;
+        this.scheduler.invalidate(1 /* Cursor */);
         const logical = Math.round(this.coords.xToLogical(x));
         const onBar = logical >= 0 && logical < this.coords.barCount;
         const time = onBar ? this.coords.logicalToTime(logical) : null;
-        const pane = this.paneNodeAtY(y); // the full node — the event also names the pane KIND
+        const pane = this.paneNodeAtY(y);
         const price = inData && pane ? this.coords.yToPrice(y, pane.scale, pane.bounds) : null;
-        const values = new Map<string, number>();
+        const values = /* @__PURE__ */ new Map();
         if (onBar) {
             for (const model of this.scene.indicators.values()) {
                 const off = this.scene.offsetOf(model.id);
@@ -2460,12 +2458,10 @@ export class NativeRenderer implements IChartRenderer {
                 }
             }
         }
-        const bar = onBar ? this.bars[logical] : undefined;
-        const ohlc: CrosshairOHLC | null = bar
-            ? { time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: bar.volume }
-            : null;
+        const bar = onBar ? this.bars[logical] : void 0;
+        const ohlc = bar ? { time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: bar.volume } : null;
         this.hoverLogical = onBar ? logical : null;
-        const event: CrosshairEvent = { time, price, paneKind: inData && pane ? pane.kind : null, values, ohlc };
+        const event = { time, price, paneKind: inData && pane ? pane.kind : null, values, ohlc };
         for (const cb of this.crosshairCbs) cb(event);
     }
 
@@ -2693,8 +2689,13 @@ export class NativeRenderer implements IChartRenderer {
         const next = resizeSplit(split, dyTotal);
         above.heightWeight = next.above;
         below.heightWeight = next.below;
+        try {
+            const weights: Record<string, number> = {};
+            for (const p of this.scene.orderedPanes()) weights[p.id] = p.heightWeight;
+            localStorage.setItem("aether_vela_pane_weights", JSON.stringify(weights));
+        } catch {}
         this.layoutPanes();
-        this.scheduler.invalidate(InvalidateLevel.Full);
+        this.scheduler.invalidate(4 /* Full */);
     }
 
     /** Double-click a separator → split the two adjacent panes evenly (each gets half of
@@ -2703,13 +2704,19 @@ export class NativeRenderer implements IChartRenderer {
         const i = this.separatorPaneIndexAt(y);
         if (i === null) return;
         const panes = this.scene.orderedPanes();
-        const above = panes[i - 1]!;
-        const below = panes[i]!;
+        const above = panes[i - 1];
+        const below = panes[i];
+        if (!above || !below) return;
         const half = (above.heightWeight + below.heightWeight) / 2;
         above.heightWeight = half;
         below.heightWeight = half;
+        try {
+            const weights: Record<string, number> = {};
+            for (const p of this.scene.orderedPanes()) weights[p.id] = p.heightWeight;
+            localStorage.setItem("aether_vela_pane_weights", JSON.stringify(weights));
+        } catch {}
         this.layoutPanes();
-        this.scheduler.invalidate(InvalidateLevel.Full);
+        this.scheduler.invalidate(4 /* Full */);
     }
 
     // ── keyboard navigation / accessibility (item 11) ──
@@ -3596,16 +3603,17 @@ export class NativeRenderer implements IChartRenderer {
     private layoutPanes(): void {
         const panes = this.scene.orderedPanes();
         const dataHeight = this.coords.height;
-        // Tell the legend which panes are collapsed (→ show only the master row) before repositioning.
         this.inputsUI?.setCollapsedPanes(this.collapsedMasterMap());
-        // Maximized: the chosen pane fills the plot; the rest collapse to zero-height (hidden but retained).
         const maxPane = this.maximizedPaneId ? this.scene.panes.get(this.maximizedPaneId) : null;
         if (maxPane) {
-            let top = 0;
+            let top2 = 0;
             for (const pane of panes) {
-                if (pane === maxPane) { pane.bounds = { top: 0, height: dataHeight }; }
-                else { pane.bounds = { top: dataHeight, height: 0 }; }
-                top += pane.bounds.height;
+                if (pane === maxPane) {
+                    pane.bounds = { top: 0, height: dataHeight };
+                } else {
+                    pane.bounds = { top: dataHeight, height: 0 };
+                }
+                top2 += pane.bounds.height;
             }
             this.inputsUI?.reposition();
             this.paneControls?.reposition();
@@ -3615,23 +3623,33 @@ export class NativeRenderer implements IChartRenderer {
             this.publishPricePaneBounds();
             return;
         }
-        // Collapsed panes take a fixed strip; the rest share the remaining height by weight.
         const collapsed = panes.filter((p) => p.collapsed);
         const flexPanes = panes.filter((p) => !p.collapsed);
+        try {
+            const savedWeights = typeof localStorage !== "undefined" ? localStorage.getItem("aether_vela_pane_weights") : null;
+            if (savedWeights) {
+                const parsed = JSON.parse(savedWeights);
+                for (const p of flexPanes) {
+                    if (parsed[p.id] != null && Number.isFinite(parsed[p.id]) && parsed[p.id] > 0) {
+                        p.heightWeight = parsed[p.id];
+                    }
+                }
+            }
+        } catch {}
         const stripTotal = collapsed.length * COLLAPSED_PANE_H;
         const flexHeight = Math.max(0, dataHeight - stripTotal);
         const totalWeight = flexPanes.reduce((s, p) => s + (p.heightWeight || 1), 0) || 1;
         let top = 0;
         for (const pane of panes) {
-            const height = pane.collapsed ? COLLAPSED_PANE_H : (flexHeight * (pane.heightWeight || 1)) / totalWeight;
+            const height = pane.collapsed ? COLLAPSED_PANE_H : flexHeight * (pane.heightWeight || 1) / totalWeight;
             pane.bounds = { top, height };
             top += height;
         }
-        this.inputsUI?.reposition(); // keep each pane's legend pinned to its pane top
+        this.inputsUI?.reposition();
         this.paneControls?.reposition();
         this.axisScaleButtons?.reposition();
         this.repositionScrollButton();
-        this.positionAttribution(); // the mark follows the lowest open pane's bottom edge
+        this.positionAttribution();
         this.publishPricePaneBounds();
     }
 
@@ -3691,8 +3709,9 @@ export class NativeRenderer implements IChartRenderer {
      *  status line, a watermark, a custom legend) can anchor to the plot's edges
      *  without reaching into the renderer's DOM. */
     private publishGutters(): void {
+        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
         this.mountContainer?.style.setProperty('--vela-toolbar-gutter', `${this.toolbarGutter}px`);
-        this.mountContainer?.style.setProperty('--vela-scale-gutter', `${this.rightAxisW}px`);
+        this.mountContainer?.style.setProperty("--vela-scale-gutter", `${isLeft ? 0 : this.rightAxisW}px`);
     }
 
     /** Publish the price pane's vertical insets as `--vela-price-pane-top` /
@@ -3760,36 +3779,18 @@ export class NativeRenderer implements IChartRenderer {
         const h = this.wrapper.clientHeight;
         if (w <= 0 || h <= 0) return;
         const dpr = window.devicePixelRatio || 1;
-        // The plot area is inset to the right of the toolbar gutter; the canvases fill the plot
-        // sub-container (0-based), so the coordinate system / pointer coords stay unchanged.
         this.plot.style.left = `${this.toolbarGutter}px`;
-        // Size the pile from the plot's REAL box, not client sizes: clientWidth/Height are
-        // integer-rounded, and on fractional-dpr displays (Windows 125%/150%) a backing store
-        // rounded from them covers a different number of device pixels than the box it is
-        // displayed in — the compositor then resamples the whole bitmap and every
-        // device-snapped edge feathers by ~1px.
         const rect = this.plot.getBoundingClientRect();
         let bw = Math.max(1, Math.round(rect.width * dpr));
         let bh = Math.max(1, Math.round(rect.height * dpr));
-        // Prefer the observer-reported device-pixel size when it describes the CURRENT box
-        // (within 1 device px of the rect — the browser's snapping can differ from plain
-        // rounding by up to a pixel, which is exactly why its report wins). A stale report
-        // (e.g. right after the toolbar gutter moved the plot) is rejected; the observer
-        // fires again with the fresh box and re-syncs.
         const dev = this.plotDeviceSize;
         if (dev && Math.abs(dev.width - rect.width * dpr) <= 1 && Math.abs(dev.height - rect.height * dpr) <= 1) {
             bw = Math.max(1, dev.width);
             bh = Math.max(1, dev.height);
         }
-        // Bitmap px == device px: each canvas gets an explicit CSS size derived from its
-        // backing store, so nothing is rescaled at composite time. The box's fractional
-        // device OFFSET is left alone on purpose: the compositor pixel-snaps a layer's
-        // layout position by itself, but an explicit sub-pixel translate becomes part of
-        // the composite matrix and RESAMPLES the texture — a half-device-pixel translate
-        // blends every horizontal edge 50/50 (measured, not theory). Never "compensate".
         const pw = bw / dpr;
         const ph = bh / dpr;
-        const size = (canvas: HTMLCanvasElement): void => {
+        const size = (canvas: HTMLCanvasElement) => {
             canvas.width = bw;
             canvas.height = bh;
             canvas.style.width = `${pw}px`;
@@ -3803,29 +3804,21 @@ export class NativeRenderer implements IChartRenderer {
         size(this.chromeCanvas);
         size(this.drawingsCanvas);
         size(this.cursorCanvas);
-        // Reserve strips for the price axis (right) + time axis (bottom); the
-        // data area drives the coordinate transform so series sit clear of them.
-        this.coords.setSize(Math.max(1, pw - this.rightAxisW), Math.max(1, ph - TIME_AXIS_H), dpr);
-        // Geometry changed — the retained crosshair {x,y} now points at the wrong
-        // bar/price, so drop it (LWC hides the crosshair until the next move).
+        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        this.coords.setSize(Math.max(1, pw - this.rightAxisW), Math.max(1, ph - TIME_AXIS_H), dpr, isLeft ? this.rightAxisW : 0);
         this.scene.crosshair = null;
         this.layoutPanes();
-        this.userDrawings?.onResize(); // dismiss the settings popup on a resize
+        this.userDrawings?.onResize();
         if (!this.didInitialFit && this.coords.barCount > 0) {
             this.fitContent();
             this.didInitialFit = true;
         }
         if (this.animator.active) {
-            // The width/height assignments above just CLEARED every canvas, and renderFrame
-            // yields to the Animator while it runs — so a scheduler flush would paint
-            // nothing and the browser would present blank canvases until the animator's
-            // next rAF tick (a visible flash on every splitter/divider move of an
-            // animating chart, live-bar easing included). Paint synchronously instead.
             this.computeScales();
             this.paintData();
             this.crosshairLayer.render(this.scene, this.coords, this.theme, this.hoverSeparatorY, this.externalCrossPx());
         } else {
-            this.scheduler.flushNow(InvalidateLevel.Full);
+            this.scheduler.flushNow(4 /* Full */);
         }
     }
 

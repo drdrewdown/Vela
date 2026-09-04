@@ -70,7 +70,7 @@ describe('mergeConfig — validating reducer (item 15)', () => {
 
     it('trades: applies valid fields, drops malformed ones', () => {
         const base = baseConfig();
-        expect(base.trades).toEqual({ visible: true, labels: true, qty: true, longColor: '#2962ff', shortColor: '#f23645', exitColor: '#d500f9' });
+        expect(base.trades).toEqual({ visible: true, labels: true, qty: true, longColor: '#2962ff', shortColor: '#ff709a', exitColor: '#d500f9' });
         const out = mergeConfig(base, { trades: { qty: false, exitColor: '#111111', visible: 'yes', longColor: 7 } });
         expect(out.trades.qty).toBe(false);
         expect(out.trades.exitColor).toBe('#111111');
@@ -119,17 +119,17 @@ describe('NativeRenderer.getConfig — defaults resolve to concrete values', () 
     it('emits a complete, versioned document from the dark theme', () => {
         const cfg = new NativeRenderer().getConfig();
         expect(cfg.version).toBe(CHART_CONFIG_VERSION);
-        expect(cfg.layout).toEqual({ background: '#151619', textColor: '#b2b5be', fontFamily: 'sans-serif', fontSize: 11 });
-        expect(cfg.grid.vertLines).toEqual({ visible: true, color: '#20222c' });
-        expect(cfg.grid.horzLines).toEqual({ visible: true, color: '#20222c' });
+        expect(cfg.layout).toEqual({ background: '#07090d', textColor: '#c8d0de', fontFamily: "'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif", fontSize: 11 });
+        expect(cfg.grid.vertLines).toEqual({ visible: true, color: '#0e131d' });
+        expect(cfg.grid.horzLines).toEqual({ visible: true, color: '#0e131d' });
         expect(cfg.crosshair).toEqual({ color: '#9aa0ad', width: 1, style: 'dashed', opacity: 0.4, labelBackground: '#595959' });
-        expect(cfg.priceScale).toEqual({ mode: 'price', log: false, invert: false, borderColor: '#2a2b30', labelsVisible: true, currentPriceLine: true, priceLabel: true, countdown: true });
-        expect(cfg.panes).toEqual({ separatorColor: '#2a2b30' }); // inherits the theme border
+        expect(cfg.priceScale).toEqual({ mode: 'price', log: false, invert: false, borderColor: '#161d2b', labelsVisible: true, currentPriceLine: true, priceLabel: true, countdown: true });
+        expect(cfg.panes).toEqual({ separatorColor: '#161d2b' }); // inherits the theme border
         expect(cfg.timeScale).toEqual({ timezone: 'UTC' });
-        expect(cfg.candles.upColor).toBe('#089981');
-        expect(cfg.candles.downColor).toBe('#f23645');
-        expect(cfg.candles.borderUpColor).toBe('#089981'); // inherits the body color
-        expect(cfg.candles.wickDownColor).toBe('#f23645');
+        expect(cfg.candles.upColor).toBe('#5aa1ff');
+        expect(cfg.candles.downColor).toBe('#ff709a');
+        expect(cfg.candles.borderUpColor).toBe('#5aa1ff'); // inherits the body color
+        expect(cfg.candles.wickDownColor).toBe('#ff709a');
         expect(cfg.series).toEqual({ style: 'candles', baseline: null, spacing: 1 });
     });
 
@@ -214,10 +214,10 @@ describe('NativeRenderer.applyConfig — applies + syncs the live scene fields',
         expect(cfg.priceScale.borderColor).toBe('#d4dae3'); // axis border follows too
         expect(cfg.panes.separatorColor).toBe('#d4dae3');
         // …and flipping back to a dark background restores the dark inks.
-        r.applyConfig({ layout: { background: '#151619' } });
+        r.applyConfig({ layout: { background: '#07090d' } });
         cfg = r.getConfig();
-        expect(cfg.layout.textColor).toBe('#b2b5be');
-        expect(cfg.grid.vertLines.color).toBe('#20222c');
+        expect(cfg.layout.textColor).toBe('#c8d0de');
+        expect(cfg.grid.vertLines.color).toBe('#0e131d');
     });
 
     it('an explicit textColor in the same patch wins over the ink re-base', () => {
@@ -229,7 +229,7 @@ describe('NativeRenderer.applyConfig — applies + syncs the live scene fields',
     it('does not re-base inks for a same-class background edit', () => {
         const r = new NativeRenderer();
         r.applyConfig({ layout: { background: '#000000' } }); // still dark
-        expect(r.getConfig().layout.textColor).toBe('#b2b5be'); // untouched
+        expect(r.getConfig().layout.textColor).toBe('#c8d0de'); // untouched
     });
 
     it('restores the stacking keys — and pre-seeds an indicator that has not mounted yet', () => {
@@ -381,18 +381,18 @@ describe('per-price-style colors — each style is independent (item 15)', () =>
     it('getConfig resolves each style to concrete colors (default = the candle palette)', () => {
         const cfg = new NativeRenderer().getConfig();
         // untouched styles default to the chart up/down so rendering is unchanged…
-        expect(cfg.bars).toEqual({ upColor: '#089981', downColor: '#f23645' });
+        expect(cfg.bars).toEqual({ upColor: '#5aa1ff', downColor: '#ff709a' });
         expect(cfg.line).toEqual({ color: '#3b82f6', width: 2 });
         expect(cfg.area).toEqual({ lineColor: '#3b82f6', width: 2, topColor: 'rgba(59,130,246,0.28)', bottomColor: 'rgba(59,130,246,0.02)' });
         // baseline owns its palette (independent of the candle colors); each area is a
         // two-stop wash of the line color — stronger near the line, fainter at the baseline.
         expect(cfg.baseline).toEqual({
-            topLineColor: '#089981',
-            bottomLineColor: '#f23645',
-            topFillColor: 'rgba(8,153,129,0.25)',
-            topFillColor2: 'rgba(8,153,129,0.05)',
-            bottomFillColor: 'rgba(242,54,69,0.25)',
-            bottomFillColor2: 'rgba(242,54,69,0.05)',
+            topLineColor: '#5aa1ff',
+            bottomLineColor: '#ff709a',
+            topFillColor: 'rgba(90,161,255,0.25)',
+            topFillColor2: 'rgba(90,161,255,0.05)',
+            bottomFillColor: 'rgba(255,112,154,0.25)',
+            bottomFillColor2: 'rgba(255,112,154,0.05)',
             width: 2,
             baselineLevel: 50,
         });
@@ -404,10 +404,10 @@ describe('per-price-style colors — each style is independent (item 15)', () =>
         const cfg = r.getConfig();
         expect(cfg.line).toEqual({ color: '#ff00ff', width: 4 });
         // candles + every other style keep their own (default) colors
-        expect(cfg.candles.upColor).toBe('#089981');
-        expect(cfg.bars.upColor).toBe('#089981');
+        expect(cfg.candles.upColor).toBe('#5aa1ff');
+        expect(cfg.bars.upColor).toBe('#5aa1ff');
         expect(cfg.area.lineColor).toBe('#3b82f6'); // area keeps its own brand default
-        expect(cfg.baseline.topLineColor).toBe('#089981'); // baseline keeps its own default palette
+        expect(cfg.baseline.topLineColor).toBe('#5aa1ff'); // baseline keeps its own default palette
     });
 
     it('changing the candle body color leaves an explicitly-set style color alone', () => {

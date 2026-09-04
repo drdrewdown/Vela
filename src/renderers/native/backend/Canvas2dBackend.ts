@@ -338,18 +338,22 @@ export class Canvas2dBackend implements IRenderBackend {
             pts.push({ x: coords.logicalToX(i), y: coords.priceToY(b.close, pane.scale, pane.bounds) });
         }
         if (pts.length < 2) return;
-        const poly = (): void => {
+        const poly = () => {
             ctx.beginPath();
             ctx.moveTo(pts[0]!.x, baseY);
             for (const p of pts) ctx.lineTo(p.x, p.y);
             ctx.lineTo(pts[pts.length - 1]!.x, baseY);
             ctx.closePath();
         };
-        // Above the baseline: top fill near the line → fainter top fill at the baseline.
+        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const fullW = ctx.canvas.width / coords.dpr;
+        const axisW = fullW - dataW;
+        const minX = isLeft ? axisW : 0;
+        const maxX = isLeft ? fullW : dataW;
         if (baseY > top) {
             ctx.save();
             ctx.beginPath();
-            ctx.rect(0, top, dataW, baseY - top);
+            ctx.rect(minX, top, dataW, baseY - top);
             ctx.clip();
             const gUp = ctx.createLinearGradient(0, top, 0, baseY);
             gUp.addColorStop(0, topFill);
@@ -359,11 +363,10 @@ export class Canvas2dBackend implements IRenderBackend {
             ctx.fill();
             ctx.restore();
         }
-        // Below the baseline: fainter bottom fill at the baseline → bottom fill near the line.
         if (baseY < bottom) {
             ctx.save();
             ctx.beginPath();
-            ctx.rect(0, baseY, dataW, bottom - baseY);
+            ctx.rect(minX, baseY, dataW, bottom - baseY);
             ctx.clip();
             const gDn = ctx.createLinearGradient(0, baseY, 0, bottom);
             gDn.addColorStop(0, bottomFill2);
@@ -373,19 +376,18 @@ export class Canvas2dBackend implements IRenderBackend {
             ctx.fill();
             ctx.restore();
         }
-        // The baseline marker, then the close line colored per segment by its side.
         ctx.strokeStyle = scene.style.borderColor ?? theme.borderColor;
         ctx.lineWidth = 1;
-        setDash(ctx, 'dashed');
+        setDash(ctx, "dashed");
         ctx.beginPath();
-        ctx.moveTo(0, Math.round(baseY) + 0.5);
-        ctx.lineTo(dataW, Math.round(baseY) + 0.5);
+        ctx.moveTo(minX, Math.round(baseY) + 0.5);
+        ctx.lineTo(maxX, Math.round(baseY) + 0.5);
         ctx.stroke();
-        setDash(ctx, 'solid');
+        setDash(ctx, "solid");
         ctx.lineWidth = bs.width;
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-        const seg = (x0: number, y0: number, x1: number, y1: number, color: string): void => {
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        const seg = (x0: number, y0: number, x1: number, y1: number, color: string) => {
             ctx.strokeStyle = color;
             ctx.beginPath();
             ctx.moveTo(x0, y0);
@@ -397,8 +399,6 @@ export class Canvas2dBackend implements IRenderBackend {
             const c = pts[k]!;
             const aUp = a.y <= baseY;
             const cUp = c.y <= baseY;
-            // Split the segment AT the baseline so each side is colored correctly — a
-            // segment must never be the up color below the baseline (or vice versa).
             if (aUp !== cUp && c.y !== a.y) {
                 const t = (baseY - a.y) / (c.y - a.y);
                 const xCross = a.x + (c.x - a.x) * t;
@@ -408,7 +408,7 @@ export class Canvas2dBackend implements IRenderBackend {
                 seg(a.x, a.y, c.x, c.y, aUp ? topLine : bottomLine);
             }
         }
-        ctx.lineCap = 'butt';
+        ctx.lineCap = "butt";
     }
 
     // ── data ──
@@ -794,14 +794,19 @@ export class Canvas2dBackend implements IRenderBackend {
     private drawHline(ctx: CanvasRenderingContext2D, pl: PriceLine, pane: PaneNode, coords: CoordinateSystem, dataW: number, theme: VelaTheme): void {
         const y = Math.round(coords.priceToY(pl.price, pane.scale, pane.bounds)) + 0.5;
         if (y < pane.bounds.top || y > pane.bounds.top + pane.bounds.height) return;
+        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const fullW = ctx.canvas.width / coords.dpr;
+        const axisW = fullW - dataW;
+        const minX = isLeft ? axisW : 0;
+        const maxX = isLeft ? fullW : dataW;
         ctx.strokeStyle = pl.color ?? theme.textColor;
         ctx.lineWidth = pl.width ?? 1;
-        setDash(ctx, pl.lineStyle ?? 'solid');
+        setDash(ctx, pl.lineStyle ?? "solid");
         ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(dataW, y);
+        ctx.moveTo(minX, y);
+        ctx.lineTo(maxX, y);
         ctx.stroke();
-        setDash(ctx, 'solid');
+        setDash(ctx, "solid");
     }
 }
 

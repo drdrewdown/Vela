@@ -4,13 +4,13 @@ import { BEARISH, BULLISH } from './palette';
 // The reference dark palette (the design spec's first-run chart cosmetics: surface,
 // axis text, subtle grid, candle green/red).
 export const DARK_THEME: VelaTheme = {
-    background: '#151619',
-    textColor: '#b2b5be',
-    gridColor: '#20222c',
-    borderColor: '#2a2b30',
-    upColor: BULLISH,
-    downColor: BEARISH,
-    fontFamily: 'sans-serif',
+    background: "#07090d",
+    textColor: "#c8d0de",
+    gridColor: "#0e131d",
+    borderColor: "#161d2b",
+    upColor: "#5aa1ff",
+    downColor: "#ff709a",
+    fontFamily: "'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif"
 };
 
 export const LIGHT_THEME: VelaTheme = {

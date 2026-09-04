@@ -309,43 +309,32 @@ export class WebGL2Backend implements IRenderBackend {
         const gl = this.gl;
         const canvas = this.canvas;
         if (!gl || !canvas || !this.program || this.contextLost || gl.isContextLost()) return;
-
         const dpr = coords.dpr;
         const dataW = coords.width;
-
         gl.viewport(0, 0, canvas.width, canvas.height);
         gl.disable(gl.SCISSOR_TEST);
-        // Transparent clear: the wrapper paints the chart background, so a reveal
-        // layer behind this canvas shows through wherever no geometry is drawn.
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT);
-
         const n = coords.barCount;
         if (n === 0) return;
         const vr = coords.visibleLogicalRange();
         const i0 = Math.max(0, Math.floor(vr.from));
         const i1 = Math.min(n - 1, Math.ceil(vr.to));
         if (i1 < i0) return;
-
-        // Blend/scissor are enabled once; the program/VAO/uniform bindings live in each pane's
-        // `flush`, since an interleave-layer quad swaps them mid-pane anyway.
         gl.enable(gl.BLEND);
         gl.enable(gl.SCISSOR_TEST);
-
         const barColorMap = mergeBarColors(scene.indicators);
         const panes = scene.orderedPanes();
-        const liveSlices = new Set<HTMLCanvasElement>();
+        const liveSlices = /* @__PURE__ */ new Set();
         for (const pane of panes) {
             const b = this.batch;
             b.reset();
-            // Pane scissor up-front: geometry flushes AND interleave-layer quads clip to it.
             const topDev = Math.round(pane.bounds.top * dpr);
             const botDev = Math.round((pane.bounds.top + pane.bounds.height) * dpr);
-            gl.scissor(0, canvas.height - botDev, Math.round(dataW * dpr), botDev - topDev);
-            // Draw whatever geometry accumulated so far — called at each interleave point (a
-            // texture quad has to land BETWEEN geometry draws) and once at the pane's end. The
-            // quad pass swaps program/VAO/blend, so every flush rebinds the geometry pipeline.
-            const flush = (): void => {
+            const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+            const leftOff = isLeft && coords.leftOffsetPx ? coords.leftOffsetPx : (isLeft ? Math.round(canvas.width / dpr - dataW) : 0);
+            gl.scissor(isLeft ? Math.round(leftOff * dpr) : 0, canvas.height - botDev, Math.round(dataW * dpr), botDev - topDev);
+            const flush = () => {
                 if (b.vertexCount === 0) return;
                 gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
                 gl.useProgram(this.program);
@@ -356,59 +345,42 @@ export class WebGL2Backend implements IRenderBackend {
                 gl.drawArrays(gl.TRIANGLES, 0, b.vertexCount);
                 b.reset();
             };
-            // User-drawing interleave layers, prepainted by the renderer: each composites just
-            // before the series carrying its `beforeZ` — under the candles, between indicators.
-            const slices = pane.collapsed ? [] : (scene.drawingSlices.get(pane.id) ?? []);
+            const slices = pane.collapsed ? [] : scene.drawingSlices.get(pane.id) ?? [];
             let si = 0;
-            const drawSlicesUpTo = (z: number): void => {
+            const drawSlicesUpTo = (z: number) => {
                 for (; si < slices.length && slices[si]!.beforeZ <= z; si += 1) {
                     flush();
                     if (this.drawSliceTexture(gl, slices[si]!.canvas)) liveSlices.add(slices[si]!.canvas);
                 }
             };
-            // z-order within the batch (painter's): bg, then the candles + each indicator's
-            // fills + series interleaved by `scene.candleZ`/per-indicator z, then hlines.
-            // (The grid + session highlights live on the renderer's backdrop canvas below.)
             b.alpha = 1;
-            // A collapsed pane is a legend-only strip: no plots (legend + separator are chrome).
             if (!pane.collapsed) {
                 const models = scene.orderedIndicatorsForPane(pane.id);
-                const isPrice = pane.kind === 'price';
-                // Merged (own-scale) indicators draw against their own price window inside the pane.
-                const effPane = (m: IndicatorModel): PaneNode => {
+                const isPrice = pane.kind === "price";
+                const effPane = (m: any) => {
                     const sc = scene.scaleFor(m, pane);
                     return sc === pane.scale ? pane : { ...pane, scale: sc };
                 };
-                b.alpha = this.modelAlpha; // indicator models fade in after the intro; candles/grid stay opaque
-                // Behind everything: bgcolor spans — Pine keeps the background under every
-                // layer regardless of stacking. Own (non-force_overlay) spans on each
-                // model's pane; force_overlay spans on the price pane (Pine semantics —
-                // mirrors the chrome's overlay-drawing routing). Fills are NOT here: they
-                // paint inside the z loop at their model's slot.
+                b.alpha = this.modelAlpha;
                 for (const m of models) for (const bgSpan of m.backgrounds) if (bgSpan.overlay !== true) this.emitBackground(b, bgSpan, pane, coords);
                 if (isPrice) {
                     for (const m of scene.indicators.values()) {
                         for (const bgSpan of m.backgrounds) if (bgSpan.overlay === true) this.emitBackground(b, bgSpan, pane, coords);
                     }
                 }
-                // When the price is hidden, the candle layer is skipped entirely (overlays still draw).
                 const drawCandles = isPrice && !scene.candlesHidden;
                 let candleDrawn = false;
                 for (const m of models) {
                     if (drawCandles && !candleDrawn && scene.zOf(m.id) >= scene.candleZ) {
                         drawSlicesUpTo(scene.candleZ);
-                        b.alpha = this.candleStructureAlpha; // baseline; emitCandles sets body vs structure per-element
+                        b.alpha = this.candleStructureAlpha;
                         this.emitPriceSeries(b, scene, i0, i1, coords, pane, theme, barColorMap, dataW);
                         candleDrawn = true;
                     }
                     drawSlicesUpTo(scene.zOf(m.id));
                     b.alpha = this.modelAlpha;
-                    // Model data is index-aligned from the model's ANCHOR bar (offset 0 = whole-chart).
                     const off = scene.offsetOf(m.id);
                     const mp = effPane(m);
-                    // Fills paint at the model's z slot, under its own series — a band between
-                    // two plots sits behind the plot lines, and the whole model moves as one
-                    // unit when its object-tree row is reordered.
                     for (const f of m.fills) if (f.overlay !== true) this.emitFill(b, m, f, mp, coords, i0, i1, off);
                     for (const s of m.series) if (s.overlay !== true) this.emitSeries(b, s, mp, coords, i0, i1, theme, off);
                 }
@@ -418,9 +390,6 @@ export class WebGL2Backend implements IRenderBackend {
                     this.emitPriceSeries(b, scene, i0, i1, coords, pane, theme, barColorMap, dataW);
                 }
                 b.alpha = this.modelAlpha;
-                // force_overlay content from EVERY indicator paints on the price pane, at the
-                // top of its series stack, against the master price scale — fills first so a
-                // forced band still sits under the forced plot lines.
                 if (isPrice) {
                     for (const m of scene.indicators.values()) {
                         const off = scene.offsetOf(m.id);
@@ -431,31 +400,25 @@ export class WebGL2Backend implements IRenderBackend {
                         for (const s of m.series) if (s.overlay === true) this.emitSeries(b, s, pane, coords, i0, i1, theme, off);
                     }
                 }
-                // Stack-top slices: the topmost indicator's drawings, force_overlay drawings,
-                // and layers bound to a hidden/removed series — above the forced series too,
-                // since drawings always paint over their own plots.
                 drawSlicesUpTo(Infinity);
-                for (const m of models) { const mp = effPane(m); for (const pl of m.priceLines) this.emitHline(b, pl, mp, coords, dataW, theme); }
+                for (const m of models) {
+                    const mp = effPane(m);
+                    for (const pl of m.priceLines) this.emitHline(b, pl, mp, coords, dataW, theme);
+                }
                 b.alpha = 1;
             }
             flush();
         }
         gl.disable(gl.SCISSOR_TEST);
-        // Drop textures whose layer disappeared this frame (the canvas cache in the drawings
-        // controller prunes the same way, so this stays a handful of entries).
         for (const [cv, tex] of this.sliceTex) {
             if (!liveSlices.has(cv)) {
                 gl.deleteTexture(tex);
                 this.sliceTex.delete(cv);
             }
         }
-
-        // Build the glow program on first use: it's compiled in initGL only when glow starts > 0,
-        // so a runtime toggle (off → on) must compile it lazily here — otherwise the bloom never
-        // appears until the next full backend (re)init. Disable glow if it can't compile.
         if (this.glow > 0 && !this.screenProgram && !this.ensureScreenPipeline()) this.glow = 0;
         if (this.glow > 0 && this.screenProgram) {
-            this.glowBatch.alpha = this.modelAlpha; // the glow of faded series fades too
+            this.glowBatch.alpha = this.modelAlpha;
             this.renderGlow(gl, scene, coords, i0, i1);
         }
     }
@@ -465,14 +428,13 @@ export class WebGL2Backend implements IRenderBackend {
      * Gaussian, ping-pong), then additively composite the halo over the sharp scene.
      */
     private renderGlow(gl: WebGL2RenderingContext, scene: SceneGraph, coords: CoordinateSystem, i0: number, i1: number): void {
-        const canvas = this.canvas!;
+        const canvas = this.canvas;
+        if (!canvas) return;
         const hw = Math.max(1, canvas.width >> 1);
         const hh = Math.max(1, canvas.height >> 1);
         if (!this.ensureFbos(gl, hw, hh)) return;
         const dpr = coords.dpr;
         const dataW = coords.width;
-
-        // ── glow-source pass: the neon lines into fboA (half-res) ──
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.fboA);
         gl.viewport(0, 0, hw, hh);
         gl.disable(gl.SCISSOR_TEST);
@@ -491,14 +453,14 @@ export class WebGL2Backend implements IRenderBackend {
             if (b.vertexCount === 0) continue;
             const topH = Math.round(pane.bounds.top * dpr * 0.5);
             const botH = Math.round((pane.bounds.top + pane.bounds.height) * dpr * 0.5);
-            gl.scissor(0, hh - botH, Math.round(dataW * dpr * 0.5), botH - topH);
+            const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+            const leftOff = isLeft && coords.leftOffsetPx ? coords.leftOffsetPx : (isLeft ? Math.round(canvas.width / dpr - dataW) : 0);
+            gl.scissor(isLeft ? Math.round(leftOff * dpr * 0.5) : 0, hh - botH, Math.round(dataW * dpr * 0.5), botH - topH);
             gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
             gl.bufferData(gl.ARRAY_BUFFER, b.view, gl.DYNAMIC_DRAW);
             gl.drawArrays(gl.TRIANGLES, 0, b.vertexCount);
         }
         gl.disable(gl.SCISSOR_TEST);
-
-        // ── separable blur: fboA --H--> fboB --V--> fboA ──
         gl.useProgram(this.screenProgram);
         gl.bindVertexArray(this.quadVao);
         gl.uniform1i(this.uTex, 0);
@@ -513,14 +475,12 @@ export class WebGL2Backend implements IRenderBackend {
         gl.bindTexture(gl.TEXTURE_2D, this.texB);
         gl.uniform2f(this.uDir, 0, 1 / hh);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-        // ── composite the blurred glow additively over the screen ──
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(0, 0, canvas.width, canvas.height);
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.ONE, gl.ONE);
         gl.bindTexture(gl.TEXTURE_2D, this.texA);
-        gl.uniform2f(this.uDir, 0, 0); // composite (passthrough × intensity)
+        gl.uniform2f(this.uDir, 0, 0);
         gl.uniform1f(this.uIntensity, this.glow);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         gl.bindTexture(gl.TEXTURE_2D, null);
@@ -852,39 +812,30 @@ export class WebGL2Backend implements IRenderBackend {
     private emitCandles(b: Batch, scene: SceneGraph, bars: OHLCV[], i0: number, i1: number, coords: CoordinateSystem, pane: PaneNode, theme: VelaTheme, barColors: ReadonlyMap<number, string>): void {
         const spacing = coords.bodySpacing();
         const tier = candleTier(spacing);
-        // A candle-based plugin style paints with its OWN cosmetics (unset keys inherit
-        // the shared candles block); built-ins pass through untouched.
         const paint = effectiveCandlePaint(scene.style.candle, scene.candleOverride, theme.upColor, theme.downColor);
-        if (tier === 'aggregate') {
+        if (tier === "aggregate") {
             this.emitCandlesAggregated(b, bars, i0, i1, coords, pane, paint.up, paint.down, barColors);
             return;
         }
-        const drawBody = tier === 'full';
+        const drawBody = tier === "full";
         const up = paint.up;
         const down = paint.down;
         const cs = paint.candle;
-        // When a fading style drops the body below the structure, draw a body outline even
-        // if no border is configured — so the candle keeps a visible (hollow) skeleton.
-        const fading = this.candleStructureAlpha > this.candleBodyAlpha + 0.001;
+        const fading = this.candleStructureAlpha > this.candleBodyAlpha + 1e-3;
         for (let i = i0; i <= i1; i += 1) {
             const bar = bars[i];
-            if (!bar || bar.high <= bar.low) continue; // skip zero-range candles (e.g. the intro reveal's un-started state)
-            // Wick + body snapped to the device grid as one unit, so the wick is always
-            // dead-center in the body and the gap between candles stays uniform.
+            if (!bar || bar.high <= bar.low) continue;
             const g = candleGeometry(coords.logicalToX(i), spacing, coords.dpr, this.candleBodyScale);
             const isUp = bar.close >= bar.open;
             const dir = isUp ? up : down;
             const bc = barColors.get(bar.time);
             const bodyColorStr = bc ?? dir;
             const c = parseColor(bodyColorStr);
-            // Body geometry up front so the wick can be clipped to it when the body is hollow.
             let bodyTop = 0;
             let bodyH = 0;
             if (drawBody) {
                 const oY = coords.priceToY(bar.open, pane.scale, pane.bounds);
                 const cY = coords.priceToY(bar.close, pane.scale, pane.bounds);
-                // Both edges snapped to the device grid so the horizontal edges rasterize
-                // crisp (no blended rim); a doji keeps a visible 1-device-px body.
                 bodyTop = snapY(Math.min(oY, cY), coords.dpr);
                 bodyH = Math.max(1 / coords.dpr, snapY(Math.max(oY, cY), coords.dpr) - bodyTop);
             }
@@ -892,13 +843,8 @@ export class WebGL2Backend implements IRenderBackend {
                 const hY = snapY(coords.priceToY(bar.high, pane.scale, pane.bounds), coords.dpr);
                 const lY = snapY(coords.priceToY(bar.low, pane.scale, pane.bounds), coords.dpr);
                 b.alpha = this.candleStructureAlpha;
-                // barcolor() recolors only the BODY (TV semantics): the wick keeps the
-                // direction color while a body is drawn. At stick-only zoom the stick IS
-                // the candle, so it keeps the barcolor tint.
                 const wCol = parseColor((isUp ? cs.wickUpColor : cs.wickDownColor) ?? (drawBody ? dir : bodyColorStr));
                 if (drawBody) {
-                    // Draw the wick only outside the body, so it never shows through it — including
-                    // hollow bodies and semi-transparent fills.
                     b.rect(g.wickX, hY, g.wickW, Math.max(0, bodyTop - hY), wCol);
                     b.rect(g.wickX, bodyTop + bodyH, g.wickW, Math.max(0, lY - (bodyTop + bodyH)), wCol);
                 } else {
@@ -906,19 +852,15 @@ export class WebGL2Backend implements IRenderBackend {
                 }
             }
             if (drawBody) {
-                if (cs.bodyVisible) {
+                const isHollow = scene.priceStyle === "hollow" || (typeof window !== "undefined" && Boolean(window.__VELA_HOLLOW__));
+                const fillBody = isHollow ? !isUp : cs.bodyVisible;
+                if (fillBody) {
                     b.alpha = this.candleBodyAlpha;
                     b.rect(g.bodyX, bodyTop, g.bodyW, bodyH, c);
                 }
-                // The border strictly follows its visibility setting — barcolor() never
-                // forces one. An unconfigured border color inherits the body color, so a
-                // barcolored body gets a matching tinted border, not a direction-colored
-                // outline.
-                if (cs.borderVisible || (fading && cs.bodyVisible)) {
+                if (cs.borderVisible || fading && cs.bodyVisible || isHollow) {
                     b.alpha = this.candleStructureAlpha;
-                    const bord = cs.borderVisible ? parseColor((isUp ? cs.borderUpColor : cs.borderDownColor) ?? bodyColorStr) : c;
-                    // Inset by half the stroke so the border stays inside the body's
-                    // snapped footprint (mirrors the canvas2d backend).
+                    const bord = (cs.borderVisible || isHollow) ? parseColor((isUp ? cs.borderUpColor : cs.borderDownColor) ?? bodyColorStr) : c;
                     const bw = Math.max(0, g.bodyW - 1);
                     const bh = Math.max(0, bodyH - 1);
                     b.rectStroke(g.bodyX + 0.5, bodyTop + 0.5, bw, bh, 1, bord);
@@ -1114,7 +1056,11 @@ export class WebGL2Backend implements IRenderBackend {
     private emitHline(b: Batch, pl: PriceLine, pane: PaneNode, coords: CoordinateSystem, dataW: number, theme: VelaTheme): void {
         const y = Math.round(coords.priceToY(pl.price, pane.scale, pane.bounds));
         if (y < pane.bounds.top || y > pane.bounds.top + pane.bounds.height) return;
-        b.dashedSeg(0, y, dataW, y, pl.width ?? 1, parseColor(pl.color ?? theme.textColor), DASH[pl.lineStyle ?? 'solid'] ?? null);
+        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const leftOff = isLeft && coords.leftOffsetPx ? coords.leftOffsetPx : 0;
+        const minX = isLeft ? leftOff : 0;
+        const maxX = isLeft ? leftOff + dataW : dataW;
+        b.dashedSeg(minX, y, maxX, y, pl.width ?? 1, parseColor(pl.color ?? theme.textColor), DASH[pl.lineStyle ?? "solid"] ?? null);
     }
 }
 

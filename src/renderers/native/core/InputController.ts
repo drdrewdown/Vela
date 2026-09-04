@@ -337,9 +337,16 @@ export class InputController {
     regionAt(x: number, y: number): DragRegion {
         const c = this.deps.getCoords();
         if (this.paneResize && y <= c.height && this.deps.paneSeparatorAt(y)) return 'separator';
+        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const leftOff = isLeft && c.leftOffsetPx ? c.leftOffsetPx : 0;
         if (this.axisDrag) {
-            if (x > c.width && y <= c.height) return 'price'; // right price-axis strip
-            if (y > c.height && x <= c.width) return 'time'; // bottom time-axis strip
+            if (isLeft) {
+                if (x < leftOff && y <= c.height) return "price";
+                if (y > c.height && x >= leftOff) return "time";
+            } else {
+                if (x > c.width && y <= c.height) return "price";
+                if (y > c.height && x <= c.width) return "time";
+            }
         }
         return 'data';
     }

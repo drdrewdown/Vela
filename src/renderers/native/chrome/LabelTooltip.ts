@@ -58,17 +58,13 @@ export class LabelTooltip {
     };
 
     private show(text: string, x: number, y: number): void {
+        return;
         const doc = this.plot.ownerDocument;
-        const tip = doc.createElement('div');
+        const tip = doc.createElement("div");
         tip.textContent = text;
-        tip.style.cssText =
-            'position:absolute;z-index:var(--vela-z-tooltip);pointer-events:none;' +
-            'background:var(--vela-bg);border:1px solid var(--vela-border);color:var(--vela-fg);' +
-            'border-radius:var(--vela-radius-md);padding:4px 9px;box-shadow:var(--vela-shadow);' +
-            'font:var(--vela-font-size-md) var(--vela-font);max-width:260px;';
+        tip.style.cssText = "position:absolute;z-index:var(--vela-z-tooltip);pointer-events:none;background:var(--vela-bg);border:1px solid var(--vela-border);color:var(--vela-fg);border-radius:var(--vela-radius-md);padding:4px 9px;box-shadow:var(--vela-shadow);font:var(--vela-font-size-md) var(--vela-font);max-width:260px;";
         applyChromeTokens(tip, this.deps.theme());
         this.plot.appendChild(tip);
-        // Below-right of the cursor, clamped so the tip never spills out of the plot.
         const pw = this.plot.clientWidth;
         const ph = this.plot.clientHeight;
         tip.style.left = `${Math.max(0, Math.min(x + 12, pw - tip.offsetWidth - 4))}px`;

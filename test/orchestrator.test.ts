@@ -475,7 +475,7 @@ describe('EngineOrchestrator', () => {
         expect(engine.runCount[vr.id] ?? 0).toBeGreaterThan(runsBefore);
     });
 
-    it('addNativeIndicator: mounts via the shared pipeline, is single-instance per type, and inspect tags it', async () => {
+    it('addNativeIndicator: mounts via the shared pipeline, is repeatable per type (Aether), and inspect tags it', async () => {
         registerNativeIndicator(testNativeDescriptor);
         try {
             const renderer = new FakeRenderer();
@@ -493,10 +493,13 @@ describe('EngineOrchestrator', () => {
             // Settings schema reached the public handle.
             expect(h1.inputs.map((i) => i.key)).toEqual(['len']);
 
-            // Single instance per type: a second add returns the SAME handle, no re-create.
+            // Aether: natives are REPEATABLE (9/50/200 EMA side by side) — a second add creates a
+            // new instance. Only the built-in volume / vpvr layers stay single-instance.
             const h2 = chart.addNativeIndicator('test-native');
-            expect(h2).toBe(h1);
-            expect(lastNative.calls.start).toBe(1);
+            await flush();
+            expect(h2).not.toBe(h1);
+            expect(h2.id).not.toBe(h1.id);
+            expect(lastNative.calls.start).toBe(1); // `lastNative` is the NEW instance — started once
 
             // inspect() tags it native.
             const summary = chart.inspect().indicators.find((s) => s.id === h1.id);

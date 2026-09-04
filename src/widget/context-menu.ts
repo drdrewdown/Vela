@@ -37,6 +37,8 @@ export class ChartContextMenu {
     private readonly menu: Menu;
     private readonly host: HTMLElement;
     private chart: Vela | null = null;
+    /** Aether: pointer position of the last right-click, for price-at-cursor trading items. */
+    private lastPoint: { clientX: number; clientY: number } | null = null;
     private lastZone: Zone = 'body';
     /** The pane whose scale the open price-axis menu targets (null ⇒ the main scale). */
     private lastPane: PaneScaleInfo | null = null;
@@ -45,6 +47,7 @@ export class ChartContextMenu {
         if (!this.chart) return;
         this.lastZone = this.zoneOf(e);
         this.lastPane = this.lastZone === 'price-axis' ? this.paneAt(e) : null;
+        this.lastPoint = { clientX: e.clientX, clientY: e.clientY };
         this.menu.setItems(this.itemsFor(this.lastZone));
         this.menu.openAt(e.clientX, e.clientY);
     };
@@ -75,9 +78,15 @@ export class ChartContextMenu {
 
     private zoneOf(e: MouseEvent): Zone {
         const rect = this.host.getBoundingClientRect();
-        if (e.clientX - rect.left > rect.width - PRICE_AXIS_W) return 'price-axis';
-        if (e.clientY - rect.top > rect.height - TIME_AXIS_H) return 'time-axis';
-        return 'body';
+        const isLeft = (typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left") || (this.chart?.renderer?.get("scalePosition") === "left");
+        const axisW = (this.chart?.renderer as any)?.rightAxisW ?? PRICE_AXIS_W;
+        if (isLeft) {
+            if (e.clientX - rect.left < axisW) return "price-axis";
+        } else {
+            if (e.clientX - rect.left > rect.width - axisW) return "price-axis";
+        }
+        if (e.clientY - rect.top > rect.height - TIME_AXIS_H) return "time-axis";
+        return "body";
     }
 
     /** The pane under the pointer, so every pane's price scale has its own menu. */
@@ -102,65 +111,121 @@ export class ChartContextMenu {
     }
 
     private itemsFor(zone: Zone): MenuItemDescriptor[] {
-        if (zone === 'price-axis') {
+        if (zone === "price-axis") {
             const pane = this.lastPane;
+            const isLeft = (typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left") || (this.chart?.renderer?.get("scalePosition") === "left");
+            const isHighLow = typeof window === "undefined" || window.__VELA_HIGH_LOW__ !== false;
+            const baseItems = priceAxisItems({
+                auto: this.chart?.renderer.get("autoScale") !== false,
+                invert: pane ? pane.invert : this.flag("invertScale"),
+                choice: scaleChoiceOf(pane ?? { mode: String(this.chart?.renderer.get("scaleMode") ?? "price"), log: this.flag("logScale") }),
+                axisLabels: this.flag("axisLabels"),
+                priceLabel: this.flag("priceLabel"),
+                countdown: this.flag("countdown"),
+                priceLine: this.flag("currentPriceLine")
+            });
+            const highLowItem = {
+                id: "aether:scale:highlow",
+                label: "High and low price labels",
+                checked: isHighLow
+            };
+            const placementItem = {
+                id: "scale-placement",
+                label: "Scale placement",
+                separatorBefore: true,
+                submenu: [
+                    { id: "aether:scale:left", label: "Left", checked: isLeft },
+                    { id: "aether:scale:right", label: "Right", checked: !isLeft }
+                ]
+            };
+            const settingsIdx = baseItems.findIndex((it) => it.id?.startsWith("settings:"));
+            if (settingsIdx !== -1) {
+                baseItems.splice(settingsIdx, 0, highLowItem, placementItem);
+            } else {
+                baseItems.push(highLowItem, placementItem);
+            }
             return [
-                ...priceAxisItems({
-                    auto: this.chart?.renderer.get('autoScale') !== false,
-                    invert: pane ? pane.invert : this.flag('invertScale'),
-                    choice: scaleChoiceOf(pane ?? { mode: String(this.chart?.renderer.get('scaleMode') ?? 'price'), log: this.flag('logScale') }),
-                    axisLabels: this.flag('axisLabels'),
-                    priceLabel: this.flag('priceLabel'),
-                    countdown: this.flag('countdown'),
-                    priceLine: this.flag('currentPriceLine'),
-                }),
-                ...this.contributed(zone),
+                ...baseItems,
+                ...this.contributed(zone)
             ];
         }
-        if (zone === 'time-axis') {
-            const tz = this.cbs.timezone?.() ?? String(this.chart?.renderer.get('timezone') ?? 'Etc/UTC');
-            return [...timeAxisItems(tz), ...this.contributed('time-axis')];
+        if (zone === "time-axis") {
+            const tz = this.cbs.timezone?.() ?? String(this.chart?.renderer.get("timezone") ?? "Etc/UTC");
+            return [...timeAxisItems(tz), ...this.contributed("time-axis")];
         }
         const chart = this.chart;
+        let extraTradingItems = [];
+        if (zone === "body" && typeof window !== "undefined" && window.__AETHER_GET_CONTEXT_ITEMS__) {
+            try {
+                extraTradingItems = window.__AETHER_GET_CONTEXT_ITEMS__(chart, this.lastPoint);
+            } catch (err) {}
+        }
+        const defaultBody = bodyItems({
+            drawings: chart?.drawings.supported ? chart.drawings.all().length : 0,
+            indicators: chart?.indicators().length ?? 0
+        });
+        if (extraTradingItems && extraTradingItems.length > 0 && defaultBody[0]) {
+            defaultBody[0].separatorBefore = true;
+        }
         return [
-            ...bodyItems({
-                drawings: chart?.drawings.supported ? chart.drawings.all().length : 0,
-                indicators: chart?.indicators().length ?? 0,
-            }),
-            ...this.contributed('body'),
+            ...(extraTradingItems || []),
+            ...defaultBody,
+            ...this.contributed("body")
         ];
     }
 
     private run(id: string): void {
         const chart = this.chart;
         if (!chart) return;
-        if (id.startsWith('action:')) {
-            const ctx = this.cbs.getContext?.();
-            if (ctx) widgetActions(`context:${this.lastZone}`, ctx).find((a) => a.id === id.slice('action:'.length))?.run(ctx);
+        if (id.startsWith("aether:order:") && typeof window !== "undefined" && window.__AETHER_RUN_CONTEXT_ORDER__) {
+            window.__AETHER_RUN_CONTEXT_ORDER__(id);
             return;
         }
-        if (id.startsWith('toggle:')) {
-            const feature = id.slice('toggle:'.length);
+        if (id === "aether:scale:highlow") {
+            if (typeof window !== "undefined" && window.__AETHER_TOGGLE_HIGH_LOW__) {
+                window.__AETHER_TOGGLE_HIGH_LOW__();
+            }
+            return;
+        }
+        if (id === "aether:scale:left") {
+            if (typeof window !== "undefined" && window.__AETHER_SET_SCALE_SIDE__) {
+                window.__AETHER_SET_SCALE_SIDE__("left");
+            }
+            return;
+        }
+        if (id === "aether:scale:right") {
+            if (typeof window !== "undefined" && window.__AETHER_SET_SCALE_SIDE__) {
+                window.__AETHER_SET_SCALE_SIDE__("right");
+            }
+            return;
+        }
+        if (id.startsWith("action:")) {
+            const ctx = this.cbs.getContext?.();
+            if (ctx) widgetActions(`context:${this.lastZone}`, ctx).find((a) => a.id === id.slice("action:".length))?.run(ctx);
+            return;
+        }
+        if (id.startsWith("toggle:")) {
+            const feature = id.slice("toggle:".length);
             chart.renderer.set(feature, !this.flag(feature));
-        } else if (id.startsWith('scale:')) {
-            for (const [feature, value] of scaleWrites(id.slice('scale:'.length) as ScaleChoice, this.lastPane)) chart.renderer.set(feature, value);
-        } else if (id.startsWith('tz:')) {
-            const zone = id.slice('tz:'.length);
+        } else if (id.startsWith("scale:")) {
+            for (const [feature, value] of scaleWrites(id.slice("scale:".length) as ScaleChoice, this.lastPane)) chart.renderer.set(feature, value);
+        } else if (id.startsWith("tz:")) {
+            const zone = id.slice("tz:".length);
             if (this.cbs.setTimezone) this.cbs.setTimezone(zone);
-            else chart.renderer.set('timezone', zone);
-        } else if (id === 'auto') {
-            chart.renderer.set('autoScale', chart.renderer.get('autoScale') === false);
-        } else if (id === 'invert') {
+            else chart.renderer.set("timezone", zone);
+        } else if (id === "auto") {
+            chart.renderer.set("autoScale", chart.renderer.get("autoScale") === false);
+        } else if (id === "invert") {
             const pane = this.lastPane;
-            const [feature, value] = invertWrite(!(pane ? pane.invert : this.flag('invertScale')), pane);
+            const [feature, value] = invertWrite(!(pane ? pane.invert : this.flag("invertScale")), pane);
             chart.renderer.set(feature, value);
-        } else if (id.startsWith('settings')) {
+        } else if (id.startsWith("settings")) {
             chart.renderer.openSettings(settingsSectionOf(id));
-        } else if (id === 'reset-view') {
+        } else if (id === "reset-view") {
             this.cbs.resetView();
-        } else if (id === 'remove-drawings') {
+        } else if (id === "remove-drawings") {
             if (chart.drawings.supported) for (const d of chart.drawings.all()) chart.drawings.remove(d.id);
-        } else if (id === 'remove-indicators') {
+        } else if (id === "remove-indicators") {
             for (const handle of chart.indicators()) handle.remove();
         }
     }

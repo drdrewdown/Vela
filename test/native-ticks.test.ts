@@ -91,29 +91,33 @@ describe('native ticks · formatPriceLabel / formatAxisValue', () => {
     });
 });
 
-describe('native ticks · formatTimeStamp (crosshair time chip)', () => {
+describe('native ticks · formatTimeStamp (crosshair time chip) — Aether contract', () => {
+    // Epochs are New York wall-clock (see tz.ts): America/New_York renders the fields verbatim and
+    // every other zone is offset relative to New York.
     const HOUR = 3_600_000;
     const DAY = 24 * HOUR;
-    const sun30Aug26_19h = Date.UTC(2026, 7, 30, 19, 0); // a Sunday
+    const NY = 'America/New_York';
+    const sun30Aug26_19h = Date.UTC(2026, 7, 30, 19, 0); // a Sunday, 19:00 NY wall-clock
 
     it('reads weekday, day, short month, two-digit year and hh:mm on intraday bars', () => {
-        expect(formatTimeStamp(sun30Aug26_19h, 'UTC', HOUR)).toBe("Sun 30 Aug '26 19:00");
-        expect(formatTimeStamp(Date.UTC(2031, 0, 3, 9, 5), 'UTC', 60_000)).toBe("Fri 3 Jan '31 09:05");
+        expect(formatTimeStamp(sun30Aug26_19h, NY, HOUR)).toBe("Sun 30 Aug '26 19:00");
+        expect(formatTimeStamp(Date.UTC(2031, 0, 3, 9, 5), NY, 60_000)).toBe("Fri 3 Jan '31 09:05");
     });
 
     it('drops hh:mm on daily and coarser bars', () => {
-        expect(formatTimeStamp(sun30Aug26_19h, 'UTC', DAY)).toBe("Sun 30 Aug '26");
-        expect(formatTimeStamp(sun30Aug26_19h, 'UTC', 7 * DAY)).toBe("Sun 30 Aug '26");
-        expect(formatTimeStamp(sun30Aug26_19h, 'UTC', 12 * HOUR)).toBe("Sun 30 Aug '26 19:00");
+        expect(formatTimeStamp(sun30Aug26_19h, NY, DAY)).toBe("Sun 30 Aug '26");
+        expect(formatTimeStamp(sun30Aug26_19h, NY, 7 * DAY)).toBe("Sun 30 Aug '26");
+        expect(formatTimeStamp(sun30Aug26_19h, NY, 12 * HOUR)).toBe("Sun 30 Aug '26 19:00");
     });
 
-    it('zero-pads the year and renders the wall clock in the chosen time zone', () => {
-        expect(formatTimeStamp(Date.UTC(2005, 11, 31, 23, 30), 'UTC', HOUR)).toBe("Sat 31 Dec '05 23:30");
-        // 23:30 UTC on Dec 31 is already Jan 1 in Tokyo (UTC+9) — date, weekday and year roll.
-        expect(formatTimeStamp(Date.UTC(2005, 11, 31, 23, 30), 'Asia/Tokyo', HOUR)).toBe("Sun 1 Jan '06 08:30");
+    it('zero-pads the year and renders other zones relative to New York', () => {
+        expect(formatTimeStamp(Date.UTC(2005, 11, 31, 23, 30), NY, HOUR)).toBe("Sat 31 Dec '05 23:30");
+        // 23:30 NY on Dec 31 is 04:30 UTC and 13:30 Tokyo on Jan 1 — date, weekday and year roll.
+        expect(formatTimeStamp(Date.UTC(2005, 11, 31, 23, 30), 'UTC', HOUR)).toBe("Sun 1 Jan '06 04:30");
+        expect(formatTimeStamp(Date.UTC(2005, 11, 31, 23, 30), 'Asia/Tokyo', HOUR)).toBe("Sun 1 Jan '06 13:30");
     });
 
     it('treats an unknown bar interval (no bars yet) as intraday', () => {
-        expect(formatTimeStamp(sun30Aug26_19h, 'UTC', 0)).toBe("Sun 30 Aug '26 19:00");
+        expect(formatTimeStamp(sun30Aug26_19h, NY, 0)).toBe("Sun 30 Aug '26 19:00");
     });
 });

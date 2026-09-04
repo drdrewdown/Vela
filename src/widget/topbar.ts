@@ -145,11 +145,12 @@ const CSS = `
 `;
 
 const BUILTIN_STYLE_LABELS: Record<string, string> = {
-    candles: 'Candles',
-    bars: 'Bars',
-    line: 'Line',
-    area: 'Area',
-    baseline: 'Baseline',
+    candles: "Candles",
+    hollow: "Hollow Candles",
+    bars: "Bars",
+    line: "Line",
+    area: "Area",
+    baseline: "Baseline"
 };
 
 export function priceStyleLabel(id: string): string {

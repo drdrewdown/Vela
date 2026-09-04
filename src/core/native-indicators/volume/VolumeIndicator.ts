@@ -69,6 +69,7 @@ class VolumeIndicator implements NativeIndicator {
 export const volumeDescriptor: NativeIndicatorDescriptor = {
     type: 'volume',
     title: 'Volume',
+    category: "Volume Indicators",
     paneHint: 'price',
     overlay: true,
     inputsSchema: (): InputSchema[] => [

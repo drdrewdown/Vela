@@ -22,6 +22,8 @@ export type BoxFontFamily = 'default' | 'monospace';
  * (xloc `bar_time`); `y1/y2` are prices.
  */
 export interface DrawingLine {
+    /** Aether: hover text registered as a tooltip hit region along the segment. */
+    tooltip?: string;
     id: string;
     paneId: string;
     xloc: DrawingXLoc;
@@ -47,6 +49,8 @@ export interface DrawingLine {
 
 /** A Pine `box.new(...)`. `left/right` follow `xloc`; `top/bottom` are prices. */
 export interface DrawingBox {
+    /** Aether: hover text registered as a tooltip hit region over the box. */
+    tooltip?: string;
     id: string;
     paneId: string;
     xloc: DrawingXLoc;

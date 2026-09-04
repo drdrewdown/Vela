@@ -77,8 +77,8 @@ describe('drawings/RegressionChannel', () => {
     it('defaults: gray midline, green/red bands, R² shown', () => {
         const d = createDrawing('regressionchannel', { paneId: 'price', anchors: [{ time: 0, price: 0 }, { time: 4 * HR, price: 0 }] })! as RegressionChannel;
         expect(d.reg.midColor).toBe('#787b86');
-        expect(d.reg.upperColor).toBe('#089981');
-        expect(d.reg.lowerColor).toBe('#f23645');
+        expect(d.reg.upperColor).toBe('#5aa1ff'); // Aether palette: BULLISH
+        expect(d.reg.lowerColor).toBe('#ff709a'); // Aether palette: BEARISH
         expect(d.reg.showR2).toBe(true);
     });
 

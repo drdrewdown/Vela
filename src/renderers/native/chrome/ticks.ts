@@ -240,7 +240,14 @@ export function formatTimeStamp(ms: number, timeZone: string, barIntervalMs: num
     const d = zonedDate(ms, timeZone);
     const date = `${WEEKDAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} '${pad2(d.getUTCFullYear() % 100)}`;
     if (barIntervalMs >= DAY) return date;
-    return `${date} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
+    const h = d.getUTCHours();
+    const m = d.getUTCMinutes();
+    if (typeof window !== "undefined" && window.__VELA_12H__) {
+        const ampm = h >= 12 ? "PM" : "AM";
+        const h12 = h % 12 || 12;
+        return `${date} ${h12}:${pad2(m)} ${ampm}`;
+    }
+    return `${date} ${pad2(h)}:${pad2(m)}`;
 }
 
 function pickStep(targetMs: number): number {
@@ -274,6 +281,10 @@ export function timeTicks(fromMs: number, toMs: number, target = 8, offsetMs = 0
             if (h === 0 && m === 0) {
                 label = `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
                 major = true;
+            } else if (typeof window !== "undefined" && window.__VELA_12H__) {
+                const ampm = h >= 12 ? "pm" : "am";
+                const h12 = h % 12 || 12;
+                label = `${h12}:${pad2(m)}${ampm}`;
             } else {
                 label = `${pad2(h)}:${pad2(m)}`;
             }

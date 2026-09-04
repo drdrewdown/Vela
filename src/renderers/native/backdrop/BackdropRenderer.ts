@@ -73,16 +73,18 @@ export class BackdropRenderer {
      *  never cuts a candle in two), host highlights on top (continuous time mapping —
      *  hosts may paint sub-bar spans). */
     private drawHighlights(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem): void {
+        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const fullW = ctx.canvas.width / coords.dpr;
+        const axisW = fullW - coords.width;
+        const minX = isLeft ? axisW : 0;
+        const maxX = isLeft ? fullW : coords.width;
         const sessions = scene.sessionHighlightBands();
         if (sessions.length > 0) {
-            // Calendar windows may extend beyond loaded candles (the tracker fetches ahead
-            // for live charts). Paint only the occupied bar slots: no wash before history,
-            // and none in right-side whitespace beyond the current bar.
-            const left = Math.max(0, coords.logicalToX(-0.5));
-            const right = Math.min(coords.width, coords.logicalToX(coords.barCount - 0.5));
+            const left = Math.max(minX, coords.logicalToX(-0.5));
+            const right = Math.min(maxX, coords.logicalToX(coords.barCount - 0.5));
             this.drawHighlightSet(ctx, sessions, coords, left, right, true);
         }
-        this.drawHighlightSet(ctx, scene.highlights, coords, 0, coords.width, false);
+        this.drawHighlightSet(ctx, scene.highlights, coords, minX, maxX, false);
     }
 
     private drawHighlightSet(ctx: CanvasRenderingContext2D, bands: ReturnType<SceneGraph['sessionHighlightBands']>, coords: CoordinateSystem, left: number, right: number, snapToSlots: boolean): void {
@@ -99,20 +101,25 @@ export class BackdropRenderer {
     // (style); each uses its own color. Pane separators are drawn on the chrome layer
     // (full-width, above the data) so series never overpaint them.
     private drawGrid(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, dataW: number, gridAlpha: number): void {
+        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const fullW = ctx.canvas.width / coords.dpr;
+        const axisW = fullW - dataW;
+        const minX = isLeft ? axisW : 0;
+        const maxX = isLeft ? fullW : dataW;
         const panes = scene.orderedPanes();
         const { gridVert, gridHorz } = scene.style;
         const vertColor = gridVert.color ?? theme.gridColor;
         const horzColor = gridHorz.color ?? theme.gridColor;
         ctx.lineWidth = 1;
         if (scene.showGrid && gridVert.visible) {
-            ctx.globalAlpha = gridAlpha; // fade the grid out as a reveal-under style opens up
+            ctx.globalAlpha = gridAlpha;
             ctx.strokeStyle = vertColor;
             const tr = coords.visibleTimeRange();
             const offset = tzOffsetMs((tr.from + tr.to) / 2, scene.timezone);
             ctx.beginPath();
             for (const tick of timeTicks(tr.from, tr.to, 8, offset)) {
                 const x = Math.round(coords.timeToX(tick.time)) + 0.5;
-                if (x < 0 || x > dataW) continue;
+                if (x < minX || x > maxX) continue;
                 ctx.moveTo(x, 0);
                 ctx.lineTo(x, coords.height);
             }
@@ -120,15 +127,15 @@ export class BackdropRenderer {
         }
         for (const pane of panes) {
             if (scene.showGrid && gridHorz.visible && !pane.collapsed) {
-                ctx.globalAlpha = gridAlpha; // fade horizontal gridlines so they don't show through fading candles
+                ctx.globalAlpha = gridAlpha;
                 ctx.strokeStyle = horzColor;
                 const pct = percentScaleFor(scene, pane);
                 ctx.beginPath();
-                for (const t of paneAxisTicks(pane.scale, pane.bounds.height, pct, undefined, pane.axisFormat)) {
+                for (const t of paneAxisTicks(pane.scale, pane.bounds.height, pct, void 0, pane.axisFormat)) {
                     const y = Math.round(coords.priceToY(t.price, pane.scale, pane.bounds)) + 0.5;
                     if (y < pane.bounds.top || y > pane.bounds.top + pane.bounds.height) continue;
-                    ctx.moveTo(0, y);
-                    ctx.lineTo(dataW, y);
+                    ctx.moveTo(minX, y);
+                    ctx.lineTo(maxX, y);
                 }
                 ctx.stroke();
             }

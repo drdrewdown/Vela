@@ -118,6 +118,8 @@ export interface CellStatusPrefs {
 export interface CellNativeInfo {
     type: string;
     title: string;
+    /** Aether: picker section (e.g. "Momentum Oscillators"). */
+    category?: string;
     supported: boolean;
     present: boolean;
     beta?: boolean;
@@ -1011,7 +1013,7 @@ export class ChartCell {
     /** The picker's library rows: supported natives first, then the manifest. */
     libraryRows(): Array<{ name: string; language?: string; category?: string; native?: boolean; nativeType?: string; beta?: boolean }> {
         return [
-            ...this.nativeCatalog.filter((n) => n.supported).map((n) => ({ name: n.title, category: 'Vela', native: true, nativeType: n.type, beta: n.beta })),
+            ...this.nativeCatalog.filter((n) => n.supported).map((n) => ({ name: n.title, category: n.category || "General", native: true, nativeType: n.type, beta: n.beta })),
             ...this.manifest.map((e) => ({ name: e.name, language: e.language, category: e.category })),
         ];
     }
@@ -1146,7 +1148,7 @@ export class ChartCell {
         if (!chart) return;
         void chart.availableNativeIndicators().then((list) => {
             if (this.destroyed || this.inner !== chart) return;
-            this.nativeCatalog = list.map((n) => ({ type: n.type, title: n.title, supported: n.supported, present: n.present, beta: n.beta }));
+            this.nativeCatalog = list.map((n) => ({ type: n.type, title: n.title, category: n.category, supported: n.supported, present: n.present, beta: n.beta }));
             this.deps.onIndicatorsChanged(this.id);
         });
     }

@@ -7,8 +7,8 @@ import type { PriceScale } from './CoordinateSystem';
 // LWC's default scaleMargins reserve the top 20% / bottom 10% of pane PIXEL
 // height (data fills the middle 70%). Expressed over the price SPAN that is
 // span*2/7 above and span*1/7 below.
-const MARGIN_TOP = 2 / 7;
-const MARGIN_BOTTOM = 1 / 7;
+const MARGIN_TOP = 0.18;
+const MARGIN_BOTTOM = 0.26;
 
 /**
  * Per-pane price window from the data visible in `[i0, i1]` (bar indices).
@@ -28,13 +28,12 @@ export function computePaneScale(
 ): PriceScale {
     let min = Infinity;
     let max = -Infinity;
-    const consider = (v: number | null | undefined): void => {
+    const consider = (v: number | null | undefined) => {
         if (v != null && Number.isFinite(v)) {
             if (v < min) min = v;
             if (v > max) max = v;
         }
     };
-
     if (includeCandles) {
         for (let i = i0; i <= i1; i += 1) {
             const b = bars[i];
@@ -43,31 +42,25 @@ export function computePaneScale(
                 consider(b.low);
             }
         }
-    }
-
-    for (const model of models) {
-        const off = offsetOf(model.id);
-        for (const s of model.series) {
-            // force_overlay series render (and scale) on the PRICE pane, not their own —
-            // the price pane folds them back in via overlaySeriesRange.
-            if (s.overlay === true) continue;
-            considerSeries(s, i0, i1, off, consider);
+    } else {
+        for (const model of models) {
+            const off = offsetOf(model.id);
+            for (const s of model.series) {
+                if (s.overlay === true) continue;
+                considerSeries(s, i0, i1, off, consider);
+            }
+            for (const pl of model.priceLines) consider(pl.price);
         }
-        for (const pl of model.priceLines) consider(pl.price);
+        if (drawings) {
+            consider(drawings.min);
+            consider(drawings.max);
+        }
     }
-
-    // Visible Pine drawings (boxes/lines/labels/…) also expand the scale.
-    if (drawings) {
-        consider(drawings.min);
-        consider(drawings.max);
-    }
-
     if (min === Infinity || max === -Infinity) return { min: 0, max: 1 };
     if (min === max) {
         const pad = Math.abs(min) * 0.1 || 1;
         return { min: min - pad, max: max + pad, log: log && min - pad > 0 };
     }
-    // Logarithmic: apply the margins in log space (requires a positive range).
     if (log && min > 0) {
         const lmin = Math.log(min);
         const lmax = Math.log(max);

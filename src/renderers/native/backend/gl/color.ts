@@ -24,14 +24,29 @@ export function parseColor(css: string | null | undefined): Rgba {
     if (v) return v;
     v = prev.get(css);
     if (v) {
-        cache.set(css, v); // promote into the live generation
+        cache.set(css, v);
         return v;
     }
-    v = readBack(css);
+    if (css.charCodeAt(0) === 35) {
+        const h = css.slice(1);
+        if (h.length === 6) {
+            const n = parseInt(h, 16);
+            v = [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255, 1];
+        } else if (h.length === 8) {
+            const n = parseInt(h, 16);
+            v = [((n >>> 24) & 255) / 255, ((n >>> 16) & 255) / 255, ((n >>> 8) & 255) / 255, (n & 255) / 255];
+        }
+    } else if (css.charCodeAt(0) === 114) {
+        const m = css.match(/[\d.]+/g);
+        if (m && m.length >= 3) {
+            v = [+m[0]! / 255, +m[1]! / 255, +m[2]! / 255, m[3] != null ? +m[3] : 1];
+        }
+    }
+    if (!v) v = readBack(css);
     cache.set(css, v);
     if (cache.size >= CAP) {
         prev = cache;
-        cache = new Map();
+        cache = /* @__PURE__ */ new Map();
     }
     return v;
 }
