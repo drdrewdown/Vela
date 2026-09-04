@@ -107,6 +107,9 @@ const HEAL_COOLDOWN_MS = 5_000;
  * Imports neither a concrete renderer nor a concrete scripting engine.
  */
 export class EngineOrchestrator implements IndicatorController, PaneController {
+    /** Aether: unique per orchestrator (= per chart) for the lifetime of the page. */
+    readonly aetherChartId: string = `chart-${++EngineOrchestrator.aetherChartSeq}`;
+    private static aetherChartSeq = 0;
     readonly events = new TypedEventBus<VelaEventMap>();
     private readonly registry = new IndicatorRegistry();
     /** Top-to-bottom pane display order (price always first). The routing + `chart.panes`
@@ -1574,6 +1577,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
             if (!record?.native || record.hidden) return; // removed/hidden during the await
             const ctx: NativeIndicatorContext = {
                 id,
+                chartId: this.aetherChartId,
                 symbol: this.config.market.symbol ?? 'TEST',
                 timeframe: this.config.market.timeframe ?? '60',
                 live: this.config.live,

@@ -39,6 +39,10 @@ export interface NativeIndicatorContext {
     /** Aether: this instance's registry id (e.g. "native-3"). Hosts key per-instance state
      *  (hover data, exported levels) on it so two charts, or two EMAs, never share a slot. */
     readonly id: string;
+    /** Aether: a token unique to the CHART this instance runs in. Registry ids restart per chart
+     *  ("native-2" exists in every cell of a 2H layout), so per-instance host state must be keyed
+     *  on `${chartId}:${id}`. */
+    readonly chartId: string;
     readonly symbol: string;
     readonly timeframe: string;
     readonly live: boolean;

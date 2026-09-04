@@ -308,6 +308,10 @@ export class Vela {
     ready(): Promise<void> {
         return this.orchestrator.ready();
     }
+    /** Aether: token unique to this chart for the page lifetime (see NativeIndicatorContext.chartId). */
+    get aetherChartId(): string {
+        return this.orchestrator.aetherChartId;
+    }
 
     /** Resolves once the FULL requested history has loaded (immediately for small/offline
      *  charts; after the backward backfill for deep ones — see the `history:progress` /
