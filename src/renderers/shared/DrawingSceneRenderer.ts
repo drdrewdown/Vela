@@ -199,7 +199,7 @@ export class DrawingSceneRenderer {
         }
         for (const lf of this.set.linefills) {
             if (!lf.color) continue;
-            const xs = [lf.line1.x1, lf.line1.x2, lf.line2.x1, lf.line2.x2].map((x, i) => this.logicalOf(i < 2 ? lf.line1.xloc : lf.line2.xloc, x));
+            const xs = [lf.line1.x1, lf.line1.x2, lf.line2.x1, lf.line2.x2].map((x: any, i: any) => this.logicalOf(i < 2 ? lf.line1.xloc : lf.line2.xloc, x));
             const lfExt: DrawingExtend = lf.line1.extend !== 'none' || lf.line2.extend !== 'none' ? 'both' : 'none';
             if (!visible(Math.min(...xs), Math.max(...xs), lfExt)) continue;
             fold(lf.line1.y1);
@@ -209,7 +209,7 @@ export class DrawingSceneRenderer {
         }
         for (const pl of this.set.polylines) {
             if (pl.points.length < 2) continue;
-            const xs = pl.points.map((p) => this.logicalOf(p.xloc, p.x));
+            const xs = pl.points.map((p: any) => this.logicalOf(p.xloc, p.x));
             if (!visible(Math.min(...xs), Math.max(...xs), 'none')) continue;
             for (const p of pl.points) fold(p.price);
         }
@@ -365,8 +365,8 @@ export class DrawingSceneRenderer {
                 if (pl.arrowLeft || pl.arrowRight) {
                     const segs = pl.closed ? pts.length : pts.length - 1;
                     for (let i = 0; i < segs; i += 1) {
-                        const a = pts[i];
-                        const b = pts[(i + 1) % pts.length];
+                        const a = pts[i]!;
+                        const b = pts[(i + 1) % pts.length]!;
                         if (pl.arrowRight) this.drawArrow(ctx, b[0], b[1], a[0], a[1], pl.lineWidth, pl.lineColor);
                         if (pl.arrowLeft) this.drawArrow(ctx, a[0], a[1], b[0], b[1], pl.lineWidth, pl.lineColor);
                     }
@@ -514,7 +514,7 @@ export class DrawingSceneRenderer {
 
     // ── labels ───────────────────────────────────────────────────────────────
     private drawLabels(ctx: CanvasRenderingContext2D, W: number, H: number, xOf: (l: number) => number, yOf: (p: number) => number | null): void {
-        const rawList = [];
+        const rawList: any[] = [];
         for (const lb of this.set.labels) {
             let px = xOf(this.logicalOf(lb.xloc, lb.x));
             let py;
@@ -539,14 +539,14 @@ export class DrawingSceneRenderer {
         }
 
         const doMerge = typeof window === "undefined" || window.__VELA_LABEL_MERGE__ !== false;
-        let renderList = [];
+        let renderList: any[] = [];
 
         if (!doMerge || rawList.length <= 1) {
             renderList = rawList;
         } else {
             // Separate into pinned right margin price chips vs on-chart anchored labels
-            const pinnedChips = [];
-            const restLabels = [];
+            const pinnedChips: any[] = [];
+            const restLabels: any[] = [];
 
             for (const item of rawList) {
                 if (item.lb.style === "label_left" && item.lb.yloc === "price") {
@@ -558,7 +558,7 @@ export class DrawingSceneRenderer {
 
             // 1. Process Pinned Price Chips (AetherTrade parity label merge)
             // Group chips within MERGE_PX (18px) vertically — ticker-agnostic & zoom-adaptive
-            pinnedChips.sort((a, b) => a.py - b.py);
+            pinnedChips.sort((a: any, b: any) => a.py - b.py);
             const MERGE_PX = 20;
             let a = 0;
             while (a < pinnedChips.length) {
@@ -570,12 +570,12 @@ export class DrawingSceneRenderer {
                     renderList.push(grp[0]);
                 } else {
                     // Tokenize label tags (remove trailing price)
-                    const tok = (s) => (s || "").split("\n")[0].replace(/\s*[\d.,]+\s*$/, "").trim() || s;
+                    const tok = (s: any) => (s || "").split("\n")[0].replace(/\s*[\d.,]+\s*$/, "").trim() || s;
 
                     // Priority hierarchy for merged chip style & color:
                     // Trade signals/orders > Key Levels / 777 > ICT Time / Liquidity / VP
                     grp.sort((g1, g2) => {
-                        const getPriority = (g) => {
+                        const getPriority = (g: any) => {
                             const id = g.lb.id || "";
                             if (id.startsWith("lbl_active_") || id.startsWith("trade_")) return 10;
                             if (id.startsWith("kl_") || id.startsWith("s777_") || id.startsWith("aether_")) return 8;
@@ -585,12 +585,12 @@ export class DrawingSceneRenderer {
                         };
                         return getPriority(g2) - getPriority(g1);
                     });
-                    const primary = grp[0];
+                    const primary = grp[0]!;
 
                     // Tags joined by middle dot '·'
                     // Deduplicate tags while preserving order
                     const seenTags = new Set();
-                    const tags = [];
+                    const tags: any[] = [];
                     for (const g of grp) {
                         const t = tok(g.lb.text);
                         if (t && !seenTags.has(t)) {
@@ -606,14 +606,14 @@ export class DrawingSceneRenderer {
                     const mergedText = priceStr ? `${mergedTag} ${priceStr}` : mergedTag;
 
                     // Merge tooltips with separator
-                    const mergedTooltip = grp.map((g) => g.lb.tooltip).filter(Boolean).join("\n──────\n");
+                    const mergedTooltip = grp.map((g: any) => g.lb.tooltip).filter(Boolean).join("\n──────\n");
 
                     const avgY = Math.round(grp.reduce((sum, g) => sum + g.py, 0) / grp.length);
                     const avgPx = Math.round(grp.reduce((sum, g) => sum + g.px, 0) / grp.length);
 
                     const mergedLb = {
                         ...primary.lb,
-                        id: `merge_${grp.map((g) => g.lb.id).join("_")}`,
+                        id: `merge_${grp.map((g: any) => g.lb.id).join("_")}`,
                         text: mergedText,
                         tooltip: mergedTooltip,
                         color: primary.color,
@@ -644,18 +644,18 @@ export class DrawingSceneRenderer {
                     if (cluster.length === 1) {
                         renderList.push(cluster[0]);
                     } else {
-                        const tok = (s) => (s || "").split("\n")[0].replace(/\s*[\d.,]+\s*$/, "").trim() || s;
-                        const mergedTag = cluster.map((g) => tok(g.lb.text)).join("·");
-                        const primary = cluster[0];
-                        const mergedTooltip = cluster.map((g) => g.lb.tooltip).filter(Boolean).join("\n──────\n");
+                        const tok = (s: any) => (s || "").split("\n")[0].replace(/\s*[\d.,]+\s*$/, "").trim() || s;
+                        const mergedTag = cluster.map((g: any) => tok(g.lb.text)).join("·");
+                        const primary = cluster[0]!;
+                        const mergedTooltip = cluster.map((g: any) => g.lb.tooltip).filter(Boolean).join("\n──────\n");
                         renderList.push({
                             lb: {
                                 ...primary.lb,
                                 text: mergedTag,
                                 tooltip: mergedTooltip,
                             },
-                            px: Math.round(cluster.reduce((s, g) => s + g.px, 0) / cluster.length),
-                            py: Math.round(cluster.reduce((s, g) => s + g.py, 0) / cluster.length),
+                            px: Math.round(cluster.reduce((s: any, g: any) => s + g.px, 0) / cluster.length),
+                            py: Math.round(cluster.reduce((s: any, g: any) => s + g.py, 0) / cluster.length),
                             color: primary.color,
                             fontPx: primary.fontPx,
                         });
