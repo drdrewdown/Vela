@@ -26,6 +26,9 @@ import { tzOffsetMs } from './tz';
  * compute the drawing price-range that folds into autoscale (`paneDrawingsRange`).
  */
 export class ChromeRenderer {
+    /** Aether: hit regions of the price-scale chips drawn on the last frame (price box + on-canvas
+     *  tag per chip), in canvas CSS pixels. Read by the host's hover HUD for THIS chart. */
+    aetherChipBounds: any[] = [];
     private canvas: HTMLCanvasElement | null = null;
     private ctx: CanvasRenderingContext2D | null = null;
     // The color for axis tick labels — the host-passed surface text, set each frame in render().
@@ -571,7 +574,7 @@ export class ChromeRenderer {
         }
 
         if (typeof window !== "undefined") {
-            window.__AETHER_CHIP_BOUNDS__ = chipBounds;
+            this.aetherChipBounds = chipBounds;
         }
 
         ctx.textAlign = "start";

@@ -175,6 +175,10 @@ export class NativeRenderer implements IChartRenderer {
     private backendMode: NativeBackend = 'auto';
     private glowAmount = 0; // WebGL2 neon-glow intensity (canvas2d ignores it)
     private readonly chrome = new ChromeRenderer();
+    /** Aether: price-scale chip hit regions from the last chrome frame (see ChromeRenderer). */
+    get aetherChipBounds(): any[] {
+        return this.chrome.aetherChipBounds;
+    }
     /** Prepaints each indicator's Pine drawings into interleave slices at the model's z. */
     private readonly indicatorSlices = new IndicatorDrawingSlices();
     /** Hover tooltips for Pine labels (canvas hit-rects collected by the chrome layer). */

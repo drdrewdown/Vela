@@ -36,6 +36,9 @@ export interface NativeIndicatorOutput {
 
 /** Services the host gives a running native indicator. */
 export interface NativeIndicatorContext {
+    /** Aether: this instance's registry id (e.g. "native-3"). Hosts key per-instance state
+     *  (hover data, exported levels) on it so two charts, or two EMAs, never share a slot. */
+    readonly id: string;
     readonly symbol: string;
     readonly timeframe: string;
     readonly live: boolean;

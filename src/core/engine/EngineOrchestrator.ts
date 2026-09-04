@@ -979,6 +979,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
         const stored = this.typeSettings.get(id);
         if (stored) engine.onSettings?.(stored);
         engine.start({
+            id,
             symbol: this.config.market.symbol ?? 'TEST',
             timeframe: this.config.market.timeframe ?? '60',
             live: this.config.live ?? false,
@@ -1573,6 +1574,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
             const record = this.registry.get(id);
             if (!record?.native || record.hidden) return; // removed/hidden during the await
             const ctx: NativeIndicatorContext = {
+                id,
                 symbol: this.config.market.symbol ?? 'TEST',
                 timeframe: this.config.market.timeframe ?? '60',
                 live: this.config.live,
