@@ -1,4 +1,4 @@
-import type {
+import type { LabelStyle, LabelYLoc,
     DrawingLine,
     DrawingBox,
     DrawingLabel,
@@ -7,6 +7,7 @@ import type {
     DrawingExtend,
     BoxTextSize,
 } from '../../core/model/drawings';
+import type { SeriesSpec, MarkerPoint } from '../../core/model/series';
 import type { VelaTheme } from '../../core/options';
 import { dashPattern, extendEndpoints, contrastColor, namedFontSize, autoFontSize } from './drawing-geometry';
 
@@ -45,6 +46,52 @@ export interface DrawingSetSource {
     labels?: DrawingLabel[];
     polylines?: DrawingPolyline[];
     linefills?: DrawingLinefill[];
+    /** Value series; only `kind: 'markers'` entries contribute (see {@link markerLabels}). */
+    series?: SeriesSpec[];
+}
+
+/** `MarkerPoint.shape` is a neutral token "mapped per renderer" — this is the mapping.
+ *  Case-insensitive; anything outside the point-shape label styles paints as a circle. */
+const MARKER_SHAPES: ReadonlySet<LabelStyle> = new Set<LabelStyle>([
+    'circle', 'square', 'diamond', 'flag', 'arrowup', 'arrowdown', 'triangleup', 'triangledown', 'cross', 'xcross',
+]);
+
+function markerStyle(shape: string): LabelStyle {
+    const token = shape.trim().toLowerCase() as LabelStyle;
+    return MARKER_SHAPES.has(token) ? token : 'circle';
+}
+
+const MARKER_YLOC: Record<MarkerPoint['position'], LabelYLoc> = { aboveBar: 'abovebar', belowBar: 'belowbar', inBar: 'inbar' };
+
+/**
+ * A `kind: 'markers'` series painted as point-shape labels — the painter that already owns
+ * above/below-bar anchoring, autoscale headroom, viewport clipping and hover tooltips.
+ * The marker's text is also its tooltip. Ids are series-scoped and stable across runs.
+ */
+export function markerLabels(series: readonly SeriesSpec[] | undefined, paneId = ''): DrawingLabel[] {
+    const out: DrawingLabel[] = [];
+    for (const s of series ?? []) {
+        if (s.kind !== 'markers') continue;
+        s.markers.forEach((m, i) => {
+            out.push({
+                id: `${s.id}:${m.time}:${i}`,
+                paneId,
+                xloc: 'bar_time',
+                x: m.time,
+                y: Number.NaN,
+                yloc: MARKER_YLOC[m.position] ?? 'abovebar',
+                text: m.text,
+                tooltip: m.text,
+                style: markerStyle(m.shape),
+                color: m.color,
+                size: m.size ?? 'small',
+                textAlign: 'center',
+                fontFamily: 'default',
+                ...(s.overlay ? { overlay: true } : {}),
+            });
+        });
+    }
+    return out;
 }
 
 /** A model's Pine drawings routed ONE way: its own pane (`overlay` false) or forced onto
@@ -55,7 +102,7 @@ export function modelDrawingSet(m: DrawingSetSource, overlay: boolean): DrawingS
     return {
         lines: (m.lines ?? []).filter(want),
         boxes: (m.boxes ?? []).filter(want),
-        labels: (m.labels ?? []).filter(want),
+        labels: [...(m.labels ?? []), ...markerLabels(m.series)].filter(want),
         polylines: (m.polylines ?? []).filter(want),
         linefills: (m.linefills ?? []).filter(want),
     };
@@ -225,6 +272,10 @@ export class DrawingSceneRenderer {
             if (lb.yloc === 'top' || lb.yloc === 'bottom') continue;
             const bar = this.deps.barAt(lx);
             if (!bar) continue;
+            if (lb.yloc === 'inbar') {
+                fold((bar.high + bar.low) / 2);
+                continue;
+            }
             fold(lb.yloc === 'abovebar' ? bar.high : bar.low);
             const fontPx = fontSizePx(lb.size);
             const lineCount = Math.max(1, (lb.text ?? '').split('\n').length);
@@ -527,12 +578,16 @@ export class DrawingSceneRenderer {
             } else {
                 const bar = this.deps.barAt(this.logicalOf(lb.xloc, lb.x));
                 if (!bar) continue;
-                const base = yOf(lb.yloc === "abovebar" ? bar.high : bar.low);
-                py = base === null ? null : base + (lb.yloc === "abovebar" ? -14 : 14);
+                if (lb.yloc === "inbar") {
+                    py = yOf((bar.high + bar.low) / 2);
+                } else {
+                    const base = yOf(lb.yloc === "abovebar" ? bar.high : bar.low);
+                    py = base === null ? null : base + (lb.yloc === "abovebar" ? -14 : 14);
+                }
             }
             if (py === null) continue;
             // Respect visible range: price & bar-relative labels MUST disappear when off-screen vertically (no clamping to canvas edge)
-            if ((lb.yloc === "price" || lb.yloc === "abovebar" || lb.yloc === "belowbar") && (py < -30 || py > H + 30)) continue;
+            if (lb.yloc !== "top" && lb.yloc !== "bottom" && (py < -30 || py > H + 30)) continue;
 
             const fontPx = fontSizePx(lb.size);
             rawList.push({ lb, px, py, color: lb.color ?? this.deps.theme.textColor, fontPx });

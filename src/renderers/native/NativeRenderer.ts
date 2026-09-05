@@ -3875,14 +3875,16 @@ function leadingPointsBefore(model: IndicatorModel, headTime: number): number | 
     return null;
 }
 
-/** Apply a scene patch to a stored indicator model so the next frame reflects it. */
-function applyPatch(model: IndicatorModel, patch: ScenePatch): void {
+/** Apply a scene patch to a stored indicator model so the next frame reflects it.
+ *  Exported for tests (Aether UC-001). */
+export function applyPatch(model: IndicatorModel, patch: ScenePatch): void {
     if (patch.kind === 'value') {
         for (const delta of patch.series) {
             const s = model.series.find((x) => x.id === delta.seriesId);
             if (!s) continue;
             if (delta.kind === 'points' && isLineLikeSeries(s)) s.points = delta.points;
             else if (delta.kind === 'bars' && (s.kind === 'candle' || s.kind === 'bar')) s.bars = delta.bars;
+            else if (delta.kind === 'markers' && s.kind === 'markers') s.markers = delta.markers;
         }
         if (patch.lines) model.lines = patch.lines;
         if (patch.boxes) model.boxes = patch.boxes;

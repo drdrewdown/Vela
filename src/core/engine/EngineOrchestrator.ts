@@ -2116,8 +2116,9 @@ function yieldToPaint(): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-/** Build a value-only patch from a freshly-run model (used on live ticks / re-runs). */
-function modelToValuePatch(model: IndicatorModel): ValuePatch {
+/** Build a value-only patch from a freshly-run model (used on live ticks / re-runs).
+ *  Exported for tests (Aether UC-001: marker series ride value patches too). */
+export function modelToValuePatch(model: IndicatorModel): ValuePatch {
     const series: SeriesValueDelta[] = [];
     let from = Number.POSITIVE_INFINITY;
     let to = 0;
@@ -2133,6 +2134,12 @@ function modelToValuePatch(model: IndicatorModel): ValuePatch {
             for (const p of s.points) {
                 if (p.time < from) from = p.time;
                 if (p.time > to) to = p.time;
+            }
+        } else if (s.kind === 'markers') {
+            series.push({ seriesId: s.id, kind: 'markers', markers: s.markers });
+            for (const m of s.markers) {
+                if (m.time < from) from = m.time;
+                if (m.time > to) to = m.time;
             }
         }
     }

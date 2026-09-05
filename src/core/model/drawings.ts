@@ -107,9 +107,10 @@ export type LabelStyle =
 
 /**
  * Where a label/marker anchors vertically. Pine `yloc` (price/abovebar/belowbar)
- * plus the `plotshape` pane-relative `location.top`/`location.bottom`.
+ * plus the `plotshape` pane-relative `location.top`/`location.bottom`, and `inbar`
+ * (the bar's midpoint — how a `MarkerPoint` with `position: 'inBar'` lands).
  */
-export type LabelYLoc = 'price' | 'abovebar' | 'belowbar' | 'top' | 'bottom';
+export type LabelYLoc = 'price' | 'abovebar' | 'belowbar' | 'inbar' | 'top' | 'bottom';
 
 /** A Pine `label.new(...)`. `x` follows `xloc`; `y` is a price (used when yloc='price'). */
 export interface DrawingLabel {
