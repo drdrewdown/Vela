@@ -814,7 +814,7 @@ export class NativeRenderer implements IChartRenderer {
         this.scene.scaleMode = next.priceScale.mode;
         const sideChanged = this.scene.scaleSide !== next.priceScale.side;
         this.scene.scaleSide = next.priceScale.side;
-        if (sideChanged) {
+        if (sideChanged && this.wrapper) { // before mount there is nothing to lay out yet
             // The gutter moves: re-lay the canvases (coords.leftOffsetPx follows) and republish.
             this.syncSize();
             this.publishGutters();

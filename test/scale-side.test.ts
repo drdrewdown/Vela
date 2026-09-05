@@ -15,9 +15,9 @@ describe('price scale side', () => {
 
     it('is a renderer feature that round-trips through the config', () => {
         const r = new NativeRenderer();
-        expect(r.get('scaleSide')).toBe('right');
-        r.set('scaleSide', 'left');
-        expect(r.get('scaleSide')).toBe('left');
+        expect(r.readFeature('scaleSide')).toBe('right');
+        r.applyFeature('scaleSide', 'left');
+        expect(r.readFeature('scaleSide')).toBe('left');
         expect(r.getConfig().priceScale.side).toBe('left');
     });
 
