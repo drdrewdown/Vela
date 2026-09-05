@@ -2,6 +2,66 @@
 
 All notable changes to Vela, newest first.
 
+## [v0.6.17]
+
+### Changed
+
+- **The live candle now snaps to each tick by default, and its glide is yours to tune.**
+  On a streaming chart the forming candle used to slide toward every new price over a
+  short, fixed ease. That slide is now a setting — `animations: { liveBar }` at
+  construction, or `chart.renderer.set('animLiveBar', …)` live — and it is **off by
+  default**, so the painted candle, the current-price line and its axis label always
+  show the real latest values. Set `liveBar: true` to bring the slide back, or give it
+  a duration in milliseconds to make it as quick or as gentle as your feed calls for
+  (a slow feed reads well with a longer glide; a busy one with a short one). The chart
+  settings dialog gets a matching **Animate price changes** switch in a new *Animation*
+  group of the *Symbol* tab (with a hint explaining it), saved with the rest of the chart's settings and templates; switching it back
+  on reuses the duration you configured. A new bar always opens without a glide, and
+  the crosshair, legend and data window show the real values at all times.
+  `animations: false` keeps disabling every animation at once.
+  _(Breaking: charts that relied on the previous always-on slide now snap; pass
+  `animations: { liveBar: true }` to restore it.)_
+
+## [v0.6.16]
+
+### Added
+
+- **A built-in catalog of classic indicators.** The indicators dialog now ships
+  more than seventy standard technical-analysis studies out of the box — moving
+  averages (Simple and Exponential as their own studies, a switchable
+  SMA/EMA/WMA/RMA/VWMA study, ZLEMA, VIDYA, envelopes, linear regression),
+  bands and channels (Bollinger Bands with %B and Width, Keltner, Donchian,
+  SuperTrend, Chandelier Exit, Williams Alligator), momentum oscillators (RSI,
+  Stochastic and Stochastic RSI, MACD, CCI, Awesome Oscillator, TSI, TRIX,
+  Fisher Transform, Schaff Trend Cycle, Ultimate Oscillator and more), trend
+  and volatility studies (ADX, Aroon, Vortex, ATR, Historical Volatility,
+  Choppiness Index), volume studies (OBV, Accumulation/Distribution, Chaikin
+  Money Flow, Money Flow Index, Klinger, volume oscillators — bars without a
+  volume report show gaps, never fake zeros), and price-anchored specials
+  (Parabolic SAR, VWAP, Pivot Points, 52 Week High/Low, ZigZag, Williams
+  Fractal). Every study computes from the chart's own bars — no scripting
+  engine needed — and gets the full indicator treatment: its own pane or a
+  price overlay, legend row, a settings dialog with typed inputs and colors,
+  and persistence across reloads. Studies stack: pick the same one again to
+  add another instance (a 20 and a 200 moving average side by side), each
+  with its own settings and its own row in the indicators dialog.
+
+### Fixed
+
+- **The custom color chooser stays open while you pick.** Pressing `+` in a color
+  picker opens the browser's own color chooser; clicking or dragging on its
+  gradient used to slam it shut after the first change, so you could only ever
+  land one step away from where you started. The chooser now stays open until
+  you dismiss it, the chart previews every color you hover through, and only the
+  color you settle on is added to the recents row. Picking a swatch also updates
+  the chooser's starting color, so `+` opens on what is currently selected.
+- **The first result in the symbol search is no longer clipped.** Since the search
+  bar and market tabs started staying pinned, they sat a few pixels too low and
+  covered the top of the first row and its highlight. The row now shows in full,
+  with its usual spacing under the tabs. On a phone, the result list scrolls on
+  its own under the pinned search bar, and browsing past the first hundred
+  results loads more as you scroll, as it does on desktop.
+
 ## [v0.6.15]
 
 ### Added

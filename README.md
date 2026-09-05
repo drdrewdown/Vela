@@ -32,6 +32,10 @@ touching the rest.
 
 ## What's in the box
 
+<p align="center">
+  <img src=".github/vela-layout.png" alt="Vela package layout" width="100%">
+</p>
+
 - **`@luxalgo/vela`**: the headless chart. Data model, engines, drawings, providers,
   native renderer.
 - **`@luxalgo/vela/workspace`**: the full chart app. One chart or a grid of them under
@@ -95,7 +99,14 @@ providers, to `window.Vela`.
 
 ## Indicators
 
-Vela™ runs indicator scripts through pluggable engines and **ships none**. Install the
+Vela™ ships **70+** built-in studies — moving averages, bands and channels, momentum
+oscillators, trend and volatility measures, volume studies, and price-anchored
+overlays such as VWAP, SuperTrend, and Pivot Points. They compute from the chart's
+own bars (no scripting engine), and each one gets a legend row, a settings dialog,
+and persistence across reloads. Volume and the visible-range volume profile sit
+alongside them.
+
+Custom scripts still run through pluggable engines. Vela™ **ships none**: install the
 addon for the language you want, or write one against the public `ScriptingEngine` port.
 Pine Script lives in [`@luxalgo/vela-pinets`](https://github.com/LuxAlgo/Vela-pinets)
 (`npm i @luxalgo/vela-pinets pinets`), which is **AGPL-3.0** because the PineTS runtime it

@@ -3,6 +3,7 @@ import type { ScriptingEngine } from './core/ports/ScriptingEngine';
 import type { MarketDataFeed } from './core/ports/MarketDataFeed';
 import type { VisibleRangePreset } from './core/visible-range';
 import type { VelaOptions, VelaTheme, ThemeName, MarketSwitch, MarketSnapshot, AddIndicatorOptions } from './core/options';
+import { resolveAnimations } from './core/options';
 import type { InputValue } from './core/model/inputs';
 import type { IndicatorHandle } from './core/IndicatorHandle';
 import type { EngineContextSnapshot } from './core/ports/ScriptingEngine';
@@ -23,6 +24,7 @@ import { MultiProviderFeed } from './data/MultiProviderFeed';
 import { registerBuiltinChartTypes } from './chart-types/builtins';
 import { registerVolume } from './core/native-indicators/volume';
 import { registerVpvr } from './core/native-indicators/vpvr';
+import { registerClassicIndicators } from './core/native-indicators/classics';
 
 /** Outcome of {@link Vela.runIndicator}: success carries the live handle, failure the error. */
 export interface RunIndicatorResult {
@@ -64,24 +66,14 @@ export class Vela {
         registerBuiltinChartTypes(); // built-in chart types through the public SDK registry (idempotent)
         registerVolume(); // register the built-in native indicators (idempotent)
         registerVpvr();
+        registerClassicIndicators();
         const element = resolveElement(container);
         const theme = resolveTheme(options.theme);
-        // Resolve animations: boolean toggles all; object configures each; default = zoom on, pan on.
-        let animZoom = true;
-        let animPan = true;
-        if (typeof options.animations === 'boolean') {
-            animZoom = options.animations;
-            animPan = options.animations;
-        } else if (options.animations) {
-            animZoom = options.animations.zoom ?? true;
-            animPan = options.animations.pan ?? true;
-        }
         const display = {
             currentPriceLine: options.currentPriceLine ?? true,
             logScale: options.logScale ?? false,
             nativeBackend: options.nativeBackend ?? 'auto',
-            animZoom,
-            animPan,
+            ...resolveAnimations(options.animations),
             glow: options.glow ?? 0,
             upColor: options.upColor ?? BULLISH,
             downColor: options.downColor ?? BEARISH,
@@ -151,9 +143,10 @@ export class Vela {
 
     /**
      * Add a built-in NATIVE indicator (core-computed, no scripting engine) by registered `type` —
-     * e.g. `'vpvr'`. It becomes a first-class indicator (legend row, settings, hide, remove,
-     * events) and is single-instance per type (a second call returns the existing handle). Returns
-     * a fail-soft handle for an unregistered type. Native renderer only.
+     * e.g. `'vpvr'` or `'sma'`. It becomes a first-class indicator (legend row, settings, hide,
+     * remove, events). Layer-backed types (`'volume'`, `'vpvr'`) are single-instance — a second
+     * call returns the existing handle; the classic studies allow several instances, so each call
+     * adds one more. Returns a fail-soft handle for an unregistered type. Native renderer only.
      */
     addNativeIndicator(type: string, options?: { inputs?: Record<string, InputValue> }): IndicatorHandle {
         return this.orchestrator.addNativeIndicator(type, options);
@@ -161,17 +154,19 @@ export class Vela {
 
     /**
      * The catalog of built-in native indicators with their live state on this chart — each entry's
-     * `type`, `title`, whether it `supported`s the current symbol, and whether it's already `present`
-     * (native indicators are single-instance per type, so a second `addNativeIndicator` is a no-op).
-     * Lets a host "add indicator" UI list them, gate unsupported ones, and avoid duplicates. Async
-     * because support may probe the provider (a type may need data the symbol lacks).
+     * `type`, `title`, whether it `supported`s the current symbol, whether it's already `present`,
+     * and whether it allows several instances (`multiInstance`; otherwise a second
+     * `addNativeIndicator` is a no-op). Lets a host "add indicator" UI list them, gate unsupported
+     * ones, and de-duplicate the single-instance ones. Async because support may probe the
+     * provider (a type may need data the symbol lacks).
      */
     availableNativeIndicators(): Promise<NativeIndicatorInfo[]> {
         return this.orchestrator.availableNativeIndicators();
     }
 
     /**
-     * The native-indicator types PRESENT on the chart right now — the synchronous slice of
+     * The native-indicator types PRESENT on the chart right now, one entry per instance (a
+     * multi-instance type repeats) — the synchronous slice of
      * {@link availableNativeIndicators} (only support probing is async; presence never is).
      * Persistence snapshots read this: an unload-time flush must see an add/remove that
      * happened microseconds ago, which an async catalog mirror cannot guarantee.

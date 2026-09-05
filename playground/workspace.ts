@@ -8,7 +8,7 @@
 // `npm i @luxalgo/vela-pinets pinets` and `engines: { pine: () => new PineWorkerEngine() }`.
 import { VelaWorkspace } from "../src/workspace";
 import { BinanceProvider } from "../src/data/providers/binance";
-import { DemoEngine, DEMO_SCRIPTS } from "./demo-engine";
+import { DemoEngine } from "./demo-engine";
 import { playgroundStorage } from "./persistence";
 
 const ws = new VelaWorkspace("#workspace", {
@@ -28,26 +28,7 @@ const ws = new VelaWorkspace("#workspace", {
   providers: { binance: () => new BinanceProvider() },
   engines: { demo: () => new DemoEngine() }, // ONE instance per cell (a worker engine would get a thread each)
   defaultLanguage: "demo", // scripts added without a `language` run on the engine above
-  indicators: [
-    {
-      name: "EMA 20",
-      enabled: false,
-      script: DEMO_SCRIPTS.ema,
-      language: "demo",
-    }, // library-only:
-    {
-      name: "Bollinger Bands",
-      enabled: false,
-      script: DEMO_SCRIPTS.bands,
-      language: "demo",
-    }, //  pick them
-    {
-      name: "RSI 14",
-      enabled: false,
-      script: DEMO_SCRIPTS.rsi,
-      language: "demo",
-    }, //  from the dialog
-  ],
+  // No script manifest: the indicators dialog lists the built-in catalog only.
   live: true,
   theme: "dark",
   autofocus: true, // the workspace IS the page — shortcuts work from the first keystroke
@@ -69,7 +50,7 @@ const ws = new VelaWorkspace("#workspace", {
   // upColor: '#089981',             // bullish candles (default: the palette's bullish green)
   // downColor: '#f23645',           // bearish candles (default: the palette's bearish red)
   // glow: 0,                        // neon glow on line series, 0..~0.6 — WebGL2 cells only
-  // animations: { zoom: true, pan: true }, // eased zoom + inertial pan; false disables both
+  // animations: { zoom: true, pan: true, liveBar: false }, // eased zoom + inertial pan + forming-bar glide (true = 90 ms, or a duration in ms); false disables all
   // nativeBackend: 'auto',          // explicit 'canvas2d'/'webgl2' wins over the maxWebglCells policy
   // renderer: NativeRenderer,       // a custom IChartRenderer class for every cell
   // drawings: true,                 // per-cell tools config — its `toolbar` key is ignored: the grid's
