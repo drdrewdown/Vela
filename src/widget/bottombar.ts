@@ -133,6 +133,7 @@ export class Bottombar {
     private readonly sessionButtons = new Map<'regular' | 'extended', HTMLButtonElement>();
     private sessionEl: HTMLElement | null = null;
     private timezone: string;
+    private hour12 = false;
     private timer: ReturnType<typeof setInterval> | null = null;
 
     constructor(host: HTMLElement, opts: BottombarOptions) {
@@ -210,6 +211,13 @@ export class Bottombar {
         this.timer = setInterval(() => this.tick(), 1000);
     }
 
+    /** 12-hour clock (the active chart's `timeScale.hour12`). */
+    setHour12(on: boolean): void {
+        if (this.hour12 === on) return;
+        this.hour12 = on;
+        this.tick();
+    }
+
     setTimezone(zone: string): void {
         this.timezone = zone;
         this.tzLabelEl.textContent = tzButtonLabel(zone);
@@ -257,10 +265,10 @@ export class Bottombar {
     private tick(): void {
         try {
             this.clockEl.textContent = new Intl.DateTimeFormat('en-GB', {
-                hour: '2-digit',
+                hour: this.hour12 ? 'numeric' : '2-digit',
                 minute: '2-digit',
                 second: '2-digit',
-                hour12: false,
+                hour12: this.hour12,
                 timeZone: this.timezone,
             }).format(new Date());
         } catch {

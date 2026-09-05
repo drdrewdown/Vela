@@ -811,7 +811,7 @@ export class VelaWorkspace {
         }
         if (id) {
             this.projectActiveCell(); // trigger ① — the chrome rebinds to the new active cell
-            this.syncToolbarSide(id);
+            this.syncChromeToCell(id);
             this.events.emit('cell:active', { id, prev });
             this.markStateDirty();
         }
@@ -1478,7 +1478,7 @@ export class VelaWorkspace {
                 onMarketChanged: (id) => this.onCellMarketChanged(id),
                 onPriceStyleChanged: (id) => this.onCellPriceStyleChanged(id),
                 onIndicatorsChanged: (id) => this.onCellIndicatorsChanged(id),
-                onScaleSideChanged: (id) => this.syncToolbarSide(id),
+                onCellConfigChanged: (id) => this.syncChromeToCell(id),
                 onStatusPrefsChanged: (id) => this.propagateStylePrefs(id),
                 onStateDirty: () => this.markStateDirty(),
                 manifestSettled: () => this.manifestSettled,
@@ -1909,11 +1909,14 @@ export class VelaWorkspace {
     /** Trigger ② — a cell's price style changed: the topbar button/menu only if active.
      *  Reads the cell back (not the requested style) so the button reflects what the
      *  renderer actually applied. */
-    /** The shared drawing toolbar docks clear of the ACTIVE cell's price scale. */
-    private syncToolbarSide(id: string): void {
+    /** The shared chrome follows the ACTIVE cell's renderer config: the drawing toolbar docks
+     *  clear of its price scale and the bottom-bar clock takes its 12/24-hour format. */
+    private syncChromeToCell(id: string): void {
         if (id !== this.activeId) return;
-        const side = this.cellsById.get(id)?.chart.renderer.get('scaleSide');
-        this.drawToolbar?.setScaleSide(side === 'left' ? 'left' : 'right');
+        const renderer = this.cellsById.get(id)?.chart.renderer;
+        if (!renderer) return;
+        this.drawToolbar?.setScaleSide(renderer.get('scaleSide') === 'left' ? 'left' : 'right');
+        this.bottombar?.setHour12(renderer.get('hour12') === true);
     }
 
     private onCellPriceStyleChanged(id: string): void {

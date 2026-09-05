@@ -78,7 +78,7 @@ export class CrosshairRenderer {
             const chipAlign = isLeft ? "right" : "left";
             this.chip(ctx, chipX, ch.y, formatAxisValue(pane.scale, pane.bounds.height, price, percentScaleFor(scene, pane), scene.priceMintick, pane.axisFormat), chipBg, chipAlign, false, theme.background);
         }
-        this.chip(ctx, x, dataH + 1, formatTimeStamp(coords.logicalToTime(logical), scene.timezone, coords.barInterval), chipBg, "center", true, theme.background);
+        this.chip(ctx, x, dataH + 1, formatTimeStamp(coords.logicalToTime(logical), scene.timezone, coords.barInterval, scene.hour12), chipBg, "center", true, theme.background);
     }
 
     destroy(): void {
@@ -135,7 +135,7 @@ export class CrosshairRenderer {
                 this.chip(ctx, chipX, ext.y, formatAxisValue(pane.scale, pane.bounds.height, ext.price, percentScaleFor(scene, pane), scene.priceMintick, pane.axisFormat), chipBg, chipAlign, false, theme.background);
             }
         }
-        this.chip(ctx, x, dataH + 1, formatTimeStamp(ext.time, scene.timezone, coords.barInterval), chipBg, "center", true, theme.background);
+        this.chip(ctx, x, dataH + 1, formatTimeStamp(ext.time, scene.timezone, coords.barInterval, scene.hour12), chipBg, "center", true, theme.background);
         ctx.globalAlpha = 1;
     }
 

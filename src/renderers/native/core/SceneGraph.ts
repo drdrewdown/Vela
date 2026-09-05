@@ -175,6 +175,8 @@ export class SceneGraph {
     percentBaseline = 0;
     /** IANA time zone for the time axis + crosshair/data-window stamps (`'UTC'` default). */
     timezone = 'UTC';
+    /** 12-hour wall clock on the axis/crosshair/bottom bar (`timeScale.hour12`). */
+    hour12 = false;
     /** Draw the background gridlines (price + time). Master toggle (`gridlines`
      *  feature); per-axis visibility + colors live in `style.gridVert`/`gridHorz`. */
     showGrid = true;

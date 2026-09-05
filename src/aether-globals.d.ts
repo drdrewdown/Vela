@@ -1,7 +1,7 @@
 export {};
 declare global {
     interface Window {
-        __VELA_12H__?: boolean; __VELA_HIGH_LOW__?: boolean;
+        __VELA_HIGH_LOW__?: boolean;
         __VELA_LABEL_MERGE__?: boolean; __VELA_INDICATOR_CHIPS__?: boolean; __VELA_SYMBOL__?: string;
         __AETHER_GET_CONTEXT_ITEMS__?: (chart: any, point: any) => any[];
         __AETHER_HANDLE_CONTEXT_ACTION__?: (actionId: string, chart: any, point: any) => boolean;

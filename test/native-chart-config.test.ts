@@ -125,7 +125,7 @@ describe('NativeRenderer.getConfig — defaults resolve to concrete values', () 
         expect(cfg.crosshair).toEqual({ color: '#9aa0ad', width: 1, style: 'dashed', opacity: 0.4, labelBackground: '#595959' });
         expect(cfg.priceScale).toEqual({ mode: 'price', side: 'right', log: false, invert: false, borderColor: '#161d2b', labelsVisible: true, currentPriceLine: true, priceLabel: true, countdown: true, animateLastPrice: false });
         expect(cfg.panes).toEqual({ separatorColor: '#161d2b' }); // inherits the theme border
-        expect(cfg.timeScale).toEqual({ timezone: 'UTC' });
+        expect(cfg.timeScale).toEqual({ timezone: 'UTC', hour12: false });
         expect(cfg.candles.upColor).toBe('#5aa1ff');
         expect(cfg.candles.downColor).toBe('#ff709a');
         expect(cfg.candles.borderUpColor).toBe('#5aa1ff'); // inherits the body color
@@ -176,7 +176,7 @@ describe('NativeRenderer.applyConfig — applies + syncs the live scene fields',
         const r = new NativeRenderer();
         r.applyConfig({
             priceScale: { log: true, mode: 'percent', labelsVisible: false, currentPriceLine: false },
-            timeScale: { timezone: 'America/New_York' },
+            timeScale: { timezone: 'America/New_York', hour12: true },
             series: { style: 'area' },
         });
         expect(r.readFeature('logScale')).toBe(true);

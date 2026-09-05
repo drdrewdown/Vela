@@ -236,13 +236,13 @@ const pad2 = (n: number): string => (n < 10 ? `0${n}` : String(n));
  * is scrolled; the wall-clock time is appended only when bars are intraday — on a daily
  * or coarser bar the hh:mm would just echo the bar's open and add noise.
  */
-export function formatTimeStamp(ms: number, timeZone: string, barIntervalMs: number): string {
+export function formatTimeStamp(ms: number, timeZone: string, barIntervalMs: number, hour12 = false): string {
     const d = zonedDate(ms, timeZone);
     const date = `${WEEKDAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} '${pad2(d.getUTCFullYear() % 100)}`;
     if (barIntervalMs >= DAY) return date;
     const h = d.getUTCHours();
     const m = d.getUTCMinutes();
-    if (typeof window !== "undefined" && window.__VELA_12H__) {
+    if (hour12) {
         const ampm = h >= 12 ? "PM" : "AM";
         const h12 = h % 12 || 12;
         return `${date} ${h12}:${pad2(m)} ${ampm}`;
@@ -260,7 +260,7 @@ function pickStep(targetMs: number): number {
  * a chosen time zone (0 ⇒ UTC): ticks land on local midnights/hours and the returned
  * `time` is the REAL epoch-ms (zoned alignment undone) so the X mapping stays correct.
  */
-export function timeTicks(fromMs: number, toMs: number, target = 8, offsetMs = 0): TimeTick[] {
+export function timeTicks(fromMs: number, toMs: number, target = 8, offsetMs = 0, hour12 = false): TimeTick[] {
     const span = toMs - fromMs;
     if (!(span > 0)) return [];
     const step = pickStep(span / Math.max(1, target));
@@ -281,7 +281,7 @@ export function timeTicks(fromMs: number, toMs: number, target = 8, offsetMs = 0
             if (h === 0 && m === 0) {
                 label = `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
                 major = true;
-            } else if (typeof window !== "undefined" && window.__VELA_12H__) {
+            } else if (hour12) {
                 const ampm = h >= 12 ? "pm" : "am";
                 const h12 = h % 12 || 12;
                 label = `${h12}:${pad2(m)}${ampm}`;

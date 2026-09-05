@@ -341,7 +341,7 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     readonly name = 'native';
-    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'scaleSide', 'invertScale', 'paneScales', 'autoScale', 'timezone', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'indicatorTitles', 'indicatorValues'];
+    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'scaleSide', 'invertScale', 'paneScales', 'autoScale', 'timezone', 'hour12', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'indicatorTitles', 'indicatorValues'];
 
     /** Apply a render feature live — mutate the field + invalidate, no engine re-run. */
     applyFeature(key: string, value: unknown): void {
@@ -427,6 +427,9 @@ export class NativeRenderer implements IChartRenderer {
                 break;
             case 'scaleSide':
                 this.applyConfig({ priceScale: { side: value === 'left' ? 'left' : 'right' } });
+                break;
+            case 'hour12':
+                this.applyConfig({ timeScale: { hour12: Boolean(value) } });
                 break;
             case 'axisLabels':
                 this.scene.showAxisLabels = Boolean(value);
@@ -540,6 +543,7 @@ export class NativeRenderer implements IChartRenderer {
             case 'sessionZones': return this.scene.sessionZones;
             case 'gridlines': return this.scene.showGrid;
             case 'scaleSide': return this.scene.scaleSide;
+            case 'hour12': return this.scene.hour12;
             case 'axisLabels': return this.scene.showAxisLabels;
             case 'scaleMode': return this.scene.scaleMode;
             case 'invertScale': return this.scene.invertScale;
@@ -700,7 +704,7 @@ export class NativeRenderer implements IChartRenderer {
                 shortColor: this.scene.tradeMarkers.colors.short,
                 exitColor: this.scene.tradeMarkers.colors.exit,
             },
-            timeScale: { timezone: this.scene.timezone },
+            timeScale: { timezone: this.scene.timezone, hour12: this.scene.hour12 },
             candles: {
                 upColor: this.candleUp,
                 downColor: this.candleDown,
@@ -840,6 +844,7 @@ export class NativeRenderer implements IChartRenderer {
         };
         // time scale
         this.scene.timezone = next.timeScale.timezone;
+        this.scene.hour12 = next.timeScale.hour12;
         // candles
         this.candleUp = next.candles.upColor;
         this.candleDown = next.candles.downColor;

@@ -117,7 +117,7 @@ export class BackdropRenderer {
             const tr = coords.visibleTimeRange();
             const offset = tzOffsetMs((tr.from + tr.to) / 2, scene.timezone);
             ctx.beginPath();
-            for (const tick of timeTicks(tr.from, tr.to, 8, offset)) {
+            for (const tick of timeTicks(tr.from, tr.to, 8, offset, scene.hour12)) {
                 const x = Math.round(coords.timeToX(tick.time)) + 0.5;
                 if (x < minX || x > maxX) continue;
                 ctx.moveTo(x, 0);

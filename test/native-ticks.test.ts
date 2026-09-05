@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { logPriceTicks, valueDecimals, priceTicks, tickDecimals, axisDecimals, formatPriceLabel, formatAxisValue, formatTimeStamp } from '../src/renderers/native/chrome/ticks';
+import { logPriceTicks, valueDecimals, priceTicks, tickDecimals, axisDecimals, formatPriceLabel, formatAxisValue, formatTimeStamp, timeTicks } from '../src/renderers/native/chrome/ticks';
 
 describe('native ticks · logPriceTicks', () => {
     it('places 1/2/5 per decade over a wide (multi-decade) range', () => {
@@ -119,5 +119,13 @@ describe('native ticks · formatTimeStamp (crosshair time chip) — Aether contr
 
     it('treats an unknown bar interval (no bars yet) as intraday', () => {
         expect(formatTimeStamp(sun30Aug26_19h, NY, 0)).toBe("Sun 30 Aug '26 19:00");
+    });
+
+    it('formats a 12-hour clock when asked — a parameter, never a global', () => {
+        expect(formatTimeStamp(sun30Aug26_19h, NY, HOUR, true)).toBe("Sun 30 Aug '26 7:00 PM");
+        expect(formatTimeStamp(Date.UTC(2031, 0, 3, 9, 5), NY, 60_000, true)).toBe("Fri 3 Jan '31 9:05 AM");
+        expect(formatTimeStamp(sun30Aug26_19h, NY, DAY, true)).toBe("Sun 30 Aug '26"); // daily bars: date only
+        const labels = timeTicks(Date.UTC(2026, 0, 5, 12, 0), Date.UTC(2026, 0, 5, 16, 0), 4, 0, true).map((t) => t.label);
+        expect(labels).toContain('1:00pm');
     });
 });

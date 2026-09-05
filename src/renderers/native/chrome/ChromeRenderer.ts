@@ -681,7 +681,7 @@ export class ChromeRenderer {
         const tr = coords.visibleTimeRange();
         const offset = tzOffsetMs((tr.from + tr.to) / 2, scene.timezone);
         const target = Math.max(3, Math.min(8, Math.floor(dataW / 64)));
-        const ticks = timeTicks(tr.from, tr.to, target, offset).map((tick) => ({ ...tick, x: coords.timeToX(tick.time), half: ctx.measureText(tick.label).width / 2 })).filter((tick) => tick.x >= minX + 20 && tick.x <= maxX - 20);
+        const ticks = timeTicks(tr.from, tr.to, target, offset, scene.hour12).map((tick) => ({ ...tick, x: coords.timeToX(tick.time), half: ctx.measureText(tick.label).width / 2 })).filter((tick) => tick.x >= minX + 20 && tick.x <= maxX - 20);
         const GAP = 12;
         const placed: { l: number; r: number }[] = [];
         const put = (tick: any) => {

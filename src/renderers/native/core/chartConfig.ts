@@ -248,6 +248,8 @@ export interface ChartConfig {
     };
     timeScale: {
         timezone: string;
+        /** Wall-clock format on the time axis, the crosshair time chip and the bottom-bar clock. */
+        hour12: boolean;
     };
     /** Per-chart-type settings (plugin SDK sections), keyed by type id then row key. */
     chartTypes: Record<string, Record<string, unknown>>;
@@ -612,6 +614,7 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
         },
         timeScale: {
             timezone: typeof ts.timezone === 'string' && ts.timezone ? ts.timezone : base.timeScale.timezone,
+            hour12: isBool(ts.hour12) ? ts.hour12 : base.timeScale.hour12,
         },
         candles: {
             upColor: isColor(candles.upColor) ? candles.upColor : base.candles.upColor,
