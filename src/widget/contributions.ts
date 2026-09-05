@@ -115,6 +115,9 @@ export interface WidgetActionDescriptor {
     /** Shown but inert (context menus; a topbar button ignores it): a caption row, or an
      *  action that needs something the pointer is not over. */
     disabled?: boolean | ((ctx: WidgetContext) => boolean);
+    /** Context menus only: `'start'` puts the action ABOVE the built-in items — for what the
+     *  host treats as primary at the pointer (trading at that price); `'end'` (default) below. */
+    placement?: 'start' | 'end';
     run: (ctx: WidgetContext) => void;
 }
 

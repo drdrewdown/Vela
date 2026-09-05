@@ -12,6 +12,7 @@ import {
     scaleChoiceOf,
     scaleWrites,
     settingsSectionOf,
+    arrangeMenu,
     timeAxisItems,
     type PaneScaleInfo,
     type ScaleChoice,
@@ -112,15 +113,25 @@ export class ChartContextMenu {
         return withPointer(base, { clientX: at.clientX, clientY: at.clientY, price: under.price, time: under.time, pane: under.pane });
     }
 
-    private contributed(zone: Zone): MenuItemDescriptor[] {
+    /** Host actions for a zone, split by placement (see `WidgetActionDescriptor.placement`). */
+    private contributed(zone: Zone): { leading: MenuItemDescriptor[]; trailing: MenuItemDescriptor[] } {
         const ctx = this.actionContext();
-        return widgetActions(`context:${zone}`, ctx).map((a, i) => ({
-            id: `action:${a.id}`,
-            label: actionLabel(a, ctx),
-            icon: a.icon,
-            disabled: ctx ? actionDisabled(a, ctx) : a.disabled === true,
-            separatorBefore: i === 0,
-        }));
+        const leading: MenuItemDescriptor[] = [];
+        const trailing: MenuItemDescriptor[] = [];
+        for (const a of widgetActions(`context:${zone}`, ctx)) {
+            (a.placement === 'start' ? leading : trailing).push({
+                id: `action:${a.id}`,
+                label: actionLabel(a, ctx),
+                icon: a.icon,
+                disabled: ctx ? actionDisabled(a, ctx) : a.disabled === true,
+            });
+        }
+        return { leading, trailing };
+    }
+
+    private arranged(zone: Zone, base: MenuItemDescriptor[]): MenuItemDescriptor[] {
+        const { leading, trailing } = this.contributed(zone);
+        return arrangeMenu(leading, base, trailing);
     }
 
     private itemsFor(zone: Zone): MenuItemDescriptor[] {
@@ -157,23 +168,17 @@ export class ChartContextMenu {
             } else {
                 baseItems.push(highLowItem, placementItem);
             }
-            return [
-                ...baseItems,
-                ...this.contributed(zone)
-            ];
+            return this.arranged(zone, baseItems);
         }
         if (zone === "time-axis") {
             const tz = this.cbs.timezone?.() ?? String(this.chart?.renderer.get("timezone") ?? "Etc/UTC");
-            return [...timeAxisItems(tz), ...this.contributed("time-axis")];
+            return this.arranged('time-axis', timeAxisItems(tz));
         }
         const chart = this.chart;
-        return [
-            ...bodyItems({
-                drawings: chart?.drawings.supported ? chart.drawings.all().length : 0,
-                indicators: chart?.indicators().length ?? 0,
-            }),
-            ...this.contributed('body'),
-        ];
+        return this.arranged('body', bodyItems({
+            drawings: chart?.drawings.supported ? chart.drawings.all().length : 0,
+            indicators: chart?.indicators().length ?? 0,
+        }));
     }
 
     private run(id: string): void {

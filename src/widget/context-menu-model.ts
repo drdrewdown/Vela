@@ -151,3 +151,19 @@ export function bodyItems(counts: { drawings: number; indicators: number }): Men
         settingsItem('body', 'Settings…'),
     ];
 }
+
+/**
+ * A zone's menu: host actions placed `'start'`, the built-in items, host actions placed
+ * `'end'` — each group separated from the one above it. The built-ins are returned as given
+ * when nothing leads them (their own first item carries no separator).
+ */
+export function arrangeMenu(
+    leading: readonly MenuItemDescriptor[],
+    base: readonly MenuItemDescriptor[],
+    trailing: readonly MenuItemDescriptor[],
+): MenuItemDescriptor[] {
+    const out: MenuItemDescriptor[] = [...leading];
+    base.forEach((it, i) => out.push(i === 0 && leading.length > 0 ? { ...it, separatorBefore: true } : it));
+    trailing.forEach((it, i) => out.push(i === 0 && out.length > 0 ? { ...it, separatorBefore: true } : it));
+    return out;
+}

@@ -175,6 +175,8 @@ export interface CellDeps {
     onMarketChanged(id: string): void;
     /** The cell's price style changed in place (topbar icon/menu refresh upstream). */
     onPriceStyleChanged(id: string): void;
+    /** The cell's history depth ("Bars to fetch") changed. */
+    onBarsChanged(id: string): void;
     /** The cell's indicator ledger changed (count/picker refresh upstream). */
     onIndicatorsChanged(id: string): void;
     /** The cell's renderer config changed (scale side, clock, …) — the shared chrome follows the active cell upstream. */
@@ -703,12 +705,8 @@ export class ChartCell {
                     label: 'Bars to fetch',
                     id: 'bars',
                     options: ['500', '1000', '2000', '5000', '10000', '20000', '50000', '60000', '80000', '100000'],
-                    get: () => String(this.state.bars ?? 1000),
-                    set: (v: string) => {
-                        this.state.bars = Number(v);
-                        this.deps.onStateDirty();
-                        void this.inner?.setMarket({ bars: Math.max(this.state.bars, this.rangeBars) });
-                    },
+                    get: () => String(this.bars),
+                    set: (v: string) => this.setBars(Number(v)),
                 },
             ],
         };
@@ -887,6 +885,20 @@ export class ChartCell {
     }
 
     /** Applied live (renderer feature) — no reload. */
+    /** The history depth this cell asks its provider for ("Bars to fetch"). */
+    get bars(): number {
+        return this.state.bars ?? 1000;
+    }
+
+    /** Set the history depth — the settings row's programmatic twin. A range preset that
+     *  needs more keeps winning (the deeper of the two is requested). */
+    setBars(bars: number): void {
+        if (!(bars > 0) || bars === this.state.bars) return;
+        this.state.bars = bars;
+        this.deps.onBarsChanged(this.id);
+        void this.inner?.setMarket({ bars: Math.max(bars, this.rangeBars) });
+    }
+
     setPriceStyle(style: string): void {
         this.state.priceStyle = style;
         this.inner?.renderer.set('priceStyle', style);

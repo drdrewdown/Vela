@@ -3,6 +3,7 @@
 // the per-pane price scales. Pure functions over plain objects, so this runs in node.
 import { describe, it, expect } from 'vitest';
 import {
+    arrangeMenu,
     bodyItems,
     invertWrite,
     paneScaleAt,
@@ -158,5 +159,24 @@ describe('settings items', () => {
 
     it('a bare settings id asks for no particular tab', () => {
         expect(settingsSectionOf('settings')).toBeUndefined();
+    });
+});
+
+describe('arrangeMenu — contributed actions around the built-in items', () => {
+    const item = (id: string) => ({ id, label: id });
+    it('leading items go above the built-ins, which then open with a separator', () => {
+        const out = arrangeMenu([item('trade')], [item('reset'), item('settings')], []);
+        expect(out.map((i) => i.id)).toEqual(['trade', 'reset', 'settings']);
+        expect(out[0]!.separatorBefore).toBeFalsy();
+        expect(out[1]!.separatorBefore).toBe(true);
+    });
+    it('trailing items keep their place below the built-ins, separated', () => {
+        const out = arrangeMenu([], [item('reset')], [item('plugin')]);
+        expect(out.map((i) => i.id)).toEqual(['reset', 'plugin']);
+        expect(out[1]!.separatorBefore).toBe(true);
+    });
+    it('with nothing contributed the built-ins are untouched', () => {
+        const base = [item('reset'), item('settings')];
+        expect(arrangeMenu([], base, [])).toEqual(base);
     });
 });

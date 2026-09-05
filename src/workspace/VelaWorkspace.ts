@@ -140,6 +140,8 @@ export interface WorkspaceEventMap extends Record<string, unknown> {
     'cell:created': { id: string };
     /** A cell's price style changed — from the topbar, the settings dialog or the API. */
     'cell:priceStyle': { id: string; style: string };
+    /** A cell's history depth ("Bars to fetch") changed — from the settings dialog or the API. */
+    'cell:bars': { id: string; bars: number };
     /** A cell's indicator set changed — added, removed, moved, or an input edited — from
      *  any door (picker, legend, object tree, chart API). Read the cell's chart for the set. */
     'cell:indicators': { id: string };
@@ -1495,6 +1497,7 @@ export class VelaWorkspace {
                 dropCell: (id, target) => this.swapCells(id, target),
                 onMarketChanged: (id) => this.onCellMarketChanged(id),
                 onPriceStyleChanged: (id) => this.onCellPriceStyleChanged(id),
+                onBarsChanged: (id) => this.onCellBarsChanged(id),
                 onIndicatorsChanged: (id) => this.onCellIndicatorsChanged(id),
                 onCellConfigChanged: (id) => this.syncChromeToCell(id),
                 onStatusPrefsChanged: (id) => this.propagateStylePrefs(id),
@@ -1935,6 +1938,12 @@ export class VelaWorkspace {
         if (!renderer) return;
         this.drawToolbar?.setScaleSide(renderer.get('scaleSide') === 'left' ? 'left' : 'right');
         this.bottombar?.setHour12(renderer.get('hour12') === true);
+    }
+
+    private onCellBarsChanged(id: string): void {
+        this.markStateDirty();
+        const cell = this.cellsById.get(id);
+        if (cell) this.events.emit('cell:bars', { id, bars: cell.bars });
     }
 
     private onCellPriceStyleChanged(id: string): void {
