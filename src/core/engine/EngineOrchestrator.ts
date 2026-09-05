@@ -1244,6 +1244,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
                 type: d.type,
                 title: d.title,
                 category: d.category || "Vela",
+                ...(d.badge ? { badge: d.badge } : {}),
                 supported: await this.isNativeSupported(d, symbol),
                 present: present.has(d.type),
                 beta: d.beta,

@@ -14,6 +14,14 @@ export interface IndicatorRow {
     nativeType?: string;
     /** Beta badge (native catalog flag). */
     beta?: boolean;
+    /** Provenance badge text; natives default to 'vela', scripts to their language. */
+    badge?: string;
+}
+
+/** Badge shown at the row's end: host-declared provenance, else 'vela' for natives, else the
+ *  script language. Pure. */
+export function rowBadge(r: Pick<IndicatorRow, 'badge' | 'native' | 'language'>): string | undefined {
+    return r.badge ?? (r.native ? 'vela' : r.language);
 }
 
 const STYLE_ID = 'vela-widget-indpicker';
@@ -221,7 +229,7 @@ export class IndicatorPicker {
                 row.appendChild(beta);
             }
             if (opts.instance !== undefined) {
-                const badgeText = r.native ? 'vela' : r.language;
+                const badgeText = rowBadge(r);
                 if (badgeText) {
                     const badge = doc.createElement('span');
                     badge.className = 'vela-ip-badge';

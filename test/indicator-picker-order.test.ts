@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { orderCategories, setIndicatorCategoryOrder } from '../src/widget/indicator-picker';
+import { orderCategories, setIndicatorCategoryOrder, rowBadge } from '../src/widget/indicator-picker';
 import { classicCategory, classicSpecs } from '../src/core/native-indicators/classics';
 
 // Aether (UC-003): the picker's category groups follow a host-declared order; the built-in
@@ -36,5 +36,14 @@ describe('classic catalog — family categories', () => {
         const bb = classicSpecs.find((s) => s.type === 'bollinger-bands' || s.title === 'Bollinger Bands')!;
         expect(classicCategory(rsi)).toBe('Oscillators');
         expect(classicCategory(bb)).toBe('Bands & Channels');
+    });
+});
+
+describe('indicator picker — provenance badge', () => {
+    it('host badge wins; natives default to vela; scripts show their language', () => {
+        expect(rowBadge({ native: true, badge: 'Aether' })).toBe('Aether');
+        expect(rowBadge({ native: true })).toBe('vela');
+        expect(rowBadge({ language: 'pine' })).toBe('pine');
+        expect(rowBadge({})).toBeUndefined();
     });
 });

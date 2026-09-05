@@ -120,6 +120,8 @@ export interface CellNativeInfo {
     title: string;
     /** Aether: picker section (e.g. "Momentum Oscillators"). */
     category?: string;
+    /** Aether: picker provenance badge. */
+    badge?: string;
     supported: boolean;
     present: boolean;
     beta?: boolean;
@@ -1029,17 +1031,17 @@ export class ChartCell {
 
     /** The picker's library rows: supported natives first (see {@link supportedNatives}),
      *  then the manifest in the host's own order. */
-    libraryRows(): Array<{ name: string; language?: string; category?: string; native?: boolean; nativeType?: string; beta?: boolean }> {
+    libraryRows(): Array<{ name: string; language?: string; category?: string; badge?: string; native?: boolean; nativeType?: string; beta?: boolean }> {
         return [
-            ...this.supportedNatives().map((n) => ({ name: n.title, category: n.category || 'Vela', native: true, nativeType: n.type, beta: n.beta })),
+            ...this.supportedNatives().map((n) => ({ name: n.title, category: n.category || 'Vela', badge: n.badge, native: true, nativeType: n.type, beta: n.beta })),
             ...this.manifest.map((e) => ({ name: e.name, language: e.language, category: e.category })),
         ];
     }
 
     /** The picker's on-chart rows: native instances first, then live script instances. */
-    onChartRows(): Array<{ name: string; language?: string; native?: boolean; nativeType?: string }> {
+    onChartRows(): Array<{ name: string; language?: string; badge?: string; native?: boolean; nativeType?: string }> {
         return [
-            ...this.nativeHandles().map((h) => ({ name: h.title, native: true, nativeType: h.nativeType })),
+            ...this.nativeHandles().map((h) => ({ name: h.title, native: true, nativeType: h.nativeType, badge: this.nativeCatalog.find((c) => c.type === h.nativeType)?.badge })),
             ...this.instances.map((it) => ({ name: it.entry.name, language: it.entry.language })),
         ];
     }
@@ -1178,7 +1180,7 @@ export class ChartCell {
         if (!chart) return;
         void chart.availableNativeIndicators().then((list) => {
             if (this.destroyed || this.inner !== chart) return;
-            this.nativeCatalog = list.map((n) => ({ type: n.type, title: n.title, category: n.category, supported: n.supported, present: n.present, beta: n.beta }));
+            this.nativeCatalog = list.map((n) => ({ type: n.type, title: n.title, category: n.category, badge: n.badge, supported: n.supported, present: n.present, beta: n.beta }));
             this.deps.onIndicatorsChanged(this.id);
         });
     }

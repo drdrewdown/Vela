@@ -96,6 +96,8 @@ export interface NativeIndicator {
 export interface NativeIndicatorDescriptor {
     /** Aether: section in the indicator picker (e.g. "Momentum Oscillators"). */
     category?: string;
+    /** Aether: provenance badge in the picker (e.g. "Aether", "TA-Lib"); default "vela". */
+    badge?: string;
     readonly type: string;
     /** Full display name (picker, settings header, handle title). */
     readonly title: string;
@@ -136,6 +138,8 @@ export interface NativeIndicatorDescriptor {
 export interface NativeIndicatorInfo {
     /** Aether: picker section. */
     category?: string;
+    /** Aether: picker provenance badge. */
+    badge?: string;
     readonly type: string;
     readonly title: string;
     /** Applies to the current symbol (a type may need data the provider lacks). */
