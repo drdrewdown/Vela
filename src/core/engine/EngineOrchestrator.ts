@@ -1243,7 +1243,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
             nativeIndicatorDescriptors().map(async (d) => ({
                 type: d.type,
                 title: d.title,
-                category: d.category || "General",
+                category: d.category || "Vela",
                 supported: await this.isNativeSupported(d, symbol),
                 present: present.has(d.type),
                 beta: d.beta,
