@@ -196,6 +196,9 @@ export class NativeRenderer implements IChartRenderer {
     private indicatorTitlesOn = true;
     /** Plot values beside the legend titles shown — held here so a remount re-applies it. */
     private indicatorValuesOn = true;
+    /** The indicator legend folded behind its chevron (`legend.folded`) — held here so a
+     *  remount re-applies it. */
+    private legendFolded = false;
     /** Host-contributed legend actions — held here so a rebuild of the legend re-wires them. */
     private legendActionsProvider: ((indicatorId: string) => LegendActionView[]) | null = null;
     /** Host-contributed legend callouts — held here so a rebuild of the legend re-wires them. */
@@ -341,7 +344,7 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     readonly name = 'native';
-    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'scaleSide', 'rangeChips', 'indicatorChips', 'mergeChips', 'invertScale', 'paneScales', 'autoScale', 'timezone', 'hour12', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'indicatorTitles', 'indicatorValues'];
+    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'scaleSide', 'rangeChips', 'indicatorChips', 'mergeChips', 'legendFolded', 'invertScale', 'paneScales', 'autoScale', 'timezone', 'hour12', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'indicatorTitles', 'indicatorValues'];
 
     /** Apply a render feature live — mutate the field + invalidate, no engine re-run. */
     applyFeature(key: string, value: unknown): void {
@@ -439,6 +442,9 @@ export class NativeRenderer implements IChartRenderer {
                 break;
             case 'mergeChips':
                 this.applyConfig({ priceScale: { mergeChips: Boolean(value) } });
+                break;
+            case 'legendFolded':
+                this.applyConfig({ legend: { folded: Boolean(value) } });
                 break;
             case 'axisLabels':
                 this.scene.showAxisLabels = Boolean(value);
@@ -554,6 +560,7 @@ export class NativeRenderer implements IChartRenderer {
             case 'scaleSide': return this.scene.scaleSide;
             case 'hour12': return this.scene.hour12;
             case 'rangeChips': return this.scene.showRangeChips;
+            case 'legendFolded': return this.legendFolded;
             case 'indicatorChips': return this.scene.showIndicatorChips;
             case 'mergeChips': return this.scene.mergeChips;
             case 'axisLabels': return this.scene.showAxisLabels;
@@ -711,6 +718,7 @@ export class NativeRenderer implements IChartRenderer {
                 mergeChips: this.scene.mergeChips,
             },
             panes: { separatorColor: s.separatorColor ?? t.borderColor },
+            legend: { folded: this.legendFolded },
             trades: {
                 visible: this.scene.tradeMarkers.visible,
                 labels: this.scene.tradeMarkers.labels,
@@ -851,6 +859,9 @@ export class NativeRenderer implements IChartRenderer {
         this.scene.showRangeChips = next.priceScale.rangeChips;
         this.scene.showIndicatorChips = next.priceScale.indicatorChips;
         this.scene.mergeChips = next.priceScale.mergeChips;
+        // legend
+        this.legendFolded = next.legend.folded;
+        this.inputsUI?.setLegendFolded(this.legendFolded);
         // panes
         s.separatorColor = keepInherit(s.separatorColor, next.panes.separatorColor, prevTheme.borderColor);
         // trade markers
@@ -1512,6 +1523,10 @@ export class NativeRenderer implements IChartRenderer {
         this.inputsUI.setLayoutMode(this.layoutMode);
         this.inputsUI.setTitlesVisible(this.indicatorTitlesOn); // a remount keeps the toggle state
         this.inputsUI.setValuesVisible(this.indicatorValuesOn);
+        this.inputsUI.setLegendFolded(this.legendFolded);
+        this.inputsUI.setOnFoldChange((folded) => {
+            if (folded !== this.legendFolded) this.applyConfig({ legend: { folded } });
+        });
         this.inputsUI.setDialogHost(this.dialogHost);
         this.inputsUI.setSymbolPicker(this.symbolPicker);
         this.inputsUI.setLegendActions(this.legendActionsProvider);

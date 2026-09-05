@@ -6,7 +6,7 @@ import { LayoutPicker, type LayoutPickerShape } from './layout-picker';
 import { iconEl, iconMarkup, registerIcon } from '../ui/icons';
 import { injectStyles } from '../ui/styles';
 import { chartType } from '../chart-types/registry';
-import { topbarActionOverride, widgetActions, type SidePanelButton, type WidgetContext } from './contributions';
+import { actionLabel, topbarActionOverride, widgetActions, type SidePanelButton, type WidgetContext } from './contributions';
 import { resolveTopbarComposition, topbarHas, TOPBAR_BUILTIN_IDS, type ResolvedTopbarComposition, type TopbarComposition } from './topbar-composition';
 import { BUILTIN_PRICE_STYLES, priceStyleIds, priceStyleLabel } from '../renderers/native/core/chartConfig';
 import { favoriteTimeframeChips, timeframeLabel } from './timeframe';
@@ -590,10 +590,10 @@ export class Topbar {
             if (action.icon) b.appendChild(iconEl(action.icon, doc));
             if (iconOnly) {
                 // The label still speaks — as the accessible name and the hover tooltip.
-                b.setAttribute('aria-label', action.label);
-                this.actionTooltips.push(new Tooltip(b, { content: action.label, triggerId: `vela-action-${action.id}`, host: this.host }));
+                b.setAttribute('aria-label', actionLabel(action, ctx));
+                this.actionTooltips.push(new Tooltip(b, { content: actionLabel(action, ctx), triggerId: `vela-action-${action.id}`, host: this.host }));
             } else {
-                b.appendChild(doc.createTextNode(action.label));
+                b.appendChild(doc.createTextNode(actionLabel(action, ctx)));
             }
             b.addEventListener('click', () => {
                 const c = this.opts.getContext?.();

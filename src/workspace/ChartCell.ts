@@ -464,17 +464,23 @@ export class ChartCell {
             // Right-clicking activates the cell first (capture-phase pointerdown), so the
             // context the actions receive is this cell's — the active one.
             getContext: () => this.deps.context(),
+            // The crosshair has already followed the pointer to the right-click position.
+            pointerAt: () => ({ price: this.lastCrossPrice, time: this.lastCrossTime }),
         });
         this.contextMenu.onChart(this.inner);
         this.inner.renderer.onCrosshairMove((e) => {
             this.lastCrossTime = e.time;
             this.lastCrossPrice = e.price;
         });
+        // Every indicator change reaches the shell — the topbar count, the picker and the
+        // `cell:indicators` event — whichever door it came through (picker, legend ✕,
+        // object tree, the chart API, an inputs dialog).
         this.inner.on('indicator:added', () => {
             this.syncPresentNatives();
             this.refreshNativeCatalog();
+            this.deps.onIndicatorsChanged(this.id);
         });
-        this.inner.on('indicator:inputs', () => this.deps.onStateDirty());
+        this.inner.on('indicator:inputs', () => this.deps.onIndicatorsChanged(this.id));
         this.inner.on('indicator:removed', ({ id }) => {
             if (this.destroyed) return;
             // Out-of-band removals (legend ✕, object tree, middle-click, handle.remove())

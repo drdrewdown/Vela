@@ -8,7 +8,7 @@ import { iconEl } from '../ui/icons';
 import { injectStyles } from '../ui/styles';
 import { parseSymbol } from '../data/ProviderRegistry';
 import { timeframeLabel } from './timeframe';
-import { widgetActions, type WidgetContext } from './contributions';
+import { actionLabel, widgetActions, type WidgetContext } from './contributions';
 import { TOPBAR_BUILTIN_IDS } from './topbar-composition';
 
 const STYLE_ID = 'vela-widget-mobilebar';
@@ -144,9 +144,9 @@ export class MobileBar {
         for (const action of widgetActions('topbar', ctx).filter((a) => a.align === 'left' && !builtin.has(a.id))) {
             const b = doc.createElement('button');
             b.className = 'vela-mb-item';
-            b.setAttribute('aria-label', action.label);
+            b.setAttribute('aria-label', actionLabel(action, ctx));
             if (action.icon) b.appendChild(iconEl(action.icon, doc));
-            else b.appendChild(doc.createTextNode(action.label));
+            else b.appendChild(doc.createTextNode(actionLabel(action, ctx)));
             b.addEventListener('click', () => {
                 const c = this.opts.getContext?.();
                 if (c) action.run(c);

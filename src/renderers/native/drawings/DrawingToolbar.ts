@@ -238,14 +238,24 @@ export class DrawingToolbar {
         this.highlight();
     }
 
-    /** Collapse to a slim expand-strip / restore the full bar, and tell the host so a
-     *  docked renderer can resize its gutter reservation. */
     private toggleCollapsed(): void {
-        this.collapsed = !this.collapsed;
+        this.setCollapsed(!this.collapsed);
+    }
+
+    /** Collapse to a slim expand-strip / restore the full bar (the chevron's programmatic
+     *  twin), and tell the host so a docked renderer can resize its gutter reservation.
+     *  A no-op when already in that state. */
+    setCollapsed(collapsed: boolean): void {
+        if (collapsed === this.collapsed) return;
+        this.collapsed = collapsed;
         this.closeFlyout();
         this.styleRoot();
         this.paintCollapse();
         this.onCollapse(this.collapsed);
+    }
+
+    get isCollapsed(): boolean {
+        return this.collapsed;
     }
 
     private paintCollapse(): void {

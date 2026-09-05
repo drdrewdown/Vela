@@ -175,6 +175,10 @@ export class InputsUI {
      *  pane's rows hide (a pane-collapse strip keeps its master label, its only marker),
      *  unlike {@link paneCollapse} which collapses one pane to a strip. */
     private legendFolded = false;
+    /** The host's fold preference (`legend.folded`) — what the chevron restores when it
+     *  comes back after a rebuild or a row-count dip, instead of the mode default. */
+    private foldPreference: boolean | null = null;
+    private onFoldChange: ((folded: boolean) => void) | null = null;
     /** Titles switched off entirely (a settings toggle): every pane's legend container
      *  hides — rows, fold chevron and all — unlike the fold, which leaves its chip. */
     private titlesVisible = true;
@@ -401,6 +405,21 @@ export class InputsUI {
         if (this.titlesVisible === visible) return;
         this.titlesVisible = visible;
         this.reposition(); // positionLegend applies the flag per pane
+    }
+
+    /** Fold/unfold the legend rows chart-wide — the chevron's programmatic twin (config
+     *  `legend.folded`). Remembered as the preference the chevron restores after a
+     *  rebuild; ignored while a host overview action owns the chevron. */
+    setLegendFolded(folded: boolean): void {
+        this.foldPreference = folded;
+        if (this.overviewAction !== null || this.legendFolded === folded) return;
+        this.legendFolded = folded;
+        this.syncFoldToggle();
+    }
+
+    /** Hear the chevron: the trader folded/unfolded the legend (programmatic sets are silent). */
+    setOnFoldChange(cb: ((folded: boolean) => void) | null): void {
+        this.onFoldChange = cb;
     }
 
     /**
@@ -645,6 +664,9 @@ export class InputsUI {
         }
         let btn = this.foldToggle;
         if (!btn) {
+            // The chevron is back (first eligible row, or after a dip): the host's
+            // preference wins over whatever the dip reset the fold to.
+            if (this.overviewAction === null && this.foldPreference !== null) this.legendFolded = this.foldPreference;
             btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'vela-ind-fold';
@@ -655,7 +677,9 @@ export class InputsUI {
                     return;
                 }
                 this.legendFolded = !this.legendFolded;
+                this.foldPreference = this.legendFolded;
                 this.syncFoldToggle();
+                this.onFoldChange?.(this.legendFolded);
             });
             this.foldToggle = btn;
         }

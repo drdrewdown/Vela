@@ -1217,7 +1217,6 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
         this.registry.add({ id, title, source: type, inputValues, propValues: {}, native: { type, instance: descriptor.create(), descriptor } });
         handle.setSchema(descriptor.inputsSchema());
         void this.startNativeIndicator(id, handle);
-        if (typeof window !== "undefined" && window.__AETHER_SYNC_INDICATORS__) window.__AETHER_SYNC_INDICATORS__(this);
         return handle;
     }
 
@@ -1286,7 +1285,6 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
         if (record.session) record.session.update(record.inputValues);
         else if (record.native && !record.hidden) record.native.instance.setInputs(record.inputValues);
         this.events.emit('indicator:inputs', { id });
-        if (typeof window !== "undefined" && window.__AETHER_SYNC_INDICATORS__) window.__AETHER_SYNC_INDICATORS__(this);
     }
 
     /** IndicatorController: the CURRENT stored input values (defaults merged with edits). */
@@ -1313,7 +1311,6 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
         record.pendingCause = 'inputs';
         record.session.update(record.inputValues, record.propValues);
         this.events.emit('indicator:inputs', { id });
-        if (typeof window !== "undefined" && window.__AETHER_SYNC_INDICATORS__) window.__AETHER_SYNC_INDICATORS__(this);
     }
 
     /** IndicatorController: tear down an indicator and (if now empty) its pane. */
@@ -1346,7 +1343,6 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
             this.events.emit('pane:changed', undefined);
         }
         this.events.emit('indicator:removed', { id });
-        if (typeof window !== "undefined" && window.__AETHER_SYNC_INDICATORS__) window.__AETHER_SYNC_INDICATORS__(this);
     }
 
     /**

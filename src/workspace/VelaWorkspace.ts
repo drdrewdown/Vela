@@ -32,7 +32,7 @@ import { ShortcutsHelp } from '../widget/shortcuts-help';
 import { Toast } from '../widget/toast';
 import { Glider, ZOOM_IN, ZOOM_OUT, PAN_FAST } from '../widget/glide';
 import { toolShortcutHints } from '../widget/tool-shortcuts';
-import { legendActionsProviderFor, legendCalloutsProviderFor, statePersistenceHandlers, topbarActionOverride, widgetActions, widgetAttachments, type WidgetActionDescriptor } from '../widget/contributions';
+import { actionLabel, legendActionsProviderFor, legendCalloutsProviderFor, statePersistenceHandlers, topbarActionOverride, widgetActions, widgetAttachments, type WidgetActionDescriptor } from '../widget/contributions';
 import { resolveTopbarComposition, topbarHas, TOPBAR_BUILTIN_IDS, type ResolvedTopbarComposition } from '../widget/topbar-composition';
 import { LayoutModeController, type LayoutMode } from '../widget/layout-mode';
 import { MobileBar } from '../widget/mobile-bar';
@@ -140,6 +140,11 @@ export interface WorkspaceEventMap extends Record<string, unknown> {
     'cell:created': { id: string };
     /** A cell's price style changed — from the topbar, the settings dialog or the API. */
     'cell:priceStyle': { id: string; style: string };
+    /** A cell's indicator set changed — added, removed, moved, or an input edited — from
+     *  any door (picker, legend, object tree, chart API). Read the cell's chart for the set. */
+    'cell:indicators': { id: string };
+    /** The shared drawing toolbar collapsed to its strip or expanded (the chevron or the API). */
+    'drawingToolbar:collapsed': { collapsed: boolean };
     'cell:destroyed': { id: string };
     /** The persistable state changed (debounced ~500ms) — re-pull `getState()` if you
      *  consume it. The signal custom persistence flows build on. */
@@ -596,6 +601,7 @@ export class VelaWorkspace {
                   },
                   {
                       dock: 'static',
+                      onCollapse: (collapsed) => this.events.emit('drawingToolbar:collapsed', { collapsed }),
                       // Drawings sync is a WORKSPACE link (same model as the layout
                       // dropdown's switches) — the bar only hosts its toggle.
                       onDrawingsSync: (on) => {
@@ -1177,6 +1183,18 @@ export class VelaWorkspace {
         }
         this.applyGrid();
         this.markStateDirty();
+    }
+
+    /** Show/hide the shared drawing toolbar at runtime (the `drawingToolbar` option decides
+     *  whether one exists at all). */
+    setDrawingToolbarVisible(visible: boolean): void {
+        this.drawToolbar?.setVisible(visible);
+    }
+
+    /** Collapse the shared drawing toolbar to its expand strip, or restore the full bar —
+     *  the chevron's programmatic twin; `drawingToolbar:collapsed` follows either way. */
+    setDrawingToolbarCollapsed(collapsed: boolean): void {
+        this.drawToolbar?.setCollapsed(collapsed);
     }
 
     resize(): void {
@@ -1931,6 +1949,7 @@ export class VelaWorkspace {
     /** Trigger ② — a cell's indicator ledger changed: count + picker only if active. */
     private onCellIndicatorsChanged(id: string): void {
         this.markStateDirty();
+        this.events.emit('cell:indicators', { id });
         if (id !== this.activeId) return;
         const cell = this.cellsById.get(id);
         if (!cell) return;
@@ -2043,9 +2062,10 @@ export class VelaWorkspace {
             // routed button (screenshot) or stop (indicators), never as an extra row.
             actions: () => {
                 const builtin = new Set<string>(TOPBAR_BUILTIN_IDS);
-                return widgetActions('topbar', this.context())
+                const ctx = this.context();
+                return widgetActions('topbar', ctx)
                     .filter((a) => a.align !== 'left' && !builtin.has(a.id))
-                    .map((a) => ({ label: a.label, icon: a.icon, run: () => a.run(this.context()) }));
+                    .map((a) => ({ label: actionLabel(a, ctx), icon: a.icon, run: () => a.run(this.context()) }));
             },
             // The desktop layout dropdown's whole surface — the grid canvas, the
             // non-canvas presets and the sync switches — relocated into the kebab
@@ -2147,7 +2167,7 @@ export class VelaWorkspace {
             this.keymap.register({
                 id: 'chart.screenshot',
                 keys: 'mod+alt+s',
-                label: ov ? ov.label : 'Download a screenshot of the layout',
+                label: ov ? actionLabel(ov, this.context()) : 'Download a screenshot of the layout',
                 category: 'Chart',
                 run: ov ? () => this.runOverride(ov) : () => this.downloadScreenshot(),
             });
@@ -2196,7 +2216,7 @@ export class VelaWorkspace {
         // to the slot's override — a replaced Indicators surface keeps its shortcut.
         const indOv = this.indicatorsOverride;
         if (indOv && topbarHas(this.topbarComp, 'indicators')) {
-            this.keymap.register({ id: 'indicators.open', keys: '/', label: indOv.label, category: 'Indicators', run: () => this.runOverride(indOv) });
+            this.keymap.register({ id: 'indicators.open', keys: '/', label: actionLabel(indOv, this.context()), category: 'Indicators', run: () => this.runOverride(indOv) });
         } else if (this.indicatorPicker) {
             this.keymap.register({ id: 'indicators.open', keys: '/', label: 'Open the indicator picker', category: 'Indicators', run: () => this.indicatorPicker?.open() });
         }

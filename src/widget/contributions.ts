@@ -9,6 +9,16 @@ import type { SymbolDescriptor } from '../core/ports/DataProvider';
 import type { InputValue } from '../core/model/inputs';
 import { TOPBAR_BUILTIN_IDS } from './topbar-composition';
 
+/** The pointer position a context-menu action was invoked at. */
+export interface WidgetPointer {
+    clientX: number;
+    clientY: number;
+    /** Price under the pointer on its pane; null off the plot. */
+    price: number | null;
+    /** Bar time under the pointer; null between bars / off the plot. */
+    time: number | null;
+}
+
 /** The runtime surface an action's `when`/`run` receives. */
 export interface WidgetContext {
     /** The CURRENT inner chart. Read it through this getter rather than capturing it:
@@ -34,6 +44,10 @@ export interface WidgetContext {
      *  (Dialog/Menu/Tooltip) from an action; without an explicit host they portal to
      *  the body, OUTSIDE the theme variables. A multi-chart shell hands its own root. */
     host: HTMLElement;
+    /** Where the pointer was when a CONTEXT MENU opened — set only on the context handed
+     *  to `context:*` actions (undefined elsewhere): the client position, and the price
+     *  and bar time under it. */
+    pointer?: WidgetPointer;
     /** The widget's feedback pill (bottom-center, auto-hides). */
     toast(message: string, kind?: 'info' | 'success' | 'error'): void;
     /** Add a SCRIPT indicator to the active chart THROUGH THE SHELL — unlike the raw
@@ -73,8 +87,10 @@ export interface WidgetActionDescriptor {
     id: string;
     target: WidgetActionTarget;
     /** Always required, even icon-only: it is the button's aria-label and tooltip, the
-     *  mobile drawer row's text, and the context-menu item's label. */
-    label: string;
+     *  mobile drawer row's text, and the context-menu item's label. A function resolves
+     *  against the live context at render time — for a label that carries state, like a
+     *  context-menu item naming the price under the pointer. */
+    label: string | ((ctx: WidgetContext) => string);
     /** Icon id from the `vela/ui` icon registry (register yours with `registerIcon`). */
     icon?: string;
     /** Topbar only: render the DESKTOP button icon-only, like the built-in tools — the
@@ -93,7 +109,27 @@ export interface WidgetActionDescriptor {
     align?: 'left' | 'right';
     /** Runtime gate — omitted ⇒ always shown. */
     when?: (ctx: WidgetContext) => boolean;
+    /** Shown but inert (context menus; a topbar button ignores it): a caption row, or an
+     *  action that needs something the pointer is not over. */
+    disabled?: boolean | ((ctx: WidgetContext) => boolean);
     run: (ctx: WidgetContext) => void;
+}
+
+/** A descriptor's label for one render — an empty string for a function label with no context. */
+export function actionLabel(desc: Pick<WidgetActionDescriptor, 'label'>, ctx?: WidgetContext): string {
+    if (typeof desc.label !== 'function') return desc.label;
+    return ctx ? desc.label(ctx) : '';
+}
+
+/** A descriptor's disabled state for one render. */
+export function actionDisabled(desc: Pick<WidgetActionDescriptor, 'disabled'>, ctx: WidgetContext): boolean {
+    return typeof desc.disabled === 'function' ? desc.disabled(ctx) : desc.disabled === true;
+}
+
+/** A view of `ctx` carrying `pointer`, with every live getter of the base intact (a
+ *  spread would freeze `chart`/`symbol`/… at the moment of the click). */
+export function withPointer<T extends WidgetContext>(ctx: T, pointer: WidgetPointer): T {
+    return Object.create(ctx, { pointer: { value: pointer, enumerable: true } }) as T;
 }
 
 /**

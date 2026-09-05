@@ -237,6 +237,12 @@ export interface ChartConfig {
          *  `animLiveBar` feature; this is only the on/off switch the settings dialog shows. */
         animateLastPrice: boolean;
     };
+    /** The indicator legend (the title + value rows on each pane). */
+    legend: {
+        /** Rows folded away behind the "˅ N" chevron chip. The chevron toggles it; a host
+         *  that remembers the trader's choice sets it here, and a rebuild keeps it. */
+        folded: boolean;
+    };
     /** Stacked-pane chrome — the draggable line between an indicator's pane and the one above it. */
     panes: {
         separatorColor: string;
@@ -556,6 +562,7 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
     const gh = asObject(grid.horzLines);
     const cross = asObject(p.crosshair);
     const ps = asObject(p.priceScale);
+    const legend = asObject(p.legend);
     const panes = asObject(p.panes);
     const trades = asObject(p.trades);
     const ts = asObject(p.timeScale);
@@ -610,6 +617,7 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
             indicatorChips: isBool(ps.indicatorChips) ? ps.indicatorChips : base.priceScale.indicatorChips,
             mergeChips: isBool(ps.mergeChips) ? ps.mergeChips : base.priceScale.mergeChips,
         },
+        legend: { folded: isBool(legend.folded) ? legend.folded : base.legend.folded },
         panes: {
             separatorColor: isColor(panes.separatorColor) ? panes.separatorColor : base.panes.separatorColor,
         },
