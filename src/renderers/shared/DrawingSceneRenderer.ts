@@ -478,8 +478,11 @@ export class DrawingSceneRenderer {
                 ctx.strokeRect(left, top, w, h);
                 ctx.setLineDash([]);
             }
-            if (bx.text) this.drawBoxText(ctx, bx, left, top, w, h);
-            if (bx.tooltip) this.tipRegions.push({ left, top, right, bottom, text: bx.tooltip });
+            // Aether: a labelled box answers hover on its LABEL only — a trader sweeping the cursor
+            // through a zone must not get a tooltip from every rectangle under it. An unlabelled
+            // box keeps the whole rectangle as its hit region.
+            const textRect = bx.text ? this.drawBoxText(ctx, bx, left, top, w, h) : null;
+            if (bx.tooltip) this.tipRegions.push({ ...(textRect ?? { left, top, right, bottom }), text: bx.tooltip });
         }
     }
 
@@ -516,7 +519,8 @@ export class DrawingSceneRenderer {
         return out;
     }
 
-    private drawBoxText(ctx: CanvasRenderingContext2D, bx: DrawingBox, left: number, top: number, w: number, h: number): void {
+    /** Draws the box text; returns the painted text block's rectangle (clipped to the box). */
+    private drawBoxText(ctx: CanvasRenderingContext2D, bx: DrawingBox, left: number, top: number, w: number, h: number): { left: number; top: number; right: number; bottom: number } {
         const text = bx.text!;
         const family = bx.fontFamily === 'monospace' ? 'monospace' : this.deps.theme.fontFamily || 'sans-serif';
         const variant = `${bx.italic ? 'italic ' : ''}${bx.bold ? 'bold ' : ''}`;
@@ -561,6 +565,17 @@ export class DrawingSceneRenderer {
         ctx.clip();
         for (let i = 0; i < lines.length; i += 1) ctx.fillText(lines[i]!, tx, blockTop + i * lineH);
         ctx.restore();
+
+        const font = `${variant}${size}px ${family}`;
+        const textW = Math.max(1, ...lines.map((l) => this.measure(ctx, font, l)));
+        const rawLeft = bx.hAlign === 'left' ? tx : bx.hAlign === 'right' ? tx - textW : tx - textW / 2;
+        const hit = 3; // a little slack around the glyphs so the hover is forgiving
+        return {
+            left: Math.max(left, rawLeft - hit),
+            top: Math.max(top, blockTop - hit),
+            right: Math.min(left + w, rawLeft + textW + hit),
+            bottom: Math.min(top + h, blockTop + blockH + hit),
+        };
     }
 
     // ── labels ───────────────────────────────────────────────────────────────
