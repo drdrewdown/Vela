@@ -165,3 +165,19 @@ describe('labels — tooltip hit regions', () => {
         expect(scene.labelTipRegions()).toHaveLength(0);
     });
 });
+
+describe('label painting — off-screen labels cost nothing', () => {
+    it('a bar-anchored label outside the plot never asks for its bar (culled by x first)', () => {
+        let lookups = 0;
+        const scene = new DrawingSceneRenderer(
+            { timeToLogical: (ms) => ms, barAt: () => (lookups++, { time: 0, open: 1, high: 2, low: 0, close: 1, volume: 0 }), theme },
+            setOf([
+                label({ id: 'far-left', x: -5000, yloc: 'abovebar', style: 'arrowup', text: undefined }),
+                label({ id: 'far-right', x: 9000, yloc: 'belowbar', style: 'arrowdown', text: undefined }),
+                label({ id: 'on-screen', x: 100, yloc: 'abovebar', style: 'arrowup', text: undefined }),
+            ]),
+        );
+        scene.render(recordingCtx().ctx, 800, 400, xOf, yOf);
+        expect(lookups).toBe(1); // only the visible one
+    });
+});

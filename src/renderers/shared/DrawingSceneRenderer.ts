@@ -606,6 +606,11 @@ export class DrawingSceneRenderer {
         const rawList: any[] = [];
         for (const lb of this.set.labels) {
             let px = xOf(this.logicalOf(lb.xloc, lb.x));
+            // Cull by x BEFORE any bar lookup or price projection: a chart with tens of
+            // thousands of bar-anchored labels (marker studies) must pay only for the ones
+            // in view. Pinned price chips are exempt — they re-anchor to the margin below.
+            const pinned = lb.style === "label_left" && lb.yloc === "price";
+            if (!pinned && (px < -50 || px > W + 50)) continue;
             let py;
             if (lb.yloc === "price") {
                 py = yOf(lb.y);
