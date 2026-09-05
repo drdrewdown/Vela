@@ -173,6 +173,53 @@ export interface DataWindowGroup {
  * group per indicator. Every value arrives pre-formatted on the scale of the pane it belongs
  * to, so a host panel lays the readout out without doing any numeric formatting itself.
  */
+/** A price-scale chip as drawn (last price, an indicator level, …), for hit-testing. */
+export interface ScaleChip {
+    tag: string;
+    title: string;
+    priceText: string;
+    tooltip: string;
+    color: string;
+    /** The price box and the tag box, in the renderer's plot pixels. */
+    boxPrice: { x: number; y: number; w: number; h: number };
+    boxTag: { x: number; y: number; w: number; h: number };
+    /** What the chip stands for — the indicator's own description, passed through untouched. */
+    meta: unknown;
+}
+
+export interface PointerReadoutPane {
+    id: string;
+    kind: 'price' | 'study';
+    /** The value at the point on this pane's scale — a price on the price pane, the study's value elsewhere. */
+    value: number;
+    /** The indicators rendered on this pane. */
+    indicatorIds: string[];
+}
+
+export interface PointerReadoutBar {
+    index: number;
+    time: Millis;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+}
+
+/** What is under a screen point — the seam a host's hover card or hit-testing builds on. */
+export interface PointerReadout {
+    /** The point in the renderer's plot pixels. */
+    x: number;
+    y: number;
+    pane: PointerReadoutPane | null;
+    /** The bar under x, or null beyond the history. */
+    bar: PointerReadoutBar | null;
+    /** A price-scale chip under the point, or null. */
+    chip: ScaleChip | null;
+    /** The tooltip of an on-chart drawing label under the point, or null. */
+    labelTooltip: string | null;
+}
+
 export interface DataWindowReadout {
     /** Bar date, pre-formatted (e.g. `2026-07-03`); empty when there is no bar. */
     date: string;
@@ -368,6 +415,10 @@ export interface IChartRenderer {
     onPriceStyleChange?(cb: (style: PriceStyle) => void): Unsubscribe;
     /** The market's display symbol, handed over by the core on every full series load. */
     setMarketSymbol?(symbol: string): void;
+    /** What is under a SCREEN point (see {@link PointerReadout}). Optional. */
+    readoutAt?(clientX: number, clientY: number): PointerReadout | null;
+    /** A value's pixel y on a pane's current scale (renderer plot frame); null for an unknown pane. Optional. */
+    valueToY?(paneId: string, value: number): number | null;
 
     /** The renderer tells core when the user edits an input in-chart. */
     onInputChange(cb: (e: InputChangeEvent) => void): Unsubscribe;

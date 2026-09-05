@@ -1,4 +1,4 @@
-import type { AxisLongPressEvent, CrosshairEvent, DataWindowReadout, IChartRenderer, LegendActionView, LegendCalloutView, RendererCapabilities } from './ports/IChartRenderer';
+import type { AxisLongPressEvent, CrosshairEvent, DataWindowReadout, IChartRenderer, LegendActionView, LegendCalloutView, RendererCapabilities, PointerReadout } from './ports/IChartRenderer';
 import type { Unsubscribe } from './util/types';
 import type { SymbolPickerFn } from './model/inputs';
 
@@ -170,6 +170,21 @@ export class RendererControl {
      */
     dataWindowReadout(): DataWindowReadout | null {
         return this.renderer.getDataWindowReadout?.() ?? null;
+    }
+
+    /**
+     * What is under a SCREEN point — the pane and its value there, the bar, a price-scale chip,
+     * a drawing label's tooltip. The seam a host's hover card builds on. Null on a renderer
+     * without hit-testing.
+     */
+    readoutAt(clientX: number, clientY: number): PointerReadout | null {
+        return this.renderer.readoutAt?.(clientX, clientY) ?? null;
+    }
+
+    /** A value's pixel y on a pane's current scale (the renderer's plot frame, the frame
+     *  {@link readoutAt} reports); null for an unknown pane or a renderer without it. */
+    valueToY(paneId: string, value: number): number | null {
+        return this.renderer.valueToY?.(paneId, value) ?? null;
     }
 
     /**

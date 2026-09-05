@@ -16,8 +16,10 @@ import type {
     DataWindowOHLC,
     DataWindowGroup,
     DataWindowReadout,
+    PointerReadout,
 } from '../../core/ports/IChartRenderer';
 import type { VelaTheme } from '../../core/options';
+import { pointerReadout } from './core/readout';
 import type { OHLCV } from '../../core/model/ohlcv';
 import type { Millis } from '../../core/model/time';
 import type { VolumeLayerData, VpvrLayerData } from '../../core/model/volume-layers';
@@ -177,9 +179,6 @@ export class NativeRenderer implements IChartRenderer {
     private glowAmount = 0; // WebGL2 neon-glow intensity (canvas2d ignores it)
     private readonly chrome = new ChromeRenderer();
     /** Aether: price-scale chip hit regions from the last chrome frame (see ChromeRenderer). */
-    get aetherChipBounds(): any[] {
-        return this.chrome.aetherChipBounds;
-    }
     /** Prepaints each indicator's Pine drawings into interleave slices at the model's z. */
     private readonly indicatorSlices = new IndicatorDrawingSlices();
     /** Hover tooltips for Pine labels (canvas hit-rects collected by the chrome layer). */
@@ -2899,6 +2898,28 @@ export class NativeRenderer implements IChartRenderer {
     /** The data-window readout (port seam) — the hovered bar's date/time and OHLCV plus every
      *  indicator's value there, or the latest bar when the cursor is off the plot. Values are
      *  pre-formatted on the scale of the pane they belong to, so a host panel renders them as-is. */
+    readoutAt(clientX: number, clientY: number): PointerReadout | null {
+        if (!this.wrapper) return null;
+        const r = this.wrapper.getBoundingClientRect();
+        return pointerReadout(
+            {
+                panes: this.scene.panes.values(),
+                indicators: this.scene.indicators.values(),
+                bars: this.bars,
+                chips: this.chrome.scaleChips,
+                coords: this.coords,
+                labelTooltipAt: (x, y) => this.indicatorSlices.labelTooltipAt(x, y),
+            },
+            clientX - r.left,
+            clientY - r.top,
+        );
+    }
+
+    valueToY(paneId: string, value: number): number | null {
+        const pane = this.scene.panes.get(paneId);
+        return pane ? this.coords.priceToY(value, pane.scale, pane.bounds) : null;
+    }
+
     getDataWindowReadout(): DataWindowReadout {
         const n = this.bars.length;
         if (n === 0) return { date: '', time: '', ohlc: null, groups: [] };

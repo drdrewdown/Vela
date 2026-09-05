@@ -1,5 +1,6 @@
 import type { VelaTheme } from '../../../core/options';
 import type { IndicatorModel } from '../../../core/model/indicator';
+import type { ScaleChip } from '../../../core/ports/IChartRenderer';
 import type { OHLCV } from '../../../core/model/ohlcv';
 import type { LineStyle } from '../../../core/model/series';
 import type { CoordinateSystem } from '../core/CoordinateSystem';
@@ -28,7 +29,8 @@ import { tzOffsetMs } from './tz';
 export class ChromeRenderer {
     /** Aether: hit regions of the price-scale chips drawn on the last frame (price box + on-canvas
      *  tag per chip), in canvas CSS pixels. Read by the host's hover HUD for THIS chart. */
-    aetherChipBounds: any[] = [];
+    /** The price-scale chips as last drawn — what {@link NativeRenderer.readoutAt} hit-tests. */
+    scaleChips: ScaleChip[] = [];
     private canvas: HTMLCanvasElement | null = null;
     private ctx: CanvasRenderingContext2D | null = null;
     // The color for axis tick labels — the host-passed surface text, set each frame in render().
@@ -282,7 +284,7 @@ export class ChromeRenderer {
         const isLeft = coords.leftOffsetPx > 0; // the scale docks left
         const fullW = ctx.canvas.width / coords.dpr;
         const axisW = fullW - dataW;
-        const chipBounds = [];
+        const chipBounds: ScaleChip[] = [];
 
         // Helper to render a split chip and record its bounds
         const drawChip = (sPriceText: string, tag: string, sColor: string, sY: number, tooltipText?: string, titleText?: string, meta?: any) => {
@@ -574,9 +576,7 @@ export class ChromeRenderer {
             }
         }
 
-        if (typeof window !== "undefined") {
-            this.aetherChipBounds = chipBounds;
-        }
+        this.scaleChips = chipBounds;
 
         ctx.textAlign = "start";
     }
