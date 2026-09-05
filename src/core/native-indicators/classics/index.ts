@@ -25,9 +25,27 @@ export const classicSpecs: ClassicIndicatorSpec[] = [
     ...overlaySpecs,
 ];
 
+/** Picker group per family — the catalog reads as a study library, not one long list. */
+const FAMILY_CATEGORY: ReadonlyArray<readonly [ClassicIndicatorSpec[], string]> = [
+    [averageSpecs, 'Moving Averages'],
+    [bandSpecs, 'Bands & Channels'],
+    [oscillatorSpecs, 'Oscillators'],
+    [trendSpecs, 'Trend'],
+    [volatilitySpecs, 'Volatility'],
+    [volumeSpecs, 'Volume'],
+    [overlaySpecs, 'Overlays'],
+];
+
+export function classicCategory(spec: ClassicIndicatorSpec): string | undefined {
+    return FAMILY_CATEGORY.find(([family]) => family.includes(spec))?.[1];
+}
+
 /** Register the classic indicator catalog (idempotent). Called by the composition root. */
 export function registerClassicIndicators(): void {
-    for (const spec of classicSpecs) registerNativeIndicator(classicDescriptor(spec));
+    for (const spec of classicSpecs) {
+        const category = classicCategory(spec);
+        registerNativeIndicator(category ? { ...classicDescriptor(spec), category } : classicDescriptor(spec));
+    }
 }
 
 export { classicDescriptor } from './define';

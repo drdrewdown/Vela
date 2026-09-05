@@ -1,5 +1,6 @@
 // Public composition root + default backends
 export { Vela } from './Vela';
+export { setIndicatorCategoryOrder, orderCategories } from './widget/indicator-picker';
 export type { VelaDeps, RunIndicatorResult } from './Vela';
 export { RendererControl } from './core/RendererControl';
 export { NativeRenderer } from './renderers/native/NativeRenderer';

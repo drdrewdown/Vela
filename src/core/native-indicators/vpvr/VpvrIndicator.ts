@@ -76,7 +76,7 @@ class VpvrIndicator implements NativeIndicator {
 export const vpvrDescriptor: NativeIndicatorDescriptor = {
     type: 'vpvr',
     title: 'Visible Range Volume Profile',
-    category: "Volume Indicators",
+    category: "Volume",
     shortTitle: 'VRVP',
     paneHint: 'price',
     overlay: true,

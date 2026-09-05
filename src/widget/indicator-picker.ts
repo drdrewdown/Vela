@@ -90,6 +90,31 @@ const CSS = `
 .vela-ip-empty { padding: var(--vela-space-3); color: var(--vela-fg-muted); text-align: center; }
 `;
 
+/** Host-declared order of the library's category groups. Categories not listed follow the
+ *  listed ones, alphabetically; unset (default) keeps first-seen order. */
+let categoryOrder: readonly string[] = [];
+
+/** Declare the order the picker shows category groups in (see {@link orderCategories}). */
+export function setIndicatorCategoryOrder(order: readonly string[]): void {
+    categoryOrder = [...order];
+}
+
+/** Pure: sort category names by the declared order, then the rest alphabetically. With no
+ *  declared order the input order is kept. */
+export function orderCategories(cats: Iterable<string>): string[] {
+    const list = [...cats];
+    if (categoryOrder.length === 0) return list;
+    const rank = new Map(categoryOrder.map((c, i) => [c, i] as const));
+    return list.sort((a, b) => {
+        const ra = rank.get(a);
+        const rb = rank.get(b);
+        if (ra !== undefined && rb !== undefined) return ra - rb;
+        if (ra !== undefined) return -1;
+        if (rb !== undefined) return 1;
+        return a.localeCompare(b);
+    });
+}
+
 export interface IndicatorPickerOptions {
     /** The manifest library — clicking a row ADDS an instance (repeatable). */
     library: () => readonly IndicatorRow[];
@@ -234,7 +259,8 @@ export class IndicatorPicker {
             bucket.push([r, i] as const);
             byCat.set(cat, bucket);
         });
-        for (const [cat, bucket] of byCat) {
+        for (const cat of orderCategories(byCat.keys())) {
+            const bucket = byCat.get(cat)!;
             const title = doc.createElement('div');
             title.className = 'vela-ip-group';
             title.textContent = cat;
