@@ -481,7 +481,7 @@ export class DrawingSceneRenderer {
             // Aether: a labelled box answers hover on its LABEL only — a trader sweeping the cursor
             // through a zone must not get a tooltip from every rectangle under it. An unlabelled
             // box keeps the whole rectangle as its hit region.
-            const textRect = bx.text ? this.drawBoxText(ctx, bx, left, top, w, h) : null;
+            const textRect = bx.text ? this.drawBoxText(ctx, bx, left, top, w, h, W) : null;
             if (bx.tooltip) this.tipRegions.push({ ...(textRect ?? { left, top, right, bottom }), text: bx.tooltip });
         }
     }
@@ -520,7 +520,7 @@ export class DrawingSceneRenderer {
     }
 
     /** Draws the box text; returns the painted text block's rectangle (clipped to the box). */
-    private drawBoxText(ctx: CanvasRenderingContext2D, bx: DrawingBox, left: number, top: number, w: number, h: number): { left: number; top: number; right: number; bottom: number } {
+    private drawBoxText(ctx: CanvasRenderingContext2D, bx: DrawingBox, left: number, top: number, w: number, h: number, W = Number.POSITIVE_INFINITY): { left: number; top: number; right: number; bottom: number } {
         const text = bx.text!;
         const family = bx.fontFamily === 'monospace' ? 'monospace' : this.deps.theme.fontFamily || 'sans-serif';
         const variant = `${bx.italic ? 'italic ' : ''}${bx.bold ? 'bold ' : ''}`;
@@ -542,16 +542,21 @@ export class DrawingSceneRenderer {
         const lineH = size * 1.3;
         const blockH = lineH * lines.length;
 
+        // Aether: a box that runs past the visible plot keeps its label ON SCREEN — the anchor
+        // is clamped to the painted part of the box, so a right-aligned tag of a zone that
+        // extends into the future sits at the plot's right edge instead of off-canvas.
+        const visLeft = Math.max(left, 0);
+        const visRight = Math.min(left + w, W);
         let tx: number;
         if (bx.hAlign === 'left') {
             ctx.textAlign = 'left';
-            tx = left + pad;
+            tx = visLeft + pad;
         } else if (bx.hAlign === 'right') {
             ctx.textAlign = 'right';
-            tx = left + w - pad;
+            tx = visRight - pad;
         } else {
             ctx.textAlign = 'center';
-            tx = left + w / 2;
+            tx = (visLeft + visRight) / 2;
         }
         ctx.textBaseline = 'top';
         let blockTop: number;

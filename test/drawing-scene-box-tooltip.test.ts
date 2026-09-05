@@ -40,10 +40,10 @@ function ctx(): CanvasRenderingContext2D {
     }) as unknown as CanvasRenderingContext2D;
 }
 
-function regions(b: DrawingBox) {
+function regions(b: DrawingBox, W = 800) {
     const scene = new DrawingSceneRenderer({ timeToLogical: (ms) => ms, barAt: () => null, theme }, { ...EMPTY_DRAWING_SET, boxes: [b] });
     // identity x; y flips so price 100 is at pixel 0 and price 0 at pixel 100
-    scene.render(ctx(), 800, 400, (l) => l, (p) => 100 - p);
+    scene.render(ctx(), W, 400, (l) => l, (p) => 100 - p);
     return scene.labelTipRegions();
 }
 
@@ -65,5 +65,13 @@ describe('box tooltip hit region', () => {
         expect(r!.right).toBe(100);
         expect(r!.top).toBe(0);
         expect(r!.bottom).toBe(100);
+    });
+
+    it('a box running past the plot keeps its right-aligned label (and region) at the visible edge', () => {
+        const [r] = regions(box({ text: 'BPR', left: 0, right: 1000 }), 500);
+        expect(r).toBeDefined();
+        expect(r!.right).toBeLessThanOrEqual(500);
+        expect(r!.right).toBeGreaterThan(480);
+        expect(r!.left).toBeGreaterThan(440);
     });
 });
