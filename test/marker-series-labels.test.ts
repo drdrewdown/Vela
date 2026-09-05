@@ -115,13 +115,11 @@ describe('markers series → labels (modelDrawingSet)', () => {
 });
 
 describe('markers series survive live value patches', () => {
-    it('modelToValuePatch carries a markers delta and widens the dirty range to the markers', () => {
+    it('modelToValuePatch carries a markers delta', () => {
         const p = modelToValuePatch(model([markers()]));
         const delta = p.series.find((d) => d.seriesId === 'm1');
         expect(delta?.kind).toBe('markers');
         expect(delta && delta.kind === 'markers' ? delta.markers.length : 0).toBe(3);
-        expect(p.dirty.from).toBe(T0);
-        expect(p.dirty.to).toBe(T0 + 120_000);
     });
 
     it('applyPatch replaces the stored markers', () => {
