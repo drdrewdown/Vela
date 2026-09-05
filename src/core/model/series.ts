@@ -54,8 +54,8 @@ export interface MarkerPoint {
     color: string;
     text?: string;
     size?: 'tiny' | 'small' | 'normal' | 'large' | 'huge';
-    /** Hover text; defaults to `text`. Lets a marker show a short code on the chart and the
-     *  full story on hover (Aether UC-001). */
+    /** Hover text; defaults to `text`, so a marker can show a short code on the chart and
+     *  the full story on hover. */
     tooltip?: string;
 }
 

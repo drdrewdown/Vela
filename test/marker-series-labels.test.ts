@@ -6,11 +6,11 @@ import type { IndicatorModel } from '../src/core/model/indicator';
 import type { MarkerSeries, SeriesSpec } from '../src/core/model/series';
 import type { VelaTheme } from '../src/core/options';
 
-// Aether (UC-001): a `kind: 'markers'` series is painted by mapping each marker onto a
-// point-shape label — the painter that already knows above/below-bar anchoring, autoscale
-// headroom, viewport clipping and hover tooltips. Before this, both backends dropped the
-// series on the floor: the model declared markers, the capability flag said "supported",
-// nothing painted (upstream's own Williams Fractal included).
+// A `kind: 'markers'` series is painted by mapping each marker onto a point-shape label —
+// the painter that already knows above/below-bar anchoring, autoscale headroom, viewport
+// clipping and hover tooltips. Before this, both native backends returned early for the
+// series: the model declared markers, the capability flag said "supported", nothing painted
+// (the built-in Williams Fractal included).
 
 const T0 = 1_700_000_000_000;
 
@@ -71,6 +71,17 @@ describe('markers series → labels (modelDrawingSet)', () => {
         // stable, series-scoped ids (label merge / tooltips key on them)
         expect(new Set(set.labels.map((l) => l.id)).size).toBe(3);
         expect(a!.id.startsWith('m1:')).toBe(true);
+    });
+
+    it('memoises on the markers array: same array → same labels, a patched array → fresh ones', () => {
+        const m = model([markers()]);
+        const a = modelDrawingSet(m, false).labels;
+        const b = modelDrawingSet(m, false).labels;
+        expect(b[0]).toBe(a[0]); // no per-frame allocation for unchanged markers
+        (m.series[0] as MarkerSeries).markers = [...(m.series[0] as MarkerSeries).markers];
+        const c = modelDrawingSet(m, false).labels;
+        expect(c[0]).not.toBe(a[0]);
+        expect(c[0]).toEqual(a[0]);
     });
 
     it('follows the series overlay flag like plots do, and leaves Pine labels untouched', () => {

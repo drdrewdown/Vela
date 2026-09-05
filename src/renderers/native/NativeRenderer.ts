@@ -3876,7 +3876,7 @@ function leadingPointsBefore(model: IndicatorModel, headTime: number): number | 
 }
 
 /** Apply a scene patch to a stored indicator model so the next frame reflects it.
- *  Exported for tests (Aether UC-001). */
+ *  Exported for unit tests. */
 export function applyPatch(model: IndicatorModel, patch: ScenePatch): void {
     if (patch.kind === 'value') {
         for (const delta of patch.series) {

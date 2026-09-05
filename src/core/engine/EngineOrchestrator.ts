@@ -2118,7 +2118,7 @@ function yieldToPaint(): Promise<void> {
 }
 
 /** Build a value-only patch from a freshly-run model (used on live ticks / re-runs).
- *  Exported for tests (Aether UC-001: marker series ride value patches too). */
+ *  Exported for unit tests. */
 export function modelToValuePatch(model: IndicatorModel): ValuePatch {
     const series: SeriesValueDelta[] = [];
     let from = Number.POSITIVE_INFINITY;

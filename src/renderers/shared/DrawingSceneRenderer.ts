@@ -1,4 +1,6 @@
-import type { LabelStyle, LabelYLoc,
+import type {
+    LabelStyle,
+    LabelYLoc,
     DrawingLine,
     DrawingBox,
     DrawingLabel,
@@ -7,7 +9,7 @@ import type { LabelStyle, LabelYLoc,
     DrawingExtend,
     BoxTextSize,
 } from '../../core/model/drawings';
-import type { SeriesSpec, MarkerPoint } from '../../core/model/series';
+import type { SeriesSpec, MarkerPoint, MarkerSeries } from '../../core/model/series';
 import type { VelaTheme } from '../../core/options';
 import { dashPattern, extendEndpoints, contrastColor, namedFontSize, autoFontSize } from './drawing-geometry';
 
@@ -64,32 +66,48 @@ function markerStyle(shape: string): LabelStyle {
 const MARKER_YLOC: Record<MarkerPoint['position'], LabelYLoc> = { aboveBar: 'abovebar', belowBar: 'belowbar', inBar: 'inbar' };
 
 /**
+ * The labels one `kind: 'markers'` series paints as. Memoised on the markers ARRAY: the
+ * drawing set is rebuilt several times per frame, and a value patch replaces the array
+ * (never mutates it), so identity is exactly the right cache key — unchanged markers cost
+ * nothing per frame, a patch invalidates on its own.
+ */
+const markerLabelCache = new WeakMap<readonly MarkerPoint[], { seriesId: string; paneId: string; overlay: boolean; labels: DrawingLabel[] }>();
+
+function labelsOfMarkerSeries(s: MarkerSeries, paneId: string): DrawingLabel[] {
+    const overlay = s.overlay === true;
+    const hit = markerLabelCache.get(s.markers);
+    if (hit && hit.seriesId === s.id && hit.paneId === paneId && hit.overlay === overlay) return hit.labels;
+    const labels: DrawingLabel[] = s.markers.map((m, i) => ({
+        id: `${s.id}:${m.time}:${i}`,
+        paneId,
+        xloc: 'bar_time',
+        x: m.time,
+        // bar-anchored labels carry no price (Pine passes `na`); `inbar` resolves to the bar's midpoint at paint time
+        y: Number.NaN,
+        yloc: MARKER_YLOC[m.position],
+        text: m.text,
+        tooltip: m.tooltip ?? m.text,
+        style: markerStyle(m.shape),
+        color: m.color,
+        size: m.size ?? 'small',
+        textAlign: 'center',
+        fontFamily: 'default',
+        ...(overlay ? { overlay: true } : {}),
+    }));
+    markerLabelCache.set(s.markers, { seriesId: s.id, paneId, overlay, labels });
+    return labels;
+}
+
+/**
  * A `kind: 'markers'` series painted as point-shape labels — the painter that already owns
  * above/below-bar anchoring, autoscale headroom, viewport clipping and hover tooltips.
- * The marker's text is also its tooltip. Ids are series-scoped and stable across runs.
+ * A marker's text doubles as its tooltip unless it carries one. Ids are series-scoped and
+ * stable across runs.
  */
 export function markerLabels(series: readonly SeriesSpec[] | undefined, paneId = ''): DrawingLabel[] {
     const out: DrawingLabel[] = [];
     for (const s of series ?? []) {
-        if (s.kind !== 'markers') continue;
-        s.markers.forEach((m, i) => {
-            out.push({
-                id: `${s.id}:${m.time}:${i}`,
-                paneId,
-                xloc: 'bar_time',
-                x: m.time,
-                y: Number.NaN,
-                yloc: MARKER_YLOC[m.position] ?? 'abovebar',
-                text: m.text,
-                tooltip: m.tooltip ?? m.text,
-                style: markerStyle(m.shape),
-                color: m.color,
-                size: m.size ?? 'small',
-                textAlign: 'center',
-                fontFamily: 'default',
-                ...(s.overlay ? { overlay: true } : {}),
-            });
-        });
+        if (s.kind === 'markers' && s.markers.length > 0) out.push(...labelsOfMarkerSeries(s, paneId));
     }
     return out;
 }
