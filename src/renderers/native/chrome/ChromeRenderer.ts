@@ -50,6 +50,7 @@ export class ChromeRenderer {
                 return b ? { high: b.high, low: b.low } : null;
             },
             theme,
+            mergeLabels: () => scene.mergeChips,
         });
     }
 
@@ -335,7 +336,7 @@ export class ChromeRenderer {
         };
 
         // 1. Indicator series chips (e.g. EMA9, EMA50, EMA100, EMA200, Key Levels, Volume Profile)
-        const showIndicatorChips = typeof window === "undefined" || window.__VELA_INDICATOR_CHIPS__ !== false;
+        const showIndicatorChips = scene.showIndicatorChips;
         if (showIndicatorChips) {
             ctx.font = `600 ${Math.max(9, (scene.style?.fontSize ?? 11) - 1)}px ${theme.fontFamily}`;
             ctx.textBaseline = "middle";
@@ -381,7 +382,7 @@ export class ChromeRenderer {
             }
 
             // Cluster & merge Moving Average chips within 14px vertically
-            const doMergeChips = typeof window === "undefined" || window.__VELA_LABEL_MERGE__ !== false;
+            const doMergeChips = scene.mergeChips;
             const finalChips: any[] = [];
             if (!doMergeChips) {
                 for (const c of candidateChips) finalChips.push(c);
@@ -448,7 +449,7 @@ export class ChromeRenderer {
         }
 
         // 2. Current Price Line across the chart
-        let rawSym = ((scene as any).symbol || (typeof window !== "undefined" && window.__VELA_SYMBOL__) || "").replace(/^aether:/i, "").trim().toUpperCase();
+        let rawSym = scene.symbol.replace(/^[a-z]+:/i, "").trim().toUpperCase(); // a provider prefix is not part of the tag
         if (rawSym && !rawSym.startsWith("$")) rawSym = "$" + rawSym;
         const tickerTag = rawSym || "$NQ";
 
@@ -580,7 +581,7 @@ export class ChromeRenderer {
         ctx.textAlign = "start";
     }
     drawVisibleRangeHighLow(ctx: any, scene: any, coords: any, theme: any, dataW: any, pricePane: any) {
-        const showHighLow = typeof window === "undefined" || window.__VELA_HIGH_LOW__ !== false;
+        const showHighLow = scene.showRangeChips;
         if (!showHighLow || !pricePane || scene.bars.length === 0 || pricePane.collapsed || pricePane.bounds.height <= 0) return;
         const lr = coords.visibleLogicalRange ? coords.visibleLogicalRange() : null;
         if (!lr) return;

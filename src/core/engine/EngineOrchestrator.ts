@@ -1054,6 +1054,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
         this.rawBars = raw;
         this.bars = this.barTransform ? this.barTransform.full(raw) : raw;
         this.renderer.setBars(this.bars, { preserveView: opts?.preserveView });
+        this.renderer.setMarketSymbol?.(this.qualifiedSymbol() ?? '');
         // The first PAINTED batch ends the loading state — on a deep history that is the quick
         // preview, well before the load pipeline completes. Only a non-empty series counts: the
         // switch-time CLEARING call says so explicitly, and an empty COMPLETED load is closed

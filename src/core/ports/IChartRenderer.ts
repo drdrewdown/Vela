@@ -366,6 +366,8 @@ export interface IChartRenderer {
      * a renderer without runtime style switching omits it.
      */
     onPriceStyleChange?(cb: (style: PriceStyle) => void): Unsubscribe;
+    /** The market's display symbol, handed over by the core on every full series load. */
+    setMarketSymbol?(symbol: string): void;
 
     /** The renderer tells core when the user edits an input in-chart. */
     onInputChange(cb: (e: InputChangeEvent) => void): Unsubscribe;

@@ -114,7 +114,7 @@ export class ChartContextMenu {
         if (zone === "price-axis") {
             const pane = this.lastPane;
             const isLeft = this.chart?.renderer?.get("scaleSide") === "left";
-            const isHighLow = typeof window === "undefined" || window.__VELA_HIGH_LOW__ !== false;
+            const isHighLow = this.chart?.renderer?.get("rangeChips") !== false;
             const baseItems = priceAxisItems({
                 auto: this.chart?.renderer.get("autoScale") !== false,
                 invert: pane ? pane.invert : this.flag("invertScale"),
@@ -182,9 +182,7 @@ export class ChartContextMenu {
             return;
         }
         if (id === "aether:scale:highlow") {
-            if (typeof window !== "undefined" && window.__AETHER_TOGGLE_HIGH_LOW__) {
-                window.__AETHER_TOGGLE_HIGH_LOW__();
-            }
+            this.chart?.renderer?.set("rangeChips", this.chart.renderer.get("rangeChips") === false);
             return;
         }
         if (id === "aether:scale:left" || id === "aether:scale:right") {

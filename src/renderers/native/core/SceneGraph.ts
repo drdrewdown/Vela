@@ -182,6 +182,14 @@ export class SceneGraph {
     showGrid = true;
     /** Which edge the price scale docks on (`priceScale.side`); `coords.leftOffsetPx` is its pixel consequence. */
     scaleSide: 'left' | 'right' = 'right';
+    /** Visible-range high/low chips on the price scale (`priceScale.rangeChips`). */
+    showRangeChips = true;
+    /** Indicator value chips on the price scale (`priceScale.indicatorChips`). */
+    showIndicatorChips = true;
+    /** Merge overlapping chips/labels into one (`priceScale.mergeChips`). */
+    mergeChips = true;
+    /** The market's display symbol (the current-price chip's ticker tag); set by the core on every series load. */
+    symbol = '';
     /** Comprehensive cosmetic config (item 15): grid colors, crosshair, candle
      *  border/wick, fonts, separators. Serialized via the renderer's `getConfig()`/
      *  `applyConfig()`; every draw layer reads its knobs from here, falling back to

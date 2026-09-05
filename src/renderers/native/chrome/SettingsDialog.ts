@@ -488,6 +488,10 @@ export class SettingsDialog {
         body.append(sid(this.boolRow('Last price label', config.priceScale.priceLabel, (v) => this.emit({ priceScale: { priceLabel: v } })), 'scales.price-scale.last-price-label'));
         body.append(sid(this.boolRow('Countdown to bar close', config.priceScale.countdown, (v) => this.emit({ priceScale: { countdown: v } })), 'scales.price-scale.countdown'));        body.append(sid(this.boolRow('Axis labels', config.priceScale.labelsVisible, (v) => this.emit({ priceScale: { labelsVisible: v } })), 'scales.price-scale.axis-labels'));
         body.append(sid(this.colorRow('Scale border color', config.priceScale.borderColor, (v) => this.emit({ priceScale: { borderColor: v } })), 'scales.price-scale.border-color'));
+        body.append(sid(this.separator(), 'scales.price-scale.chips'));
+        body.append(sid(this.boolRow('Visible range high/low labels', config.priceScale.rangeChips, (v) => this.emit({ priceScale: { rangeChips: v } })), 'scales.price-scale.range-chips'));
+        body.append(sid(this.boolRow('Indicator value labels', config.priceScale.indicatorChips, (v) => this.emit({ priceScale: { indicatorChips: v } })), 'scales.price-scale.indicator-chips'));
+        body.append(sid(this.boolRow('Merge overlapping labels', config.priceScale.mergeChips, (v) => this.emit({ priceScale: { mergeChips: v } })), 'scales.price-scale.merge-chips'));
         body.append(sid(this.sectionTitle('Crosshair'), 'scales.crosshair'));
         body.append(sid(this.colorRow('Color', config.crosshair.color, (v) => this.emit({ crosshair: { color: v } })), 'scales.crosshair.color'));
         body.append(sid(this.numberRow('Width', config.crosshair.width, 0.5, 8, 0.5, (v) => this.emit({ crosshair: { width: v } })), 'scales.crosshair.width'));

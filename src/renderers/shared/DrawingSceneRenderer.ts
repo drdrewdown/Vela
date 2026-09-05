@@ -29,6 +29,8 @@ export interface LayerDeps {
     /** Bar high/low at a (rounded) logical index, for label yloc above/below. */
     barAt: (logical: number) => { high: number; low: number } | null;
     theme: VelaTheme;
+    /** Merge overlapping chips/labels into one (default true). */
+    mergeLabels?: () => boolean;
 }
 
 /** Drawing price range over the visible bar window (backend-neutral autoscale geometry). */
@@ -673,7 +675,7 @@ export class DrawingSceneRenderer {
             rawList.push({ lb, px, py, color: lb.color ?? this.deps.theme.textColor, fontPx });
         }
 
-        const doMerge = typeof window === "undefined" || window.__VELA_LABEL_MERGE__ !== false;
+        const doMerge = this.deps.mergeLabels?.() ?? true;
         let renderList: any[] = [];
 
         if (!doMerge || rawList.length <= 1) {

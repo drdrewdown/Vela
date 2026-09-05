@@ -226,6 +226,12 @@ export interface ChartConfig {
         currentPriceLine: boolean;
         priceLabel: boolean;
         countdown: boolean;
+        /** Chips for the visible range's high and low on the price scale. */
+        rangeChips: boolean;
+        /** Indicator value chips (moving averages, levels, …) on the price scale. */
+        indicatorChips: boolean;
+        /** Merge chips and on-chart labels that would overlap into one readable chip. */
+        mergeChips: boolean;
         /** Glide the forming bar (and the last-price line/label) toward each live tick
          *  instead of snapping. The duration comes from `animations.liveBar` / the
          *  `animLiveBar` feature; this is only the on/off switch the settings dialog shows. */
@@ -600,6 +606,9 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
             priceLabel: isBool(ps.priceLabel) ? ps.priceLabel : base.priceScale.priceLabel,
             countdown: isBool(ps.countdown) ? ps.countdown : base.priceScale.countdown,
             animateLastPrice: isBool(ps.animateLastPrice) ? ps.animateLastPrice : base.priceScale.animateLastPrice,
+            rangeChips: isBool(ps.rangeChips) ? ps.rangeChips : base.priceScale.rangeChips,
+            indicatorChips: isBool(ps.indicatorChips) ? ps.indicatorChips : base.priceScale.indicatorChips,
+            mergeChips: isBool(ps.mergeChips) ? ps.mergeChips : base.priceScale.mergeChips,
         },
         panes: {
             separatorColor: isColor(panes.separatorColor) ? panes.separatorColor : base.panes.separatorColor,

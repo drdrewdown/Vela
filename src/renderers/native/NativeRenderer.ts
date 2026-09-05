@@ -341,7 +341,7 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     readonly name = 'native';
-    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'scaleSide', 'invertScale', 'paneScales', 'autoScale', 'timezone', 'hour12', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'indicatorTitles', 'indicatorValues'];
+    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'scaleSide', 'rangeChips', 'indicatorChips', 'mergeChips', 'invertScale', 'paneScales', 'autoScale', 'timezone', 'hour12', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'indicatorTitles', 'indicatorValues'];
 
     /** Apply a render feature live — mutate the field + invalidate, no engine re-run. */
     applyFeature(key: string, value: unknown): void {
@@ -430,6 +430,15 @@ export class NativeRenderer implements IChartRenderer {
                 break;
             case 'hour12':
                 this.applyConfig({ timeScale: { hour12: Boolean(value) } });
+                break;
+            case 'rangeChips':
+                this.applyConfig({ priceScale: { rangeChips: Boolean(value) } });
+                break;
+            case 'indicatorChips':
+                this.applyConfig({ priceScale: { indicatorChips: Boolean(value) } });
+                break;
+            case 'mergeChips':
+                this.applyConfig({ priceScale: { mergeChips: Boolean(value) } });
                 break;
             case 'axisLabels':
                 this.scene.showAxisLabels = Boolean(value);
@@ -544,6 +553,9 @@ export class NativeRenderer implements IChartRenderer {
             case 'gridlines': return this.scene.showGrid;
             case 'scaleSide': return this.scene.scaleSide;
             case 'hour12': return this.scene.hour12;
+            case 'rangeChips': return this.scene.showRangeChips;
+            case 'indicatorChips': return this.scene.showIndicatorChips;
+            case 'mergeChips': return this.scene.mergeChips;
             case 'axisLabels': return this.scene.showAxisLabels;
             case 'scaleMode': return this.scene.scaleMode;
             case 'invertScale': return this.scene.invertScale;
@@ -694,6 +706,9 @@ export class NativeRenderer implements IChartRenderer {
                 priceLabel: this.scene.showPriceLabel,
                 countdown: this.scene.showCountdown,
                 animateLastPrice: this.animLiveBarMs > 0,
+                rangeChips: this.scene.showRangeChips,
+                indicatorChips: this.scene.showIndicatorChips,
+                mergeChips: this.scene.mergeChips,
             },
             panes: { separatorColor: s.separatorColor ?? t.borderColor },
             trades: {
@@ -833,6 +848,9 @@ export class NativeRenderer implements IChartRenderer {
         this.scene.showCountdown = next.priceScale.countdown;
         this.syncCountdownTimer();
         this.animLiveBarMs = next.priceScale.animateLastPrice ? this.animLiveBarOnMs : 0; // on/off only — the duration is the host's
+        this.scene.showRangeChips = next.priceScale.rangeChips;
+        this.scene.showIndicatorChips = next.priceScale.indicatorChips;
+        this.scene.mergeChips = next.priceScale.mergeChips;
         // panes
         s.separatorColor = keepInherit(s.separatorColor, next.panes.separatorColor, prevTheme.borderColor);
         // trade markers
@@ -2077,6 +2095,14 @@ export class NativeRenderer implements IChartRenderer {
 
     setIndicatorInputs(handle: IndicatorRenderHandle, values: Record<string, InputValue>, props?: Record<string, InputValue>): void {
         this.inputsUI.setValues(handle.id, values, props);
+    }
+
+    /** The market's display symbol — the core hands it over on every series load; the
+     *  current-price chip wears it as its ticker tag. */
+    setMarketSymbol(symbol: string): void {
+        if (this.scene.symbol === symbol) return;
+        this.scene.symbol = symbol;
+        this.scheduler?.invalidate(InvalidateLevel.Chrome);
     }
 
     setSymbolPicker(picker: SymbolPickerFn | null): void {

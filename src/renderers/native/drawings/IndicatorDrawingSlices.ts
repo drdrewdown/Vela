@@ -68,7 +68,8 @@ export class IndicatorDrawingSlices {
                 const b = scene.bars[Math.round(logical)];
                 return b ? { high: b.high, low: b.low } : null;
             },
-            theme
+            theme,
+            mergeLabels: () => scene.mergeChips,
         });
         const dpr = coords.dpr;
         const dataW = coords.width;
@@ -102,7 +103,7 @@ export class IndicatorDrawingSlices {
                 }
             }
         }
-        if (typeof window === "undefined" || window.__VELA_LABEL_MERGE__ !== false) {
+        if (scene.mergeChips) {
             for (const pane of scene.orderedPanes()) {
                 const allPaneLabels = [];
                 for (const [bKey, b] of buckets) {
