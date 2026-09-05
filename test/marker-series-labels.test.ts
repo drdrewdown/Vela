@@ -23,7 +23,7 @@ function markers(over: Partial<MarkerSeries> = {}): MarkerSeries {
         markers: [
             { time: T0, position: 'aboveBar', shape: 'arrowDown', color: '#ff709a', text: 'SHO', size: 'tiny' },
             { time: T0 + 60_000, position: 'belowBar', shape: 'triangleup', color: '#5aa1ff' },
-            { time: T0 + 120_000, position: 'inBar', shape: 'no-such-shape', color: '#b2b5be', text: 'X', size: 'large' },
+            { time: T0 + 120_000, position: 'inBar', shape: 'no-such-shape', color: '#b2b5be', text: 'X', size: 'large', tooltip: 'Long story' },
         ],
         ...over,
     };
@@ -66,6 +66,7 @@ describe('markers series → labels (modelDrawingSet)', () => {
         expect(a!.text).toBe('SHO');
         expect(a!.tooltip).toBe('SHO');
         expect(b!.size).toBe('small'); // default marker size
+        expect(c!.tooltip).toBe('Long story'); // explicit tooltip wins over text
         expect(b!.text).toBeUndefined();
         // stable, series-scoped ids (label merge / tooltips key on them)
         expect(new Set(set.labels.map((l) => l.id)).size).toBe(3);

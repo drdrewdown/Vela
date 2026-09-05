@@ -81,7 +81,7 @@ export function markerLabels(series: readonly SeriesSpec[] | undefined, paneId =
                 y: Number.NaN,
                 yloc: MARKER_YLOC[m.position] ?? 'abovebar',
                 text: m.text,
-                tooltip: m.text,
+                tooltip: m.tooltip ?? m.text,
                 style: markerStyle(m.shape),
                 color: m.color,
                 size: m.size ?? 'small',
