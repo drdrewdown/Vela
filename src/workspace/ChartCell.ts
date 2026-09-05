@@ -349,6 +349,16 @@ export class ChartCell {
         // applyConfig) — mirror it back so the workspace bottom bar, the other cells and
         // the persisted state never disagree with this cell's axis. `renderer.set` is a
         // feature write, not an applyConfig, so adopting the value cannot loop.
+        // The settings dialog (and any API caller) can change the price style straight on the
+        // renderer, bypassing setPriceStyle: adopt it here so the cell's state, the status-line
+        // ink, the topbar and the workspace event all follow. setPriceStyle writes the state
+        // BEFORE the feature, so its own callback is a no-op and nothing notifies twice.
+        this.inner.renderer.onPriceStyleChange((style) => {
+            if (this.state.priceStyle === style) return;
+            this.state.priceStyle = style;
+            this.syncStatuslineColors();
+            this.deps.onPriceStyleChanged(this.id);
+        });
         this.inner.renderer.onConfigChanged(() => {
             const zone = this.inner?.renderer.get('timezone');
             if (typeof zone === 'string' && normalizeTimezone(zone) !== normalizeTimezone(this.deps.timezone())) {

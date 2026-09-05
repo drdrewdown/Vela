@@ -143,6 +143,11 @@ export class RendererControl {
         return this.renderer.onConfigChanged?.(cb) ?? (() => undefined);
     }
 
+    /** Subscribe to price-style changes made on the renderer (settings dialog, `set('priceStyle')`). */
+    onPriceStyleChange(cb: (style: string) => void): Unsubscribe {
+        return this.renderer.onPriceStyleChange?.(cb) ?? (() => undefined);
+    }
+
     /**
      * Subscribe to crosshair movement — `time`/`price` under the cursor, per-series values,
      * and the hovered bar's OHLC (null fields when the cursor leaves the chart). This is the
