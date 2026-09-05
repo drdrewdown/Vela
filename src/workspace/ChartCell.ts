@@ -221,6 +221,7 @@ export class ChartCell {
     /** Last crosshair position in this cell (the alt+H/alt+V shortcuts anchor here). */
     lastCrossTime: number | null = null;
     lastCrossPrice: number | null = null;
+    lastCrossPane: 'price' | 'study' | null = null;
     /** The bottombar range chip this cell is framed on (null = none). */
     activeRangeId: string | null = null;
     /** Latched verdict of {@link sessionAvailable} (async metadata, sticky per symbol). */
@@ -465,12 +466,13 @@ export class ChartCell {
             // context the actions receive is this cell's — the active one.
             getContext: () => this.deps.context(),
             // The crosshair has already followed the pointer to the right-click position.
-            pointerAt: () => ({ price: this.lastCrossPrice, time: this.lastCrossTime }),
+            pointerAt: () => ({ price: this.lastCrossPrice, time: this.lastCrossTime, pane: this.lastCrossPane }),
         });
         this.contextMenu.onChart(this.inner);
         this.inner.renderer.onCrosshairMove((e) => {
             this.lastCrossTime = e.time;
             this.lastCrossPrice = e.price;
+            this.lastCrossPane = e.paneKind ?? null;
         });
         // Every indicator change reaches the shell — the topbar count, the picker and the
         // `cell:indicators` event — whichever door it came through (picker, legend ✕,

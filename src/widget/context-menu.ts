@@ -33,7 +33,7 @@ export interface ContextMenuCallbacks {
     getContext?: () => WidgetContext;
     /** The price and bar time under a client position — what `context:*` actions read as
      *  `ctx.pointer`. Omitted ⇒ actions get the position only. */
-    pointerAt?: (point: { clientX: number; clientY: number }) => { price: number | null; time: number | null };
+    pointerAt?: (point: { clientX: number; clientY: number }) => { price: number | null; time: number | null; pane: 'price' | 'study' | null };
 }
 
 export class ChartContextMenu {
@@ -108,8 +108,8 @@ export class ChartContextMenu {
         const base = this.cbs.getContext?.();
         const at = this.lastPoint;
         if (!base || !at) return base;
-        const under = this.cbs.pointerAt?.(at) ?? { price: null, time: null };
-        return withPointer(base, { clientX: at.clientX, clientY: at.clientY, price: under.price, time: under.time });
+        const under = this.cbs.pointerAt?.(at) ?? { price: null, time: null, pane: null };
+        return withPointer(base, { clientX: at.clientX, clientY: at.clientY, price: under.price, time: under.time, pane: under.pane });
     }
 
     private contributed(zone: Zone): MenuItemDescriptor[] {

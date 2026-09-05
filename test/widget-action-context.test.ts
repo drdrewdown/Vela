@@ -24,7 +24,7 @@ function liveContext(state: { symbol: string }): WidgetContext {
     } as unknown as WidgetContext;
 }
 
-const pointer: WidgetPointer = { clientX: 10, clientY: 20, price: 5001.25, time: 1_700_000_000_000 };
+const pointer: WidgetPointer = { clientX: 10, clientY: 20, price: 5001.25, time: 1_700_000_000_000, pane: 'price' };
 
 afterEach(() => {
     unregisterWidgetAction('t.price');

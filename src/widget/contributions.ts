@@ -17,6 +17,9 @@ export interface WidgetPointer {
     price: number | null;
     /** Bar time under the pointer; null between bars / off the plot. */
     time: number | null;
+    /** Which kind of pane `price` came from — a real price only on the price pane; a
+     *  study pane gives the indicator's value. Null off the plot. */
+    pane: 'price' | 'study' | null;
 }
 
 /** The runtime surface an action's `when`/`run` receives. */
