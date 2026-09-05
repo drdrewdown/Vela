@@ -79,11 +79,13 @@ export class IndicatorDrawingSlices {
             if (bucket) bucket.entries.push(entry);
             else buckets.set(key, { paneId, beforeZ, entries: [entry] });
         };
+        const vl = coords.visibleLogicalRange();
+        const win = { from: coords.logicalToTime(vl.from - 2), to: coords.logicalToTime(vl.to + 2) };
         for (const pane of scene.orderedPanes()) {
             if (pane.collapsed) continue;
             const boundaries = scene.seriesBoundaries(pane.id);
             for (const m of scene.orderedIndicatorsForPane(pane.id)) {
-                const set = modelDrawingSet(m, false);
+                const set = modelDrawingSet(m, false, win);
                 const tables = (m.tables ?? []).filter((t) => !t.overlay);
                 if (drawingSetEmpty(set) && tables.length === 0) continue;
                 const sc = scene.scaleFor(m, pane);
@@ -93,7 +95,7 @@ export class IndicatorDrawingSlices {
             }
             if (pane.kind === "price") {
                 for (const m of scene.indicators.values()) {
-                    const set = modelDrawingSet(m, true);
+                    const set = modelDrawingSet(m, true, win);
                     const tables = (m.tables ?? []).filter((t) => t.overlay === true);
                     if (drawingSetEmpty(set) && tables.length === 0) continue;
                     add(pane.id, Infinity, { set, tables, pane, indexOffset: scene.offsetOf(m.id) });

@@ -3254,7 +3254,7 @@ export class NativeRenderer implements IChartRenderer {
             const masterModels = models.filter((m) => m.ownScale !== true);
             // User drawings do not expand the scale (placing one in the empty margin
             // must not yank the window to follow the cursor). Pine drawings still fold in.
-            let dr = this.chrome.paneDrawingsRange(masterModels, this.scene, pane === pricePane, vr);
+            let dr = this.chrome.paneDrawingsRange(masterModels, this.scene, pane === pricePane, vr, this.drawingWindow(vr));
             // force_overlay series render on the price pane whatever pane their indicator
             // owns — fold their visible range in here (their own pane excludes them).
             if (pane === pricePane) {
@@ -3329,7 +3329,7 @@ export class NativeRenderer implements IChartRenderer {
                     sl.initialized = true;
                     continue;
                 }
-                const mdr = this.chrome.paneDrawingsRange([model], this.scene, false, vr);
+                const mdr = this.chrome.paneDrawingsRange([model], this.scene, false, vr, this.drawingWindow(vr));
                 sl.scaleTarget = computePaneScale([model], this.bars, false, i0, i1, mdr, false, (id) => this.scene.offsetOf(id));
                 if (!animating || !sl.initialized) {
                     sl.scale = { ...sl.scaleTarget };
@@ -3598,6 +3598,12 @@ export class NativeRenderer implements IChartRenderer {
     /** The first visible value a study pane measures percent-change from: the earliest finite
      *  value at bar `i0` across its master series (line-like value, else a candle/bar close).
      *  0 when none is available yet — the axis then falls back to absolute. */
+    /** The visible logical range as an epoch-ms window (two bars of slack) — what the marker
+     *  labels of a frame are sliced to. */
+    private drawingWindow(vr: { from: number; to: number }): { from: number; to: number } {
+        return { from: this.coords.logicalToTime(vr.from - 2), to: this.coords.logicalToTime(vr.to + 2) };
+    }
+
     private firstVisibleValue(models: IndicatorModel[], i0: number): number {
         for (const m of models) {
             const off = this.scene.offsetOf(m.id);

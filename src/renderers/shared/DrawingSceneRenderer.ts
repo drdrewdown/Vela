@@ -73,6 +73,25 @@ const MARKER_YLOC: Record<MarkerPoint['position'], LabelYLoc> = { aboveBar: 'abo
  */
 const markerLabelCache = new WeakMap<readonly MarkerPoint[], { seriesId: string; paneId: string; overlay: boolean; labels: DrawingLabel[] }>();
 
+/** Inclusive epoch-ms window; a drawing set built with one carries only the marker labels
+ *  inside it (Pine labels are few and untouched). */
+export interface TimeWindow {
+    from: number;
+    to: number;
+}
+
+/** First index with `labels[i].x >= t` in a time-sorted label array. */
+function lowerBound(labels: readonly DrawingLabel[], t: number): number {
+    let lo = 0;
+    let hi = labels.length;
+    while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (labels[mid]!.x < t) lo = mid + 1;
+        else hi = mid;
+    }
+    return lo;
+}
+
 function labelsOfMarkerSeries(s: MarkerSeries, paneId: string): DrawingLabel[] {
     const overlay = s.overlay === true;
     const hit = markerLabelCache.get(s.markers);
@@ -94,6 +113,14 @@ function labelsOfMarkerSeries(s: MarkerSeries, paneId: string): DrawingLabel[] {
         fontFamily: 'default',
         ...(overlay ? { overlay: true } : {}),
     }));
+    // Kept time-sorted so a viewport window is a binary search, not a scan. Markers arrive in
+    // bar order from every producer we know; an unsorted series pays one sort per patch.
+    for (let i = 1; i < labels.length; i++) {
+        if (labels[i]!.x < labels[i - 1]!.x) {
+            labels.sort((a, b) => a.x - b.x);
+            break;
+        }
+    }
     markerLabelCache.set(s.markers, { seriesId: s.id, paneId, overlay, labels });
     return labels;
 }
@@ -104,10 +131,20 @@ function labelsOfMarkerSeries(s: MarkerSeries, paneId: string): DrawingLabel[] {
  * A marker's text doubles as its tooltip unless it carries one. Ids are series-scoped and
  * stable across runs.
  */
-export function markerLabels(series: readonly SeriesSpec[] | undefined, paneId = ''): DrawingLabel[] {
+export function markerLabels(series: readonly SeriesSpec[] | undefined, paneId = '', window?: TimeWindow): DrawingLabel[] {
     const out: DrawingLabel[] = [];
     for (const s of series ?? []) {
-        if (s.kind === 'markers' && s.markers.length > 0) out.push(...labelsOfMarkerSeries(s, paneId));
+        if (s.kind !== 'markers' || s.markers.length === 0) continue;
+        const all = labelsOfMarkerSeries(s, paneId);
+        if (!window) {
+            for (const l of all) out.push(l);
+            continue;
+        }
+        // Only the labels in the viewport enter the frame's drawing set — a marker study on
+        // tens of thousands of bars costs the frame what is on screen, nothing more.
+        const lo = lowerBound(all, window.from);
+        const hi = lowerBound(all, window.to + 1);
+        for (let i = lo; i < hi; i++) out.push(all[i]!);
     }
     return out;
 }
@@ -115,12 +152,12 @@ export function markerLabels(series: readonly SeriesSpec[] | undefined, paneId =
 /** A model's Pine drawings routed ONE way: its own pane (`overlay` false) or forced onto
  *  the price pane (`overlay` true, Pine's `force_overlay`) — every consumer of a model's
  *  drawings splits along this same seam. */
-export function modelDrawingSet(m: DrawingSetSource, overlay: boolean): DrawingSet {
+export function modelDrawingSet(m: DrawingSetSource, overlay: boolean, window?: TimeWindow): DrawingSet {
     const want = (d: { overlay?: boolean }): boolean => Boolean(d.overlay) === overlay;
     return {
         lines: (m.lines ?? []).filter(want),
         boxes: (m.boxes ?? []).filter(want),
-        labels: [...(m.labels ?? []), ...markerLabels(m.series)].filter(want),
+        labels: [...(m.labels ?? []), ...markerLabels(m.series, '', window)].filter(want),
         polylines: (m.polylines ?? []).filter(want),
         linefills: (m.linefills ?? []).filter(want),
     };

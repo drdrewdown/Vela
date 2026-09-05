@@ -84,6 +84,22 @@ describe('markers series → labels (modelDrawingSet)', () => {
         expect(c[0]).toEqual(a[0]);
     });
 
+    it('a time window slices the marker labels by binary search; Pine labels are untouched', () => {
+        const m = model([markers()]);
+        m.labels = [{ id: 'pine', paneId: '', xloc: 'bar_time', x: T0 - 999_999, y: 1, yloc: 'price', style: 'label_up', size: 'normal', textAlign: 'center', fontFamily: 'default' }];
+        const mid = modelDrawingSet(m, false, { from: T0 + 30_000, to: T0 + 90_000 }).labels;
+        expect(mid.map((l) => l.id)).toEqual(['pine', `m1:${T0 + 60_000}:1`]);
+        expect(modelDrawingSet(m, false, { from: T0 + 500_000, to: T0 + 900_000 }).labels.map((l) => l.id)).toEqual(['pine']);
+        expect(modelDrawingSet(m, false).labels).toHaveLength(4);
+    });
+
+    it('an unsorted markers series is sorted once so the window search stays valid', () => {
+        const m = model([markers({ markers: [...markers().markers].reverse() })]);
+        const all = modelDrawingSet(m, false).labels.map((l) => l.x);
+        expect(all).toEqual([T0, T0 + 60_000, T0 + 120_000]);
+        expect(modelDrawingSet(m, false, { from: T0 + 100_000, to: T0 + 200_000 }).labels.map((l) => l.x)).toEqual([T0 + 120_000]);
+    });
+
     it('follows the series overlay flag like plots do, and leaves Pine labels untouched', () => {
         const forced = markers({ id: 'm2', overlay: true });
         const m = model([markers(), forced]);

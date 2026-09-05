@@ -7,7 +7,7 @@ import type { SceneGraph, PaneNode } from '../core/SceneGraph';
 import { percentScaleFor } from '../core/SceneGraph';
 // Re-exported so existing importers (crosshair) can keep sourcing it from here.
 export { percentScaleFor } from '../core/SceneGraph';
-import { DrawingSceneRenderer, modelDrawingSet, type DrawingSet } from '../../shared/DrawingSceneRenderer';
+import { DrawingSceneRenderer, modelDrawingSet, type DrawingSet, type TimeWindow } from '../../shared/DrawingSceneRenderer';
 import { renderTradeMarkers } from '../../shared/trade-markers';
 import type { TradeExecution } from '../../../core/model/trades';
 import { paneAxisTicks, formatAxisValue, timeTicks } from './ticks';
@@ -58,10 +58,10 @@ export class ChromeRenderer {
      * own (non-overlay) drawings, plus force_overlay drawings when it's the price pane.
      * Requires `prepare()` to have wired the resolvers for this frame.
      */
-    paneDrawingsRange(ownModels: IndicatorModel[], scene: SceneGraph, isPricePane: boolean, vr: { from: number; to: number }): { min: number; max: number } | null {
+    paneDrawingsRange(ownModels: IndicatorModel[], scene: SceneGraph, isPricePane: boolean, vr: { from: number; to: number }, win?: TimeWindow): { min: number; max: number } | null {
         let dr: { min: number; max: number } | null = null;
-        for (const m of ownModels) dr = unionRange(dr, this.drawingsRange(modelDrawingSet(m, false), vr, scene.offsetOf(m.id)));
-        if (isPricePane) for (const m of scene.indicators.values()) dr = unionRange(dr, this.drawingsRange(modelDrawingSet(m, true), vr, scene.offsetOf(m.id)));
+        for (const m of ownModels) dr = unionRange(dr, this.drawingsRange(modelDrawingSet(m, false, win), vr, scene.offsetOf(m.id)));
+        if (isPricePane) for (const m of scene.indicators.values()) dr = unionRange(dr, this.drawingsRange(modelDrawingSet(m, true, win), vr, scene.offsetOf(m.id)));
         return dr;
     }
 
