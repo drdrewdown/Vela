@@ -1,5 +1,6 @@
 import type { VelaTheme } from '../../../core/options';
 import type { IndicatorModel } from '../../../core/model/indicator';
+import { resolveChrome, withAlpha } from '../../../core/theme';
 import type { ScaleChip } from '../../../core/ports/IChartRenderer';
 import type { OHLCV } from '../../../core/model/ohlcv';
 import type { LineStyle } from '../../../core/model/series';
@@ -366,7 +367,7 @@ export class ChromeRenderer {
                         const sY = coords.priceToY(lastVal, pricePane.scale, pricePane.bounds);
                         if (sY < pricePane.bounds.top || sY > pricePane.bounds.top + pricePane.bounds.height) continue;
 
-                        const sColor = ptColor || s.style?.color || "#5aa1ff"; // palette-exempt: Aether brand chrome (price/ticker/countdown chips)
+                        const sColor = ptColor || s.style?.color || theme.upColor;
                         const rawTag = (s.title || s.id || "").replace(/\s+/g, "");
                         const tag = rawTag.length > 8 ? rawTag.slice(0, 8) : rawTag;
                         if (!tag) continue;
@@ -455,9 +456,10 @@ export class ChromeRenderer {
         if (rawSym && !rawSym.startsWith("$")) rawSym = "$" + rawSym;
         const tickerTag = rawSym || "$NQ";
 
-        // Split chip styling: dark slate for price box & ticker tag (#414b5c) // palette-exempt: Aether brand chrome (price/ticker/countdown chips)
-        const chipBg = "#414b5c"; // palette-exempt: Aether brand chrome (price/ticker/countdown chips)
-        const chipFg = "#ffffff"; // palette-exempt: Aether brand chrome (price/ticker/countdown chips)
+        // The chip pair, the countdown pill and the range chips paint in the theme's chrome tokens.
+        const chrome = resolveChrome(theme);
+        const chipBg = chrome.chipBackground;
+        const chipFg = chrome.chipText;
 
         ctx.font = `${scene.style.fontSize}px ${theme.fontFamily}`;
         ctx.textBaseline = "middle";
@@ -555,22 +557,22 @@ export class ChromeRenderer {
 
             if (isLeft) {
                 const xCd = axisW - 1 - wCd;
-                ctx.fillStyle = "#2e151e"; // palette-exempt: Aether brand chrome (price/ticker/countdown chips)
+                ctx.fillStyle = chrome.countdownBackground;
                 ctx.fillRect(xCd, cdTop, wCd, cdH);
-                ctx.strokeStyle = "rgba(255, 112, 154, 0.35)";
+                ctx.strokeStyle = withAlpha(chrome.countdownText, 0.35);
                 ctx.lineWidth = 1;
                 ctx.strokeRect(xCd + 0.5, cdTop + 0.5, wCd - 1, cdH - 1);
-                ctx.fillStyle = "#ff8da8"; // palette-exempt: Aether brand chrome (price/ticker/countdown chips)
+                ctx.fillStyle = chrome.countdownText;
                 ctx.textAlign = "center";
                 ctx.fillText(cdText, xCd + wCd / 2, cdTop + cdH / 2 + 0.5);
             } else {
                 const xCd = dataW + 1;
-                ctx.fillStyle = "#2e151e"; // palette-exempt: Aether brand chrome (price/ticker/countdown chips)
+                ctx.fillStyle = chrome.countdownBackground;
                 ctx.fillRect(xCd, cdTop, wCd, cdH);
-                ctx.strokeStyle = "rgba(255, 112, 154, 0.35)";
+                ctx.strokeStyle = withAlpha(chrome.countdownText, 0.35);
                 ctx.lineWidth = 1;
                 ctx.strokeRect(xCd + 0.5, cdTop + 0.5, wCd - 1, cdH - 1);
-                ctx.fillStyle = "#ff8da8"; // palette-exempt: Aether brand chrome (price/ticker/countdown chips)
+                ctx.fillStyle = chrome.countdownText;
                 ctx.textAlign = "center";
                 ctx.fillText(cdText, xCd + wCd / 2, cdTop + cdH / 2 + 0.5);
             }
@@ -613,27 +615,28 @@ export class ChromeRenderer {
         const fontSize = Math.max(9, (scene.style?.fontSize ?? 11) - 1);
         ctx.font = `600 ${fontSize}px ${theme.fontFamily}`;
 
+        const chrome = resolveChrome(theme);
         if (hiY >= pricePane.bounds.top && hiY <= pricePane.bounds.top + pricePane.bounds.height && Math.abs(hiY - curY) >= 14) {
             const wHi = ctx.measureText(hiText).width + PAD;
             const xHi = isLeft ? axisW - 1 - wHi : dataW + 1;
-            ctx.fillStyle = "#111824"; // palette-exempt: Aether brand chrome (price/ticker/countdown chips)
+            ctx.fillStyle = chrome.rangeHighBackground;
             ctx.fillRect(xHi, hiY - 8, wHi, 16);
-            ctx.strokeStyle = "rgba(90, 161, 255, 0.45)";
+            ctx.strokeStyle = withAlpha(theme.upColor, 0.45);
             ctx.lineWidth = 1;
             ctx.strokeRect(xHi + 0.5, hiY - 7.5, wHi - 1, 15);
-            ctx.fillStyle = "#9dbad9"; // palette-exempt: Aether brand chrome (price/ticker/countdown chips)
+            ctx.fillStyle = chrome.rangeHighText;
             ctx.fillText(hiText, xHi + wHi / 2, hiY + 0.5);
         }
 
         if (loY >= pricePane.bounds.top && loY <= pricePane.bounds.top + pricePane.bounds.height && Math.abs(loY - curY) >= 14 && Math.abs(loY - hiY) >= 14) {
             const wLo = ctx.measureText(loText).width + PAD;
             const xLo = isLeft ? axisW - 1 - wLo : dataW + 1;
-            ctx.fillStyle = "#22141a"; // palette-exempt: Aether brand chrome (price/ticker/countdown chips)
+            ctx.fillStyle = chrome.rangeLowBackground;
             ctx.fillRect(xLo, loY - 8, wLo, 16);
-            ctx.strokeStyle = "rgba(255, 112, 154, 0.45)";
+            ctx.strokeStyle = withAlpha(theme.downColor, 0.45);
             ctx.lineWidth = 1;
             ctx.strokeRect(xLo + 0.5, loY - 7.5, wLo - 1, 15);
-            ctx.fillStyle = "#cca0af"; // palette-exempt: Aether brand chrome (price/ticker/countdown chips)
+            ctx.fillStyle = chrome.rangeLowText;
             ctx.fillText(loText, xLo + wLo / 2, loY + 0.5);
         }
         ctx.textAlign = "start";
@@ -732,7 +735,7 @@ function tagTextColor(bg: string, over: string): string {
     }
     const lin = (c: number): number => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
     const L = 0.2126 * lin(R) + 0.7152 * lin(G) + 0.0722 * lin(B);
-    return L >= 0.4 ? '#000000' : '#ffffff'; // palette-exempt: Aether brand chrome (price/ticker/countdown chips)
+    return L >= 0.4 ? '#000000' : '#ffffff';
 }
 
 /** `M:SS` (or `H:MM:SS` past an hour) for the ms remaining until the bar closes; clamped at 0. */

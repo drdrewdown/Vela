@@ -19,7 +19,7 @@ export { DrawingsControl } from './core/DrawingsControl';
 // Native indicators (core-computed, no scripting engine) — register a type, then chart.addNativeIndicator(type)
 export { registerNativeIndicator, unregisterNativeIndicator, getNativeIndicator, nativeIndicatorTypes, nativeIndicatorDescriptors } from './core/native-indicators';
 export type { NativeIndicator, NativeIndicatorContext, NativeIndicatorDescriptor, NativeIndicatorInfo, NativeIndicatorOutput } from './core/native-indicators';
-export { DARK_THEME, LIGHT_THEME, resolveTheme } from './core/theme';
+export { DARK_THEME, LIGHT_THEME, resolveTheme, resolveChrome, mixHex, withAlpha } from './core/theme';
 export { TypedEventBus } from './core/events/EventBus';
 
 // User drawings (model + registry + persistence; renderer-agnostic)
@@ -70,6 +70,7 @@ export type {
     AnimationConfig,
     AddIndicatorOptions,
     SettingsVisibilityPolicy,
+    ChromeTokens,
 } from './core/options';
 export type { IndicatorHandle, IndicatorEventMap } from './core/IndicatorHandle';
 export type { VelaEventMap } from './core/events/types';

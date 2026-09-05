@@ -79,6 +79,20 @@ export interface MarketSnapshot {
     offline: boolean;
 }
 
+/** The scale's chrome accents: the current-price chip pair (price box + symbol tag), the
+ *  bar countdown pill under it, and the visible-range high/low chips. Every token is
+ *  optional on a theme — a missing one derives from the base tokens (see `resolveChrome`). */
+export interface ChromeTokens {
+    chipBackground: string;
+    chipText: string;
+    countdownBackground: string;
+    countdownText: string;
+    rangeHighBackground: string;
+    rangeHighText: string;
+    rangeLowBackground: string;
+    rangeLowText: string;
+}
+
 export interface VelaTheme {
     background: string;
     textColor: string;
@@ -87,6 +101,7 @@ export interface VelaTheme {
     upColor: string;
     downColor: string;
     fontFamily: string;
+    chrome?: Partial<ChromeTokens>;
 }
 
 export type ThemeName = 'dark' | 'light';
