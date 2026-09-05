@@ -2116,35 +2116,18 @@ function yieldToPaint(): Promise<void> {
 
 /** Build a value-only patch from a freshly-run model (used on live ticks / re-runs).
  *  Exported for unit tests. */
+/** The model's series and drawings as a value patch — arrays by reference, O(series):
+ *  a streamed native re-emits every live tick, so nothing here may walk the points. */
 export function modelToValuePatch(model: IndicatorModel): ValuePatch {
     const series: SeriesValueDelta[] = [];
-    let from = Number.POSITIVE_INFINITY;
-    let to = 0;
     for (const s of model.series) {
-        if (s.kind === 'candle' || s.kind === 'bar') {
-            series.push({ seriesId: s.id, kind: 'bars', bars: s.bars });
-            for (const b of s.bars) {
-                if (b.time < from) from = b.time;
-                if (b.time > to) to = b.time;
-            }
-        } else if (isLineLikeSeries(s)) {
-            series.push({ seriesId: s.id, kind: 'points', points: s.points });
-            for (const p of s.points) {
-                if (p.time < from) from = p.time;
-                if (p.time > to) to = p.time;
-            }
-        } else if (s.kind === 'markers') {
-            series.push({ seriesId: s.id, kind: 'markers', markers: s.markers });
-            for (const m of s.markers) {
-                if (m.time < from) from = m.time;
-                if (m.time > to) to = m.time;
-            }
-        }
+        if (s.kind === 'candle' || s.kind === 'bar') series.push({ seriesId: s.id, kind: 'bars', bars: s.bars });
+        else if (isLineLikeSeries(s)) series.push({ seriesId: s.id, kind: 'points', points: s.points });
+        else if (s.kind === 'markers') series.push({ seriesId: s.id, kind: 'markers', markers: s.markers });
     }
     return {
         kind: 'value',
         indicatorId: model.id,
-        dirty: { from: Number.isFinite(from) ? from : 0, to },
         // ALWAYS stated, `null` included: an omitted key leaves the renderer on the previous
         // run's offset, so a re-run that widened to the whole chart could not clear it.
         anchorTime: model.anchorTime ?? null,

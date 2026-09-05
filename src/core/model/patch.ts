@@ -4,6 +4,8 @@ import type { SeriesPoint, SeriesSpec, MarkerPoint } from './series';
 import type { DrawingLine, DrawingBox, DrawingLabel, DrawingPolyline, DrawingLinefill, DrawingTable } from './drawings';
 import type { TradeExecution } from './trades';
 
+/** @deprecated No renderer consumes a patch's dirty range; the orchestrator no longer
+ *  computes one (it cost a walk over every point of every series per emit). */
 export interface DirtyRange {
     from: Millis;
     to: Millis;
@@ -22,7 +24,8 @@ export type SeriesValueDelta =
 export interface ValuePatch {
     kind: 'value';
     indicatorId: string;
-    dirty: DirtyRange;
+    /** @deprecated Never set by the core; kept so existing patch literals still type. */
+    dirty?: DirtyRange;
     /**
      * The emitting run's anchor (see `IndicatorModel.anchorTime`): a re-run over a
      * DIFFERENT bar window arrives as a value patch, so the anchor must travel with
