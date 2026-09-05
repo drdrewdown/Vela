@@ -27,7 +27,7 @@ import {
     fieldSeparator,
     buildFieldControl,
 } from '../../../ui/components/field';
-import { priceStyleIds, hasOwnCandlePaint } from '../core/chartConfig';
+import { priceStyleIds, priceStyleLabel, hasOwnCandlePaint } from '../core/chartConfig';
 import { chromeHint } from '../../shared/chrome-tooltip';
 import {
     filterHiddenHostRows,
@@ -74,18 +74,6 @@ export interface HostSettingsSection {
     id?: string;
 }
 
-const BUILTIN_STYLE_LABELS: Record<string, string> = {
-    candles: 'Candles',
-    bars: 'Bars',
-    line: 'Line',
-    area: 'Area',
-    baseline: 'Baseline',
-};
-
-/** Display label for a price style: registry label, built-in name, else the raw id. */
-function styleLabel(id: string): string {
-    return chartType(id)?.label ?? BUILTIN_STYLE_LABELS[id] ?? id;
-}
 
 const SD_STYLE_ID = 'vela-settings-controls';
 const SD_STYLE_REV = '5';
@@ -330,7 +318,7 @@ export class SettingsDialog {
             }
         };
         body.append(
-            sid(this.selectRowLabeled('Type', config.series.style, priceStyleIds().map((id) => [id, styleLabel(id)] as const), (v) => {
+            sid(this.selectRowLabeled('Type', config.series.style, priceStyleIds().map((id) => [id, priceStyleLabel(id)] as const), (v) => {
                 this.emit({ series: { style: v } });
                 showActive(v);
                 this.syncTypeTabs?.(v);

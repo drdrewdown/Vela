@@ -484,7 +484,10 @@ export class Canvas2dBackend implements IRenderBackend {
                 ctx.stroke();
             }
             if (drawBody) {
-                if (cs.bodyVisible) {
+                // Hollow candles: up bodies are outlined, down bodies filled (same rule as WebGL2).
+                const isHollow = scene.priceStyle === "hollow";
+                const fillBody = isHollow ? !up : cs.bodyVisible;
+                if (fillBody) {
                     ctx.globalAlpha = this.candleBodyAlpha;
                     ctx.fillStyle = color;
                     ctx.fillRect(g.bodyX, top, g.bodyW, bodyH);
@@ -493,9 +496,9 @@ export class Canvas2dBackend implements IRenderBackend {
                 // forces one. An unconfigured border color inherits the body color, so a
                 // barcolored body gets a matching tinted border, not a direction-colored
                 // outline.
-                if (cs.borderVisible || (fading && cs.bodyVisible)) {
+                if (cs.borderVisible || (fading && cs.bodyVisible) || isHollow) {
                     ctx.globalAlpha = this.candleStructureAlpha;
-                    ctx.strokeStyle = cs.borderVisible ? ((up ? cs.borderUpColor : cs.borderDownColor) ?? color) : color;
+                    ctx.strokeStyle = (cs.borderVisible || isHollow) ? ((up ? cs.borderUpColor : cs.borderDownColor) ?? color) : color;
                     ctx.lineWidth = 1;
                     // Inset by half the stroke so the border lands on whole pixels
                     // (crisp) and stays inside the body's snapped footprint.

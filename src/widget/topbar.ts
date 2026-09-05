@@ -8,7 +8,7 @@ import { injectStyles } from '../ui/styles';
 import { chartType } from '../chart-types/registry';
 import { topbarActionOverride, widgetActions, type SidePanelButton, type WidgetContext } from './contributions';
 import { resolveTopbarComposition, topbarHas, TOPBAR_BUILTIN_IDS, type ResolvedTopbarComposition, type TopbarComposition } from './topbar-composition';
-import { BUILTIN_PRICE_STYLES, priceStyleIds } from '../renderers/native/core/chartConfig';
+import { BUILTIN_PRICE_STYLES, priceStyleIds, priceStyleLabel } from '../renderers/native/core/chartConfig';
 import { favoriteTimeframeChips, timeframeLabel } from './timeframe';
 import { parseSymbol } from '../data/ProviderRegistry';
 
@@ -144,18 +144,7 @@ const CSS = `
 .vela-widget-action:hover { background: var(--vela-hover); }
 `;
 
-const BUILTIN_STYLE_LABELS: Record<string, string> = {
-    candles: "Candles",
-    hollow: "Hollow Candles",
-    bars: "Bars",
-    line: "Line",
-    area: "Area",
-    baseline: "Baseline"
-};
-
-export function priceStyleLabel(id: string): string {
-    return chartType(id)?.label ?? BUILTIN_STYLE_LABELS[id] ?? id;
-}
+export { priceStyleLabel } from '../renderers/native/core/chartConfig';
 
 /** Icon id for a price style — registers a plugin type's `icon` markup on first use. */
 export function priceStyleIcon(id: string): string | undefined {

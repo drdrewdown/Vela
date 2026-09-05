@@ -852,7 +852,7 @@ export class WebGL2Backend implements IRenderBackend {
                 }
             }
             if (drawBody) {
-                const isHollow = scene.priceStyle === "hollow" || (typeof window !== "undefined" && Boolean(window.__VELA_HOLLOW__));
+                const isHollow = scene.priceStyle === "hollow";
                 const fillBody = isHollow ? !isUp : cs.bodyVisible;
                 if (fillBody) {
                     b.alpha = this.candleBodyAlpha;

@@ -138,6 +138,8 @@ export interface WorkspaceEventMap extends Record<string, unknown> {
     /** A cell was maximized over the whole grid, or the grid restored (`id: null`). */
     'cell:maximized': { id: string | null };
     'cell:created': { id: string };
+    /** A cell's price style changed — from the topbar, the settings dialog or the API. */
+    'cell:priceStyle': { id: string; style: string };
     'cell:destroyed': { id: string };
     /** The persistable state changed (debounced ~500ms) — re-pull `getState()` if you
      *  consume it. The signal custom persistence flows build on. */
@@ -1907,9 +1909,10 @@ export class VelaWorkspace {
      *  renderer actually applied. */
     private onCellPriceStyleChanged(id: string): void {
         this.markStateDirty();
-        if (id !== this.activeId) return;
         const cell = this.cellsById.get(id);
         if (!cell) return;
+        this.events.emit('cell:priceStyle', { id, style: cell.priceStyle });
+        if (id !== this.activeId) return;
         this.topbar.setPriceStyle(cell.priceStyle);
     }
 

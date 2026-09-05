@@ -1,5 +1,5 @@
 import type { LineStyle } from '../../../core/model/series';
-import { chartTypes, settingsRowValueKeys, type SettingsRowDescriptor } from '../../../chart-types/registry';
+import { chartTypes, settingsRowValueKeys, type SettingsRowDescriptor, chartType } from '../../../chart-types/registry';
 import { withAlpha } from '../../../core/color';
 import { ACCENT, BEARISH, BULLISH, CHIP_PLATE, CROSSHAIR, SERIES_LINE, WARNING } from '../../../core/palette';
 import type { PriceStyle } from '../../../core/options';
@@ -317,6 +317,23 @@ const LINE_STYLES: readonly LineStyle[] = ['solid', 'dashed', 'dotted'];
 /** The library's own price styles, in picker order — {@link priceStyleIds} appends the
  *  SDK-registered chart types after these, so UIs can group the two families. */
 export const BUILTIN_PRICE_STYLES: readonly PriceStyle[] = ["candles", "hollow", "bars", "line", "area", "baseline", "heikinashi"];
+
+/** Display names of the built-in price styles — the ONE list every menu reads (topbar,
+ *  settings dialog, hosts). A plugin chart type supplies its own label via the registry. */
+export const BUILTIN_PRICE_STYLE_LABELS: Readonly<Record<string, string>> = {
+    candles: 'Candles',
+    hollow: 'Hollow Candles',
+    bars: 'Bars',
+    line: 'Line',
+    area: 'Area',
+    baseline: 'Baseline',
+    heikinashi: 'Heikin Ashi',
+};
+
+/** Display label for a price style: registry label, then the built-in name, else the raw id. */
+export function priceStyleLabel(id: string): string {
+    return chartType(id)?.label ?? BUILTIN_PRICE_STYLE_LABELS[id] ?? id;
+}
 
 /** Base price-series painting for a style: built-ins paint themselves; a plugin type
  *  may declare `basePainting: 'none'` to suppress candles under its layer. */
