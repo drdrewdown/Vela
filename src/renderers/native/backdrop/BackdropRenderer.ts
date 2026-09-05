@@ -73,7 +73,7 @@ export class BackdropRenderer {
      *  never cuts a candle in two), host highlights on top (continuous time mapping —
      *  hosts may paint sub-bar spans). */
     private drawHighlights(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem): void {
-        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const isLeft = coords.leftOffsetPx > 0; // the scale docks left
         const fullW = ctx.canvas.width / coords.dpr;
         const axisW = fullW - coords.width;
         const minX = isLeft ? axisW : 0;
@@ -101,7 +101,7 @@ export class BackdropRenderer {
     // (style); each uses its own color. Pane separators are drawn on the chrome layer
     // (full-width, above the data) so series never overpaint them.
     private drawGrid(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, dataW: number, gridAlpha: number): void {
-        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const isLeft = coords.leftOffsetPx > 0; // the scale docks left
         const fullW = ctx.canvas.width / coords.dpr;
         const axisW = fullW - dataW;
         const minX = isLeft ? axisW : 0;

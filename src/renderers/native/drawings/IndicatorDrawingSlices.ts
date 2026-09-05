@@ -157,7 +157,7 @@ export class IndicatorDrawingSlices {
     }
 
     private paintEntry(ctx: CanvasRenderingContext2D, e: SliceEntry, coords: CoordinateSystem, dataW: number, theme: VelaTheme): void {
-        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const isLeft = coords.leftOffsetPx > 0; // the scale docks left
         const fullW = ctx.canvas.width / coords.dpr;
         const axisW = fullW - dataW;
         const clipX = isLeft ? axisW : 0;

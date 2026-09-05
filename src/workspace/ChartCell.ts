@@ -177,6 +177,8 @@ export interface CellDeps {
     onPriceStyleChanged(id: string): void;
     /** The cell's indicator ledger changed (count/picker refresh upstream). */
     onIndicatorsChanged(id: string): void;
+    /** The cell's price-scale side changed (the shared drawing toolbar re-docks upstream). */
+    onScaleSideChanged?(id: string): void;
     /** A Status line tab pref changed on this cell (the style link mirrors upstream). */
     onStatusPrefsChanged(id: string): void;
     /** Persistable per-cell state changed outside the market/indicator channels
@@ -360,6 +362,7 @@ export class ChartCell {
             this.deps.onPriceStyleChanged(this.id);
         });
         this.inner.renderer.onConfigChanged(() => {
+            this.deps.onScaleSideChanged?.(this.id);
             const zone = this.inner?.renderer.get('timezone');
             if (typeof zone === 'string' && normalizeTimezone(zone) !== normalizeTimezone(this.deps.timezone())) {
                 this.deps.setTimezone(normalizeTimezone(zone));

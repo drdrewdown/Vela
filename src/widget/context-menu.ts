@@ -78,7 +78,7 @@ export class ChartContextMenu {
 
     private zoneOf(e: MouseEvent): Zone {
         const rect = this.host.getBoundingClientRect();
-        const isLeft = (typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left") || (this.chart?.renderer?.get("scalePosition") === "left");
+        const isLeft = this.chart?.renderer?.get("scaleSide") === "left";
         const axisW = (this.chart?.renderer as any)?.rightAxisW ?? PRICE_AXIS_W;
         if (isLeft) {
             if (e.clientX - rect.left < axisW) return "price-axis";
@@ -113,7 +113,7 @@ export class ChartContextMenu {
     private itemsFor(zone: Zone): MenuItemDescriptor[] {
         if (zone === "price-axis") {
             const pane = this.lastPane;
-            const isLeft = (typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left") || (this.chart?.renderer?.get("scalePosition") === "left");
+            const isLeft = this.chart?.renderer?.get("scaleSide") === "left";
             const isHighLow = typeof window === "undefined" || window.__VELA_HIGH_LOW__ !== false;
             const baseItems = priceAxisItems({
                 auto: this.chart?.renderer.get("autoScale") !== false,
@@ -187,16 +187,8 @@ export class ChartContextMenu {
             }
             return;
         }
-        if (id === "aether:scale:left") {
-            if (typeof window !== "undefined" && window.__AETHER_SET_SCALE_SIDE__) {
-                window.__AETHER_SET_SCALE_SIDE__("left");
-            }
-            return;
-        }
-        if (id === "aether:scale:right") {
-            if (typeof window !== "undefined" && window.__AETHER_SET_SCALE_SIDE__) {
-                window.__AETHER_SET_SCALE_SIDE__("right");
-            }
+        if (id === "aether:scale:left" || id === "aether:scale:right") {
+            this.chart?.renderer?.set("scaleSide", id.endsWith(":left") ? "left" : "right");
             return;
         }
         if (id.startsWith("action:")) {

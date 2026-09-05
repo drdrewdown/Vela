@@ -337,8 +337,8 @@ export class InputController {
     regionAt(x: number, y: number): DragRegion {
         const c = this.deps.getCoords();
         if (this.paneResize && y <= c.height && this.deps.paneSeparatorAt(y)) return 'separator';
-        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
-        const leftOff = isLeft && c.leftOffsetPx ? c.leftOffsetPx : 0;
+        const leftOff = c.leftOffsetPx; // 0 unless the scale docks left
+        const isLeft = leftOff > 0;
         if (this.axisDrag) {
             if (isLeft) {
                 if (x < leftOff && y <= c.height) return "price";

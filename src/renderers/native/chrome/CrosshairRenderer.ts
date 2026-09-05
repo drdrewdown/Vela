@@ -41,7 +41,7 @@ export class CrosshairRenderer {
         const dataW = coords.width;
         const dataH = coords.height;
         const fullW = canvas.width / dpr;
-        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const isLeft = coords.leftOffsetPx > 0; // the scale docks left
         const axisW = fullW - dataW;
         const minX = isLeft ? axisW : 0;
         const maxX = isLeft ? fullW : dataW;
@@ -97,7 +97,7 @@ export class CrosshairRenderer {
         const dataW = coords.width;
         const dataH = coords.height;
         const fullW = ctx.canvas.width / coords.dpr;
-        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const isLeft = coords.leftOffsetPx > 0; // the scale docks left
         const axisW = fullW - dataW;
         const minX = isLeft ? axisW : 0;
         const maxX = isLeft ? fullW : dataW;

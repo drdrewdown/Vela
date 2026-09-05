@@ -341,7 +341,7 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     readonly name = 'native';
-    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'invertScale', 'paneScales', 'autoScale', 'timezone', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'indicatorTitles', 'indicatorValues'];
+    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'scaleSide', 'invertScale', 'paneScales', 'autoScale', 'timezone', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'indicatorTitles', 'indicatorValues'];
 
     /** Apply a render feature live — mutate the field + invalidate, no engine re-run. */
     applyFeature(key: string, value: unknown): void {
@@ -424,6 +424,9 @@ export class NativeRenderer implements IChartRenderer {
                 break;
             case 'gridlines':
                 this.scene.showGrid = Boolean(value);
+                break;
+            case 'scaleSide':
+                this.applyConfig({ priceScale: { side: value === 'left' ? 'left' : 'right' } });
                 break;
             case 'axisLabels':
                 this.scene.showAxisLabels = Boolean(value);
@@ -536,6 +539,7 @@ export class NativeRenderer implements IChartRenderer {
             case 'highlights': return this.scene.highlights;
             case 'sessionZones': return this.scene.sessionZones;
             case 'gridlines': return this.scene.showGrid;
+            case 'scaleSide': return this.scene.scaleSide;
             case 'axisLabels': return this.scene.showAxisLabels;
             case 'scaleMode': return this.scene.scaleMode;
             case 'invertScale': return this.scene.invertScale;
@@ -677,6 +681,7 @@ export class NativeRenderer implements IChartRenderer {
             },
             priceScale: {
                 mode: this.scene.scaleMode,
+                side: this.scene.scaleSide,
                 log: this.scene.logScale,
                 invert: this.scene.invertScale,
                 borderColor: s.borderColor ?? t.borderColor,
@@ -807,6 +812,14 @@ export class NativeRenderer implements IChartRenderer {
         };
         // price scale
         this.scene.scaleMode = next.priceScale.mode;
+        const sideChanged = this.scene.scaleSide !== next.priceScale.side;
+        this.scene.scaleSide = next.priceScale.side;
+        if (sideChanged) {
+            // The gutter moves: re-lay the canvases (coords.leftOffsetPx follows) and republish.
+            this.syncSize();
+            this.publishGutters();
+            this.scheduler?.invalidate(InvalidateLevel.Full);
+        }
         this.scene.logScale = next.priceScale.log;
         this.scene.invertScale = next.priceScale.invert;
         s.borderColor = keepInherit(s.borderColor, next.priceScale.borderColor, prevTheme.borderColor);
@@ -1472,7 +1485,7 @@ export class NativeRenderer implements IChartRenderer {
         });
         this.setKeyboardEnabled(this.keyboardEnabled); // accessible by default; wires focus + ARIA
 
-        this.inputsUI = new InputsUI(this.plot, theme, (paneId) => this.paneBoundsFor(paneId));
+        this.inputsUI = new InputsUI(this.plot, theme, (paneId) => this.paneBoundsFor(paneId), () => this.scene.scaleSide);
         this.inputsUI.setLayoutMode(this.layoutMode);
         this.inputsUI.setTitlesVisible(this.indicatorTitlesOn); // a remount keeps the toggle state
         this.inputsUI.setValuesVisible(this.indicatorValuesOn);
@@ -2457,10 +2470,9 @@ export class NativeRenderer implements IChartRenderer {
             for (const cb of this.crosshairCbs) cb(empty);
             return;
         }
-        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
-        const leftOff = isLeft && this.coords.leftOffsetPx ? this.coords.leftOffsetPx : 0;
-        const minX = isLeft ? leftOff : 0;
-        const maxX = isLeft ? leftOff + this.coords.width : this.coords.width;
+        const leftOff = this.coords.leftOffsetPx; // 0 unless the scale docks left
+        const minX = leftOff;
+        const maxX = leftOff + this.coords.width;
         const inData = x >= minX && y >= 0 && x <= maxX && y <= this.coords.height;
         this.scene.crosshair = inData ? { x, y } : null;
         this.lastPointer = inData ? { x, y } : null;
@@ -3740,7 +3752,7 @@ export class NativeRenderer implements IChartRenderer {
      *  status line, a watermark, a custom legend) can anchor to the plot's edges
      *  without reaching into the renderer's DOM. */
     private publishGutters(): void {
-        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const isLeft = this.scene.scaleSide === 'left';
         this.mountContainer?.style.setProperty('--vela-toolbar-gutter', `${this.toolbarGutter}px`);
         this.mountContainer?.style.setProperty("--vela-scale-gutter", `${isLeft ? 0 : this.rightAxisW}px`);
     }
@@ -3835,7 +3847,7 @@ export class NativeRenderer implements IChartRenderer {
         size(this.chromeCanvas);
         size(this.drawingsCanvas);
         size(this.cursorCanvas);
-        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const isLeft = this.scene.scaleSide === 'left';
         this.coords.setSize(Math.max(1, pw - this.rightAxisW), Math.max(1, ph - TIME_AXIS_H), dpr, isLeft ? this.rightAxisW : 0);
         this.scene.crosshair = null;
         this.layoutPanes();

@@ -215,6 +215,9 @@ export interface ChartConfig {
     };
     priceScale: {
         mode: ScaleMode;
+        /** Which edge the price scale docks on. The plot, gutters, axes, crosshair chips and
+         *  the drawing toolbar all follow it. */
+        side: 'left' | 'right';
         log: boolean;
         /** Inverted price axis (high at the bottom). */
         invert: boolean;
@@ -586,6 +589,7 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
         },
         priceScale: {
             mode: isScaleMode(ps.mode) ? ps.mode : base.priceScale.mode,
+            side: ps.side === 'left' || ps.side === 'right' ? ps.side : base.priceScale.side,
             log: isBool(ps.log) ? ps.log : base.priceScale.log,
             invert: isBool(ps.invert) ? ps.invert : base.priceScale.invert,
             borderColor: isColor(ps.borderColor) ? ps.borderColor : base.priceScale.borderColor,

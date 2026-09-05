@@ -133,12 +133,12 @@ export class CoordinateSystem {
 
     // ── X axis: logical bar index ↔ pixel (via the effective pitch = zoom × spacing multiplier) ──
     logicalToX(logical: number): number {
-        const leftOff = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left" && this.leftOffsetPx ? this.leftOffsetPx : 0;
+        const leftOff = this.leftOffsetPx; // 0 unless the scale docks left
         return leftOff + this.widthPx - (this.rightEdgeLogical - logical) * this.pxPerBar();
     }
 
     xToLogical(x: number): number {
-        const leftOff = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left" && this.leftOffsetPx ? this.leftOffsetPx : 0;
+        const leftOff = this.leftOffsetPx; // 0 unless the scale docks left
         return this.rightEdgeLogical - (this.widthPx - (x - leftOff)) / this.pxPerBar();
     }
 

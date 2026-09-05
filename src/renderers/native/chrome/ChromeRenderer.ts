@@ -87,7 +87,7 @@ export class ChromeRenderer {
         // Paint the price-axis (right) + time-axis (bottom) gutters opaquely so drawings or
         // series pixels beneath never bleed into the scales. Data/drawings stay clear of
         // these strips, so this only ever covers the axis areas.
-        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const isLeft = coords.leftOffsetPx > 0; // the scale docks left
         const axisW = fullW - dataW;
         if (surface && (fullW > dataW || fullH > dataH)) {
             ctx.fillStyle = surface.background;
@@ -151,7 +151,7 @@ export class ChromeRenderer {
         pane: PaneNode,
         dataW: number,
     ): void {
-        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const isLeft = coords.leftOffsetPx > 0; // the scale docks left
         const fullW = ctx.canvas.width / coords.dpr;
         const axisW = fullW - dataW;
         const clipX = isLeft ? axisW : 0;
@@ -184,7 +184,7 @@ export class ChromeRenderer {
 
     // ── axes ──
     private drawPriceAxes(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, dataW: number, panes: PaneNode[]): void {
-        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const isLeft = coords.leftOffsetPx > 0; // the scale docks left
         const fullW = ctx.canvas.width / coords.dpr;
         const axisW = fullW - dataW;
         ctx.strokeStyle = scene.style.borderColor ?? theme.borderColor;
@@ -278,7 +278,7 @@ export class ChromeRenderer {
         const y = coords.priceToY(last.close, pricePane.scale, pricePane.bounds);
         if (y < pricePane.bounds.top || y > pricePane.bounds.top + pricePane.bounds.height) return;
 
-        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const isLeft = coords.leftOffsetPx > 0; // the scale docks left
         const fullW = ctx.canvas.width / coords.dpr;
         const axisW = fullW - dataW;
         const chipBounds = [];
@@ -601,7 +601,7 @@ export class ChromeRenderer {
         const loY = coords.priceToY(lo, pricePane.scale, pricePane.bounds);
         const last = scene.bars[scene.bars.length - 1];
         const curY = (scene.showPriceLabel || scene.showCountdown) && last ? coords.priceToY(last.close, pricePane.scale, pricePane.bounds) : -999;
-        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const isLeft = coords.leftOffsetPx > 0; // the scale docks left
         const fullW = ctx.canvas.width / coords.dpr;
         const axisW = fullW - dataW;
         const PAD = 8;
@@ -663,7 +663,7 @@ export class ChromeRenderer {
     }
 
     private drawTimeAxis(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, dataW: number, dataH: number, fullH: number): void {
-        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const isLeft = coords.leftOffsetPx > 0; // the scale docks left
         const fullW = ctx.canvas.width / coords.dpr;
         const axisW = fullW - dataW;
         const minX = isLeft ? axisW : 0;

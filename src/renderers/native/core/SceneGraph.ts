@@ -178,6 +178,8 @@ export class SceneGraph {
     /** Draw the background gridlines (price + time). Master toggle (`gridlines`
      *  feature); per-axis visibility + colors live in `style.gridVert`/`gridHorz`. */
     showGrid = true;
+    /** Which edge the price scale docks on (`priceScale.side`); `coords.leftOffsetPx` is its pixel consequence. */
+    scaleSide: 'left' | 'right' = 'right';
     /** Comprehensive cosmetic config (item 15): grid colors, crosshair, candle
      *  border/wick, fonts, separators. Serialized via the renderer's `getConfig()`/
      *  `applyConfig()`; every draw layer reads its knobs from here, falling back to

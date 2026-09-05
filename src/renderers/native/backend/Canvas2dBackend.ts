@@ -345,7 +345,7 @@ export class Canvas2dBackend implements IRenderBackend {
             ctx.lineTo(pts[pts.length - 1]!.x, baseY);
             ctx.closePath();
         };
-        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const isLeft = coords.leftOffsetPx > 0; // the scale docks left
         const fullW = ctx.canvas.width / coords.dpr;
         const axisW = fullW - dataW;
         const minX = isLeft ? axisW : 0;
@@ -797,7 +797,7 @@ export class Canvas2dBackend implements IRenderBackend {
     private drawHline(ctx: CanvasRenderingContext2D, pl: PriceLine, pane: PaneNode, coords: CoordinateSystem, dataW: number, theme: VelaTheme): void {
         const y = Math.round(coords.priceToY(pl.price, pane.scale, pane.bounds)) + 0.5;
         if (y < pane.bounds.top || y > pane.bounds.top + pane.bounds.height) return;
-        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
+        const isLeft = coords.leftOffsetPx > 0; // the scale docks left
         const fullW = ctx.canvas.width / coords.dpr;
         const axisW = fullW - dataW;
         const minX = isLeft ? axisW : 0;

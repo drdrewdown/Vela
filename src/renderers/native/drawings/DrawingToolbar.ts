@@ -85,6 +85,7 @@ export class DrawingToolbar {
     private readonly onCollapse: (collapsed: boolean) => void;
     private readonly onDrawingsSync: ((on: boolean) => void) | null;
 
+    private scaleSide: "left" | "right" = "right";
     constructor(
         private readonly host: HTMLElement,
         private theme: VelaTheme,
@@ -123,10 +124,16 @@ export class DrawingToolbar {
         applyChromeTokens(this.root, t);
         const width = this.collapsed ? TOOLBAR_COLLAPSED_WIDTH : this.width;
         this.root.dataset.collapsed = this.collapsed ? "1" : "";
-        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
-        const leftPx = isLeft ? 64 : 0;
+        const leftPx = this.scaleSide === "left" ? 64 : 0;
         const placement = this.dock === "absolute" ? `position:absolute;left:${leftPx}px;top:0;height:100%;width:${width}px;z-index:21;` : `position:relative;height:100%;width:${width}px;flex:none;`;
         this.root.style.cssText = placement + `display:${this.visible ? "flex" : "none"};flex-direction:column;gap:4px;padding:6px 0;box-sizing:border-box;background:${t.background};border-right:1px solid ${this.borderColor};color:var(--vela-fg-muted);pointer-events:auto;overflow-y:auto;overflow-x:hidden;`;
+    }
+
+    /** Dock the bar clear of a left-docked price scale (the workspace mirrors the active chart). */
+    setScaleSide(side: "left" | "right"): void {
+        if (this.scaleSide === side) return;
+        this.scaleSide = side;
+        this.styleRoot();
     }
 
     setDefinition(def: ToolbarDefinition): void {

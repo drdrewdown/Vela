@@ -331,9 +331,8 @@ export class WebGL2Backend implements IRenderBackend {
             b.reset();
             const topDev = Math.round(pane.bounds.top * dpr);
             const botDev = Math.round((pane.bounds.top + pane.bounds.height) * dpr);
-            const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
-            const leftOff = isLeft && coords.leftOffsetPx ? coords.leftOffsetPx : (isLeft ? Math.round(canvas.width / dpr - dataW) : 0);
-            gl.scissor(isLeft ? Math.round(leftOff * dpr) : 0, canvas.height - botDev, Math.round(dataW * dpr), botDev - topDev);
+            const leftOff = coords.leftOffsetPx; // 0 unless the scale docks left
+            gl.scissor(Math.round(leftOff * dpr), canvas.height - botDev, Math.round(dataW * dpr), botDev - topDev);
             const flush = () => {
                 if (b.vertexCount === 0) return;
                 gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
@@ -453,9 +452,8 @@ export class WebGL2Backend implements IRenderBackend {
             if (b.vertexCount === 0) continue;
             const topH = Math.round(pane.bounds.top * dpr * 0.5);
             const botH = Math.round((pane.bounds.top + pane.bounds.height) * dpr * 0.5);
-            const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
-            const leftOff = isLeft && coords.leftOffsetPx ? coords.leftOffsetPx : (isLeft ? Math.round(canvas.width / dpr - dataW) : 0);
-            gl.scissor(isLeft ? Math.round(leftOff * dpr * 0.5) : 0, hh - botH, Math.round(dataW * dpr * 0.5), botH - topH);
+            const leftOff = coords.leftOffsetPx; // 0 unless the scale docks left
+            gl.scissor(Math.round(leftOff * dpr * 0.5), hh - botH, Math.round(dataW * dpr * 0.5), botH - topH);
             gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
             gl.bufferData(gl.ARRAY_BUFFER, b.view, gl.DYNAMIC_DRAW);
             gl.drawArrays(gl.TRIANGLES, 0, b.vertexCount);
@@ -1056,10 +1054,9 @@ export class WebGL2Backend implements IRenderBackend {
     private emitHline(b: Batch, pl: PriceLine, pane: PaneNode, coords: CoordinateSystem, dataW: number, theme: VelaTheme): void {
         const y = Math.round(coords.priceToY(pl.price, pane.scale, pane.bounds));
         if (y < pane.bounds.top || y > pane.bounds.top + pane.bounds.height) return;
-        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
-        const leftOff = isLeft && coords.leftOffsetPx ? coords.leftOffsetPx : 0;
-        const minX = isLeft ? leftOff : 0;
-        const maxX = isLeft ? leftOff + dataW : dataW;
+        const leftOff = coords.leftOffsetPx; // 0 unless the scale docks left
+        const minX = leftOff;
+        const maxX = leftOff + dataW;
         b.dashedSeg(minX, y, maxX, y, pl.width ?? 1, parseColor(pl.color ?? theme.textColor), DASH[pl.lineStyle ?? "solid"] ?? null);
     }
 }

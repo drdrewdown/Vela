@@ -215,6 +215,7 @@ export class InputsUI {
         private readonly container: HTMLElement,
         private theme: VelaTheme,
         private readonly paneBoundsOf?: (paneId: string) => { top: number; height: number },
+        private readonly scaleSideOf?: () => 'left' | 'right',
     ) {
         if (!container.style.position) container.style.position = 'relative';
         if (typeof document !== 'undefined') document.addEventListener('click', this.onDocClick);
@@ -607,8 +608,7 @@ export class InputsUI {
             const rowH = lg.offsetHeight || 20;
             top = bounds.top + Math.max(1, Math.round((bounds.height - rowH) / 2));
         }
-        const isLeft = typeof window !== "undefined" && window.__VELA_SCALE_SIDE__ === "left";
-        lg.style.left = `${isLeft ? 110 : 10}px`;
+        lg.style.left = `${this.scaleSideOf?.() === 'left' ? 110 : 10}px`;
         lg.style.top = `${top}px`;
     }
 
