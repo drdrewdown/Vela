@@ -198,6 +198,8 @@ export class NativeRenderer implements IChartRenderer {
     /** The indicator legend folded behind its chevron (`legend.folded`) — held here so a
      *  remount re-applies it. */
     private legendFolded = false;
+    /** Pane heights by id (`panes.weights`) — applied to panes as they appear. */
+    private paneWeights: Record<string, number> = {};
     /** Host-contributed legend actions — held here so a rebuild of the legend re-wires them. */
     private legendActionsProvider: ((indicatorId: string) => LegendActionView[]) | null = null;
     /** Host-contributed legend callouts — held here so a rebuild of the legend re-wires them. */
@@ -716,7 +718,7 @@ export class NativeRenderer implements IChartRenderer {
                 indicatorChips: this.scene.showIndicatorChips,
                 mergeChips: this.scene.mergeChips,
             },
-            panes: { separatorColor: s.separatorColor ?? t.borderColor },
+            panes: { separatorColor: s.separatorColor ?? t.borderColor, weights: this.currentPaneWeights() },
             legend: { folded: this.legendFolded },
             trades: {
                 visible: this.scene.tradeMarkers.visible,
@@ -863,6 +865,11 @@ export class NativeRenderer implements IChartRenderer {
         this.inputsUI?.setLegendFolded(this.legendFolded);
         // panes
         s.separatorColor = keepInherit(s.separatorColor, next.panes.separatorColor, prevTheme.borderColor);
+        this.paneWeights = { ...next.panes.weights };
+        for (const p of this.scene.panes.values()) {
+            const w = this.paneWeights[p.id];
+            if (w !== undefined) p.heightWeight = w;
+        }
         // trade markers
         this.scene.tradeMarkers = {
             visible: next.trades.visible,
@@ -2771,17 +2778,26 @@ export class NativeRenderer implements IChartRenderer {
         const next = resizeSplit(split, dyTotal);
         above.heightWeight = next.above;
         below.heightWeight = next.below;
-        try {
-            const weights: Record<string, number> = {};
-            for (const p of this.scene.orderedPanes()) weights[p.id] = p.heightWeight;
-            localStorage.setItem("aether_vela_pane_weights", JSON.stringify(weights));
-        } catch {}
+        this.rememberPaneWeights();
         this.layoutPanes();
         this.scheduler.invalidate(4 /* Full */);
     }
 
     /** Double-click a separator → split the two adjacent panes evenly (each gets half of
      *  their combined weight). A simple, predictable reset that leaves siblings untouched. */
+    /** The panes' current weights — the `panes.weights` a host reads back and persists. */
+    private currentPaneWeights(): Record<string, number> {
+        const out: Record<string, number> = { ...this.paneWeights };
+        for (const p of this.scene.panes.values()) out[p.id] = p.heightWeight;
+        return out;
+    }
+
+    /** A drag or reset changed the heights: record them and tell config listeners. */
+    private rememberPaneWeights(): void {
+        this.paneWeights = this.currentPaneWeights();
+        for (const cb of this.configChangedCbs) cb();
+    }
+
     private resetPaneSize(y: number): void {
         const i = this.separatorPaneIndexAt(y);
         if (i === null) return;
@@ -2792,11 +2808,7 @@ export class NativeRenderer implements IChartRenderer {
         const half = (above.heightWeight + below.heightWeight) / 2;
         above.heightWeight = half;
         below.heightWeight = half;
-        try {
-            const weights: Record<string, number> = {};
-            for (const p of this.scene.orderedPanes()) weights[p.id] = p.heightWeight;
-            localStorage.setItem("aether_vela_pane_weights", JSON.stringify(weights));
-        } catch {}
+        this.rememberPaneWeights();
         this.layoutPanes();
         this.scheduler.invalidate(4 /* Full */);
     }
@@ -3735,17 +3747,10 @@ export class NativeRenderer implements IChartRenderer {
         }
         const collapsed = panes.filter((p) => p.collapsed);
         const flexPanes = panes.filter((p) => !p.collapsed);
-        try {
-            const savedWeights = typeof localStorage !== "undefined" ? localStorage.getItem("aether_vela_pane_weights") : null;
-            if (savedWeights) {
-                const parsed = JSON.parse(savedWeights);
-                for (const p of flexPanes) {
-                    if (parsed[p.id] != null && Number.isFinite(parsed[p.id]) && parsed[p.id] > 0) {
-                        p.heightWeight = parsed[p.id];
-                    }
-                }
-            }
-        } catch {}
+        for (const p of flexPanes) {
+            const w = this.paneWeights[p.id];
+            if (w !== undefined) p.heightWeight = w;
+        }
         const stripTotal = collapsed.length * COLLAPSED_PANE_H;
         const flexHeight = Math.max(0, dataHeight - stripTotal);
         const totalWeight = flexPanes.reduce((s, p) => s + (p.heightWeight || 1), 0) || 1;

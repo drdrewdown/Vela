@@ -246,6 +246,10 @@ export interface ChartConfig {
     /** Stacked-pane chrome — the draggable line between an indicator's pane and the one above it. */
     panes: {
         separatorColor: string;
+        /** Relative heights by pane id (the price pane and each study pane) — what a
+         *  separator drag sets. Persisted with the document; unknown ids are kept for
+         *  panes that appear later. Empty = the renderer's defaults. */
+        weights: Record<string, number>;
     };
     /** Strategy trade markers (the `tradeMarkers` feature): the order-fill units on the price pane. */
     trades: {
@@ -549,6 +553,17 @@ export function factoryResetConfig(factory: ChartConfig): ChartConfig {
  * field and silently dropping malformed ones. Pure (returns a fresh config, mutates
  * nothing) — the single reducer behind `applyConfig(json)` and the import path.
  */
+/** Positive finite weights by pane id; anything else is dropped. */
+function paneWeights(v: unknown): Record<string, number> {
+    const out: Record<string, number> = {};
+    if (v && typeof v === 'object') {
+        for (const [id, w] of Object.entries(v as Record<string, unknown>)) {
+            if (typeof w === 'number' && Number.isFinite(w) && w > 0) out[id] = w;
+        }
+    }
+    return out;
+}
+
 export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
     const p = asObject(patch);
     const ctPatch = asObject(p.chartTypes);
@@ -620,6 +635,7 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
         legend: { folded: isBool(legend.folded) ? legend.folded : base.legend.folded },
         panes: {
             separatorColor: isColor(panes.separatorColor) ? panes.separatorColor : base.panes.separatorColor,
+            weights: panes.weights === undefined ? base.panes.weights : paneWeights(panes.weights),
         },
         trades: {
             visible: isBool(trades.visible) ? trades.visible : base.trades.visible,
