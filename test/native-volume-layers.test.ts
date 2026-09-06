@@ -5,6 +5,7 @@ import { CoordinateSystem } from '../src/renderers/native/core/CoordinateSystem'
 import { VolumeRenderer } from '../src/renderers/native/volume/VolumeRenderer';
 import { VpvrRenderer } from '../src/renderers/native/vpvr/VpvrRenderer';
 import { VOLUME_FILL_ALPHA } from '../src/renderers/native/volume/paintVolume';
+import { volumeLayerData } from '../src/core/native-indicators/volume/VolumeIndicator';
 
 /**
  * The bespoke volume layers (bottom-anchored volume columns + the visible-range volume
@@ -73,7 +74,7 @@ describe('VolumeRenderer (bottom-anchored volume columns)', () => {
         const layer = new VolumeRenderer();
         const { ctx, rects } = recordingCtx();
         layer.mount({ width: W, height: H, getContext: () => ctx } as unknown as HTMLCanvasElement);
-        layer.render({ bars, data, visible, coords: makeCoords(bars.length), bounds: BOUNDS, fillPane });
+        layer.render({ bars, data, visible, coords: makeCoords(bars.length), bounds: BOUNDS, fillPane, candles: { up: '#0000FF', down: '#FF00FF' } });
         return rects;
     }
 
@@ -93,6 +94,22 @@ describe('VolumeRenderer (bottom-anchored volume columns)', () => {
         const rects = render([upBar(0, 50), downBar(1, 50)]);
         expect(rects.map((r) => r.style)).toEqual(['#11AA11', '#AA1111']);
         for (const r of rects) expect(r.alpha).toBeCloseTo(VOLUME_FILL_ALPHA, 6);
+    });
+
+    it('paints in the candle colours when the data names none (the default: volume follows the candles)', () => {
+        const layer = new VolumeRenderer();
+        const { ctx, rects } = recordingCtx();
+        layer.mount({ width: W, height: H, getContext: () => ctx } as unknown as HTMLCanvasElement);
+        const bars = [upBar(0, 50), downBar(1, 50)];
+        const data = { upColor: null, downColor: null, heightFrac: 0.2 };
+        layer.render({ bars, data, visible: true, coords: makeCoords(2), bounds: BOUNDS, fillPane: false, candles: { up: '#0000FF', down: '#FF00FF' } });
+        expect(rects.map((r) => r.style)).toEqual(['#0000FF', '#FF00FF']);
+    });
+
+    it('the indicator follows the candles by default and names its own colours only when told to', () => {
+        expect(volumeLayerData({})).toMatchObject({ upColor: null, downColor: null });
+        expect(volumeLayerData({ followCandles: true, upColor: '#111111', downColor: '#222222' })).toMatchObject({ upColor: null, downColor: null });
+        expect(volumeLayerData({ followCandles: false, upColor: '#111111', downColor: '#222222' })).toMatchObject({ upColor: '#111111', downColor: '#222222' });
     });
 
     it('skips bars without volume and paints nothing when hidden or unconfigured', () => {

@@ -16,11 +16,13 @@ function str(v: InputValue | undefined, fallback: string): string {
     return typeof v === 'string' && v !== '' ? v : fallback;
 }
 
-/** Resolve the input record into the layer payload (clamped, fraction-normalized). */
+/** Resolve the input record into the layer payload (clamped, fraction-normalized). The
+ *  columns follow the chart's candle colours unless `followCandles` is switched off. */
 export function volumeLayerData(inputs: Record<string, InputValue>): VolumeLayerData {
+    const follow = inputs.followCandles !== false;
     return {
-        upColor: str(inputs.upColor, DEFAULT_UP),
-        downColor: str(inputs.downColor, DEFAULT_DOWN),
+        upColor: follow ? null : str(inputs.upColor, DEFAULT_UP),
+        downColor: follow ? null : str(inputs.downColor, DEFAULT_DOWN),
         heightFrac: Math.min(0.5, Math.max(0.05, num(inputs.heightPct, DEFAULT_HEIGHT_PCT) / 100)),
     };
 }
@@ -73,11 +75,12 @@ export const volumeDescriptor: NativeIndicatorDescriptor = {
     paneHint: 'price',
     overlay: true,
     inputsSchema: (): InputSchema[] => [
+        { key: 'followCandles', title: 'Follow candle colors', type: 'bool', defval: true, tooltip: 'Color the columns like the candles; off uses the colors below' },
         { key: 'upColor', title: 'Up color', type: 'color', defval: DEFAULT_UP },
         { key: 'downColor', title: 'Down color', type: 'color', defval: DEFAULT_DOWN },
         { key: 'heightPct', title: 'Height %', type: 'int', defval: DEFAULT_HEIGHT_PCT, min: 5, max: 50, step: 1, tooltip: 'Pane height the tallest visible bar occupies' },
     ],
-    defaultInputs: (): Record<string, InputValue> => ({ upColor: DEFAULT_UP, downColor: DEFAULT_DOWN, heightPct: DEFAULT_HEIGHT_PCT }),
+    defaultInputs: (): Record<string, InputValue> => ({ followCandles: true, upColor: DEFAULT_UP, downColor: DEFAULT_DOWN, heightPct: DEFAULT_HEIGHT_PCT }),
     create: () => new VolumeIndicator(),
 };
 

@@ -3147,6 +3147,7 @@ export class NativeRenderer implements IChartRenderer {
                 coords: this.coords,
                 bounds: volumePane.bounds,
                 fillPane: volumePane.kind !== 'price',
+                candles: { up: this.candleUp, down: this.candleDown },
             });
             this.vpvrRenderer.render({
                 bars: this.scene.bars,

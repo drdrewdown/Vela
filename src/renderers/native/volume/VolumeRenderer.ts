@@ -25,6 +25,8 @@ interface VolumeRenderArgs {
     /** True when the indicator was moved into its own (study) pane — columns fill the pane
      *  instead of hugging `heightFrac` of it (the price-pane overlay proportion). */
     fillPane: boolean;
+    /** The chart's candle colours — what a column paints in when the data names none. */
+    candles: { up: string; down: string };
 }
 
 /**
@@ -52,7 +54,7 @@ export class VolumeRenderer {
         const ctx = this.ctx;
         const canvas = this.canvas;
         if (!ctx || !canvas) return;
-        const { bars, data, visible, coords, bounds, fillPane } = args;
+        const { bars, data, visible, coords, bounds, fillPane, candles } = args;
 
         const dpr = coords.dpr;
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -87,7 +89,7 @@ export class VolumeRenderer {
             // overlay it occupies the configured bottom fraction.
             maxH: bounds.height * (fillPane ? VOLUME_PANE_FILL_FRAC : data.heightFrac),
             maxVol,
-        }, { up: data.upColor, down: data.downColor });
+        }, { up: data.upColor ?? candles.up, down: data.downColor ?? candles.down });
         ctx.restore();
     }
 }

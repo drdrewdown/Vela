@@ -8,8 +8,10 @@
 
 /** `setNativeData('volume', …)`: bottom-anchored per-bar volume columns on the price pane. */
 export interface VolumeLayerData {
-    upColor: string;
-    downColor: string;
+    /** Column colour for an up bar; `null` follows the chart's candle up colour. */
+    upColor: string | null;
+    /** Column colour for a down bar; `null` follows the chart's candle down colour. */
+    downColor: string | null;
     /** Pane-height fraction (0..1) the tallest VISIBLE bar occupies (the layer's own scale). */
     heightFrac: number;
 }

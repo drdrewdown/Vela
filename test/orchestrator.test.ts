@@ -1751,10 +1751,10 @@ describe('EngineOrchestrator — built-in volume native indicators', () => {
         expect(model).toBeDefined(); // legend row mounted (no series — the layer draws outside the model)
         expect(model!.series).toHaveLength(0);
         expect(model!.paneId).toBe('price');
-        expect(renderer.volumePushes).toEqual([{ upColor: BULLISH, downColor: BEARISH, heightFrac: 0.2 }]);
+        expect(renderer.volumePushes).toEqual([{ upColor: null, downColor: null, heightFrac: 0.2 }]); // null: the columns follow the candles
         const summary = chart.inspect().indicators.find((s) => s.nativeType === 'volume');
         expect(summary?.native).toBe(true);
-        expect(summary?.inputs).toBe(3); // colors + height% drive the settings dialog
+        expect(summary?.inputs).toBe(4); // follow switch + colors + height% drive the settings dialog
     });
 
     it('volume: false opts out; a manual add still works and stays single-instance', async () => {
@@ -1773,9 +1773,9 @@ describe('EngineOrchestrator — built-in volume native indicators', () => {
     it('an input change re-pushes the resolved config (percent → fraction, clamped)', async () => {
         const { chart, renderer } = await makeChart();
         const handle = chart.addNativeIndicator('volume'); // existing (auto-added) handle
-        handle.setInputs({ upColor: '#112233', heightPct: 35 });
+        handle.setInputs({ followCandles: false, upColor: '#112233', heightPct: 35 });
         await flush();
-        const last = renderer.volumePushes[renderer.volumePushes.length - 1] as { upColor: string; downColor: string; heightFrac: number };
+        const last = renderer.volumePushes[renderer.volumePushes.length - 1] as { upColor: string | null; downColor: string | null; heightFrac: number };
         expect(last).toEqual({ upColor: '#112233', downColor: BEARISH, heightFrac: 0.35 });
     });
 
