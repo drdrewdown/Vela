@@ -10,6 +10,7 @@ interface EvInit {
     metaKey?: boolean;
     altKey?: boolean;
     shiftKey?: boolean;
+    defaultPrevented?: boolean;
     target?: unknown;
 }
 
@@ -154,6 +155,23 @@ describe('KeymapManager', () => {
         const e2 = ev({ key: 'p' });
         km.handleKeydown(e2);
         expect(e2.preventDefault).not.toHaveBeenCalled();
+    });
+
+    it('a key a nearer listener already claimed is not a shortcut, unless the binding only observes', () => {
+        const km = new KeymapManager({ platform: 'other' });
+        const claim = vi.fn();
+        const observe = vi.fn();
+        km.register({ id: 'claim', keys: 'arrowright', label: 'C', run: claim });
+        km.register({ id: 'observe', keys: 'escape', label: 'O', preventDefault: false, run: observe });
+        // The chart's own arrow navigation ran first (on the canvas) and called preventDefault —
+        // handling the same keystroke twice reads as a bounce.
+        expect(km.handleKeydown(ev({ key: 'ArrowRight', defaultPrevented: true }))).toBe(false);
+        expect(claim).not.toHaveBeenCalled();
+        expect(km.handleKeydown(ev({ key: 'ArrowRight' }))).toBe(true);
+        expect(claim).toHaveBeenCalledTimes(1);
+        // An observer never claims the key itself, so it may still see a claimed one.
+        expect(km.handleKeydown(ev({ key: 'Escape', defaultPrevented: true }))).toBe(true);
+        expect(observe).toHaveBeenCalledTimes(1);
     });
 
     it('re-registering an id replaces it; the returned disposer only removes its own registration', () => {

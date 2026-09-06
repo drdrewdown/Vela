@@ -26,7 +26,8 @@ export interface KeyBindingDescriptor {
     when?: () => boolean;
     /** Fire even while an input/textarea/contenteditable has focus (default false). */
     allowInInput?: boolean;
-    /** preventDefault + stopPropagation on match (default true). */
+    /** preventDefault + stopPropagation on match (default true). A binding that opts out only
+     *  OBSERVES the key, so it still fires on a keystroke a nearer listener already claimed. */
     preventDefault?: boolean;
     run: (ev: KeyboardEvent) => void;
 }
@@ -220,10 +221,16 @@ export class KeymapManager {
     /** The matcher — public so hosts/tests can feed events from their own listeners. */
     handleKeydown(ev: KeyboardEvent): boolean {
         const editable = isEditableTarget(ev);
+        // A keystroke a nearer listener already claimed (the chart's own arrow navigation on
+        // its canvas, a host control) is not a shortcut — the same key handled twice reads as
+        // a bounce. Bindings that never claim keys themselves (`preventDefault: false`) are
+        // observers and still see it.
+        const claimed = ev.defaultPrevented === true;
         for (const d of this.descriptors.values()) {
             const scope = d.scope ?? this.baseScope;
             if (scope !== 'global' && scope !== this.activeScope) continue;
             if (editable && !d.allowInInput) continue;
+            if (claimed && d.preventDefault !== false) continue;
             if (d.when && !d.when()) continue;
             for (const spec of this.activeKeys(d)) {
                 if (eventMatches(ev, parseChord(spec, this.mac))) {

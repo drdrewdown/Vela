@@ -395,7 +395,10 @@ The shell is keyboard-first (bindings act on the **active cell**):
 Bindings are declarative descriptors on `ws.keymap` — `register({ id, keys:
 'mod+shift+k', label, category, scope?, run })` — and are listed automatically in the
 `?` panel. `'mod'` is ⌘ on macOS and Ctrl elsewhere. Scopes stack: the shell pushes
-`'dialog'` while any of its dialogs is open, muting chart-scope bindings.
+`'dialog'` while any of its dialogs is open, muting chart-scope bindings. A keystroke a
+nearer listener already claimed (`defaultPrevented` — the chart's own arrow navigation, a
+host control) is not a shortcut; a binding with `preventDefault: false` only observes and
+still sees it.
 
 Shortcuts fire while keyboard focus is **inside the shell** (any click on a chart puts
 it there). For a page where the chart is the main content, set `autofocus: true` so
