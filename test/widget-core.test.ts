@@ -295,6 +295,11 @@ describe('indicatorLedger', () => {
             .toEqual({ manifest: [], natives: [{ type: 'volume', inputs: { ma: true } }] });
     });
 
+    it('a hidden instance (legend eye off) travels as hidden: true, natives and manifest alike', () => {
+        expect(indicatorLedger({ ...base, present: [{ type: 'sma', hidden: true }], instanceEntries: [{ name: 'RSI', hidden: true }] }))
+            .toEqual({ manifest: [{ name: 'RSI', hidden: true }], natives: [{ type: 'sma', hidden: true }] });
+    });
+
     it('reports the volume INTENT until the auto-add had its chance, never duplicating', () => {
         expect(indicatorLedger({ ...base, volumePending: true })).toEqual({ manifest: [], natives: ['volume'] });
         expect(indicatorLedger({ ...base, volumePending: true, present: ['volume'] })).toEqual({ manifest: [], natives: ['volume'] });

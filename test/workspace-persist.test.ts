@@ -30,7 +30,7 @@ const fullDoc: WorkspaceState = {
             indicatorValues: false,
             rendererConfig: { theme: 'dark', nested: { any: ['shape'] } },
             drawings: { version: 1, items: [{ type: 'trendline' }] },
-            indicators: { manifest: ['EMA 20'], natives: ['volume', { type: 'sma', inputs: { length: 50 } }] },
+            indicators: { manifest: ['EMA 20', { name: 'RSI', hidden: true }], natives: ['volume', { type: 'sma', inputs: { length: 50 } }, { type: 'vpvr', hidden: true }] },
             ext: { 'velapro.indicators': [{ slug: 'smart-money', inputs: { len: 20 } }] },
         },
         { id: 'c2', symbol: 'ETHUSDT', timeframe: '15' },
@@ -84,7 +84,7 @@ describe('sanitizeState (the applyState gate)', () => {
                 },
                 {
                     id: 'c5', // native entries: type required, a bad input bag collapses to the bare type
-                    indicators: { manifest: [], natives: [{ type: 'sma', inputs: { length: 50 } }, { type: 'ema', inputs: 'oops' }, { inputs: { x: 1 } }, 7] },
+                    indicators: { manifest: [{ name: 'MACD', hidden: 'yes' }], natives: [{ type: 'sma', inputs: { length: 50 } }, { type: 'ema', inputs: 'oops' }, { inputs: { x: 1 } }, 7, { type: 'wma', hidden: true }] },
                 },
             ],
         });
@@ -98,7 +98,7 @@ describe('sanitizeState (the applyState gate)', () => {
                 { id: 'c3', indicators: { manifest: ['EMA'], natives: [] } },
                 // bad bags dropped (an all-default entry collapses to the bare name); nameless entries vanish
                 { id: 'c4', indicators: { manifest: [{ name: 'RSI', inputs: { len: 21 } }, 'MACD'], natives: [] } },
-                { id: 'c5', indicators: { manifest: [], natives: [{ type: 'sma', inputs: { length: 50 } }, 'ema'] } },
+                { id: 'c5', indicators: { manifest: ['MACD'], natives: [{ type: 'sma', inputs: { length: 50 } }, 'ema', { type: 'wma', hidden: true }] } },
             ],
         });
     });

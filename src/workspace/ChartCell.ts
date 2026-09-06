@@ -388,7 +388,10 @@ export class ChartCell {
         // resolving) and stay reported by `dehydrate` until then, so an early snapshot
         // (persist flush racing the resolution) never wipes them.
         if (seed.indicators) {
-            for (const e of seed.indicators.natives as LedgerNativeEntry[]) this.inner.addNativeIndicator(ledgerNativeType(e), typeof e === 'object' && e.inputs ? { inputs: e.inputs } : {});
+            for (const e of seed.indicators.natives as LedgerNativeEntry[]) {
+                const h = this.inner.addNativeIndicator(ledgerNativeType(e), typeof e === 'object' && e.inputs ? { inputs: e.inputs } : {});
+                if (typeof e === 'object' && e.hidden) h.setVisible(false);
+            }
             this.pendingManifestNames = [...seed.indicators.manifest] as LedgerManifestEntry[];
         }
         this.volumeIntent = seed.indicators ? seed.indicators.natives.some((e) => ledgerNativeType(e as LedgerNativeEntry) === 'volume') : deps.volume;
@@ -485,6 +488,8 @@ export class ChartCell {
             this.deps.onIndicatorsChanged(this.id);
         });
         this.inner.on('indicator:inputs', () => this.deps.onIndicatorsChanged(this.id));
+        // The legend eye is state too: a hidden study must come back hidden.
+        this.inner.on('indicator:visibility', () => this.deps.onIndicatorsChanged(this.id));
         this.inner.on('indicator:removed', ({ id }) => {
             if (this.destroyed) return;
             // Out-of-band removals (legend ✕, object tree, middle-click, handle.remove())
@@ -1002,7 +1007,7 @@ export class ChartCell {
             if (list.length === 0) return; // the manifest hasn't resolved yet — keep waiting
             for (const led of this.pendingManifestNames) {
                 const entry = list.find((e) => e.name === ledgerEntryName(led));
-                if (entry) this.addManifestInstance(entry, { record: false, ...(typeof led === 'object' ? { inputs: led.inputs, props: led.props } : {}) });
+                if (entry) this.addManifestInstance(entry, { record: false, ...(typeof led === 'object' ? { inputs: led.inputs, props: led.props, hidden: led.hidden } : {}) });
             }
             this.pendingManifestNames = null;
             return;
@@ -1045,15 +1050,20 @@ export class ChartCell {
                     for (const sch of h.inputs) defaults[sch.key] = sch.defval;
                     h.setInputs({ ...defaults, ...(want ?? {}) });
                 }
+                const wantVisible = !(typeof e === 'object' && e.hidden);
+                if (h.visible !== wantVisible) h.setVisible(wantVisible);
             }
             for (const h of pool) if (!claimed.has(h)) h.remove();
-            for (const e of missing) chart.addNativeIndicator(ledgerNativeType(e), typeof e === 'object' && e.inputs ? { inputs: e.inputs } : {});
+            for (const e of missing) {
+                const h = chart.addNativeIndicator(ledgerNativeType(e), typeof e === 'object' && e.inputs ? { inputs: e.inputs } : {});
+                if (typeof e === 'object' && e.hidden) h.setVisible(false);
+            }
             for (const it of [...this.instances]) this.dropInstance(it);
             if (this.manifest.length > 0) {
                 for (const item of led.manifest) {
                     const entry = this.manifest.find((e) => e.name === ledgerEntryName(item));
                     if (entry)
-                        this.addManifestInstance(entry, { record: false, ...(typeof item === 'object' ? { inputs: item.inputs, props: item.props } : {}) });
+                        this.addManifestInstance(entry, { record: false, ...(typeof item === 'object' ? { inputs: item.inputs, props: item.props, hidden: item.hidden } : {}) });
                 }
                 this.pendingManifestNames = null;
             } else if (!this.deps.manifestSettled()) {
@@ -1125,11 +1135,12 @@ export class ChartCell {
     /** Add ONE instance of a manifest entry (repeatable — duplicates are legitimate). */
     addManifestInstance(
         entry: ResolvedIndicator,
-        opts: { record?: boolean; external?: boolean; inputs?: Record<string, InputValue>; props?: Record<string, InputValue> } = {},
+        opts: { record?: boolean; external?: boolean; inputs?: Record<string, InputValue>; props?: Record<string, InputValue>; hidden?: boolean } = {},
     ): void {
         if (this.destroyed) return;
         const values = opts.inputs || opts.props ? { inputs: opts.inputs, props: opts.props } : undefined;
         const it: CellInstance = { entry, handle: this.addToChart(entry, values), ...(opts.external ? { external: true } : {}), ...(values ? { values } : {}) };
+        if (opts.hidden) it.handle?.setVisible(false);
         this.instances.push(it);
         this.deps.onIndicatorsChanged(this.id);
         if (opts.record === false) return;
@@ -1368,7 +1379,8 @@ export class ChartCell {
                 // one entry per instance, in registry order, with its LIVE input deltas
                 present: this.nativeHandles().map((h) => {
                     const d = instanceDeltas(h)?.inputs;
-                    return d ? { type: h.nativeType!, inputs: d } : h.nativeType!;
+                    const hidden = !h.visible;
+                    return d || hidden ? { type: h.nativeType!, ...(d ? { inputs: d } : {}), ...(hidden ? { hidden: true as const } : {}) } : h.nativeType!;
                 }),
                 instanceEntries: this.instances
                     .filter((it) => !it.external)
@@ -1376,7 +1388,8 @@ export class ChartCell {
                         // LIVE deltas from the handle; a handle-less instance (add failed)
                         // keeps whatever values it was restored with.
                         const d = it.handle ? instanceDeltas(it.handle) : it.values;
-                        return d ? { name: it.entry.name, ...d } : it.entry.name;
+                        const hidden = it.handle ? !it.handle.visible : false;
+                        return d || hidden ? { name: it.entry.name, ...(d ?? {}), ...(hidden ? { hidden: true as const } : {}) } : it.entry.name;
                     }),
                 pendingManifest: this.pendingManifestNames,
                 manifestSettled: this.deps.manifestSettled(),
