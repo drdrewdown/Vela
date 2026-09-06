@@ -99,10 +99,18 @@ export type LedgerManifestEntry = string | { name: string; inputs?: Record<strin
 /** The entry's manifest NAME, whichever shape it travels as. */
 export const ledgerEntryName = (e: LedgerManifestEntry): string => (typeof e === 'string' ? e : e.name);
 
+/** One native instance in the ledger: the bare TYPE when its inputs sit on the descriptor
+ *  defaults, else the type plus the input DELTAS — the same rule as manifest entries. */
+export type LedgerNativeEntry = string | { type: string; inputs?: Record<string, InputValue> };
+
+/** The entry's native TYPE, whichever shape it travels as. */
+export const ledgerNativeType = (e: LedgerNativeEntry): string => (typeof e === 'string' ? e : e.type);
+
 /** Everything {@link indicatorLedger} needs to decide what a state snapshot reports. */
 export interface LedgerInputs {
-    /** Native types present on the chart RIGHT NOW (`chart.presentNativeIndicators()` — sync). */
-    present: readonly string[];
+    /** Native instances present on the chart RIGHT NOW (sync registry read), each with the
+     *  input deltas it carries. */
+    present: readonly LedgerNativeEntry[];
     /** The live manifest instances (the shell's own synchronous array), values included. */
     instanceEntries: readonly LedgerManifestEntry[];
     /** A restored ledger's manifest half, until it materializes (null once consumed). */
@@ -130,9 +138,9 @@ export interface LedgerInputs {
  * never be repainted as "empty because nothing loaded yet" — that resurrection was the
  * bug this helper exists to pin down.
  */
-export function indicatorLedger(i: LedgerInputs): { manifest: LedgerManifestEntry[]; natives: string[] } {
-    const natives = [...i.present];
-    if (i.volumePending && !natives.includes('volume')) natives.push('volume');
+export function indicatorLedger(i: LedgerInputs): { manifest: LedgerManifestEntry[]; natives: LedgerNativeEntry[] } {
+    const natives: LedgerNativeEntry[] = [...i.present];
+    if (i.volumePending && !natives.some((n) => ledgerNativeType(n) === 'volume')) natives.push('volume');
     return {
         manifest: i.manifestSettled ? [...i.instanceEntries] : [...(i.pendingManifest ?? i.instanceEntries)],
         natives,

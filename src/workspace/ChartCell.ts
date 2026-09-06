@@ -24,7 +24,7 @@ import { CellControls } from '../widget/cell-controls';
 import { ChartContextMenu } from '../widget/context-menu';
 import { WidgetHistory } from '../widget/history';
 import type { RangePreset } from '../widget/bottombar';
-import { indicatorLedger, ledgerEntryName, type LedgerManifestEntry, type ResolvedIndicator } from '../widget/indicators';
+import { indicatorLedger, ledgerEntryName, type LedgerManifestEntry, type ResolvedIndicator, ledgerNativeType, type LedgerNativeEntry } from '../widget/indicators';
 import { inputDeltas, type InputValue } from '../core/model/inputs';
 import {
     legendActionsProviderFor,
@@ -261,7 +261,7 @@ export class ChartCell {
     private volumeIntent: boolean;
     /** Sync mirror of the chart's native instances (id + type) — the removal handler
      *  looks the removed id up here to learn which type an undo must re-add. */
-    private presentNatives: Array<{ id: string; type: string }> = [];
+    private presentNatives: Array<{ id: string; type: string; inputs?: Record<string, InputValue> }> = [];
     private rangeBars = 0;
     private pendingRange: RangePreset | null = null;
     /** Last symbol we toasted "no provider serves this" for — once per symbol (the
@@ -388,10 +388,10 @@ export class ChartCell {
         // resolving) and stay reported by `dehydrate` until then, so an early snapshot
         // (persist flush racing the resolution) never wipes them.
         if (seed.indicators) {
-            for (const type of seed.indicators.natives) this.inner.addNativeIndicator(type);
+            for (const e of seed.indicators.natives as LedgerNativeEntry[]) this.inner.addNativeIndicator(ledgerNativeType(e), typeof e === 'object' && e.inputs ? { inputs: e.inputs } : {});
             this.pendingManifestNames = [...seed.indicators.manifest] as LedgerManifestEntry[];
         }
-        this.volumeIntent = seed.indicators ? seed.indicators.natives.includes('volume') : deps.volume;
+        this.volumeIntent = seed.indicators ? seed.indicators.natives.some((e) => ledgerNativeType(e as LedgerNativeEntry) === 'volume') : deps.volume;
         // Third-party state rides in verbatim; the workspace triggers the handlers'
         // `restore` AFTER wiring the cell (restorePersistedExt) — a restore that adds
         // indicators must not call back into a workspace that doesn't know the cell yet.
@@ -513,11 +513,11 @@ export class ChartCell {
                 // a multi-instance type may have siblings on the chart.
                 const gone = this.presentNatives.find((n) => n.id === id);
                 if (gone) {
-                    const { type } = gone;
+                    const { type, inputs } = gone;
                     let revived: IndicatorHandle | null = null;
                     this.history.push({
                         undo: () => {
-                            revived = this.inner?.addNativeIndicator(type) ?? null;
+                            revived = this.inner?.addNativeIndicator(type, inputs ? { inputs } : {}) ?? null;
                             this.refreshNativeCatalog();
                         },
                         redo: () => {
@@ -1019,23 +1019,35 @@ export class ChartCell {
      * resolves. Convergence is state application, not user edits — nothing enters the
      * undo timeline.
      */
-    private applyIndicatorLedger(led: { manifest: LedgerManifestEntry[]; natives: string[] }): void {
+    private applyIndicatorLedger(led: { manifest: LedgerManifestEntry[]; natives: LedgerNativeEntry[] }): void {
         const chart = this.inner;
         if (!chart) return;
-        this.volumeIntent = led.natives.includes('volume');
+        this.volumeIntent = led.natives.some((e) => ledgerNativeType(e) === 'volume');
         this.history.silently(() => {
             // Converge as a MULTISET: a multi-instance type is listed once per instance.
-            // Existing instances are kept while the ledger still owes their type; the
-            // surplus goes, the shortfall is added.
-            const owed = new Map<string, number>();
-            for (const type of led.natives) owed.set(type, (owed.get(type) ?? 0) + 1);
-            for (const h of this.nativeHandles()) {
-                const type = h.nativeType!;
-                const n = owed.get(type) ?? 0;
-                if (n > 0) owed.set(type, n - 1);
-                else h.remove();
+            // Each entry claims an existing instance of its type (and brings that instance's
+            // inputs to the entry's — the descriptor defaults plus its deltas); the surplus
+            // goes, the shortfall is added with its inputs.
+            const pool = this.nativeHandles();
+            const claimed = new Set<IndicatorHandle>();
+            const missing: LedgerNativeEntry[] = [];
+            for (const e of led.natives) {
+                const type = ledgerNativeType(e);
+                const h = pool.find((x) => !claimed.has(x) && x.nativeType === type);
+                if (!h) {
+                    missing.push(e);
+                    continue;
+                }
+                claimed.add(h);
+                const want = typeof e === 'object' ? e.inputs : undefined;
+                if (JSON.stringify(instanceDeltas(h)?.inputs ?? null) !== JSON.stringify(want ?? null)) {
+                    const defaults: Record<string, InputValue> = {};
+                    for (const sch of h.inputs) defaults[sch.key] = sch.defval;
+                    h.setInputs({ ...defaults, ...(want ?? {}) });
+                }
             }
-            for (const [type, n] of owed) for (let i = 0; i < n; i++) chart.addNativeIndicator(type);
+            for (const h of pool) if (!claimed.has(h)) h.remove();
+            for (const e of missing) chart.addNativeIndicator(ledgerNativeType(e), typeof e === 'object' && e.inputs ? { inputs: e.inputs } : {});
             for (const it of [...this.instances]) this.dropInstance(it);
             if (this.manifest.length > 0) {
                 for (const item of led.manifest) {
@@ -1204,7 +1216,7 @@ export class ChartCell {
     /** Sync mirror of the chart's native instances — the removal handler looks the
      *  removed id up here (the registry has already forgotten it) to record its type. */
     private syncPresentNatives(): void {
-        this.presentNatives = this.nativeHandles().map((h) => ({ id: h.id, type: h.nativeType! }));
+        this.presentNatives = this.nativeHandles().map((h) => ({ id: h.id, type: h.nativeType!, ...(instanceDeltas(h)?.inputs ? { inputs: instanceDeltas(h)!.inputs } : {}) }));
     }
 
     /** Refresh the native catalog (supported/present flags) for this cell's market. */
@@ -1353,7 +1365,11 @@ export class ChartCell {
             // (`ctx.addIndicator`) stay out: their names would never resolve against the
             // manifest — their plugin persists them via the `ext` seam instead.
             indicators: indicatorLedger({
-                present: this.inner ? this.inner.presentNativeIndicators() : [],
+                // one entry per instance, in registry order, with its LIVE input deltas
+                present: this.nativeHandles().map((h) => {
+                    const d = instanceDeltas(h)?.inputs;
+                    return d ? { type: h.nativeType!, inputs: d } : h.nativeType!;
+                }),
                 instanceEntries: this.instances
                     .filter((it) => !it.external)
                     .map((it) => {

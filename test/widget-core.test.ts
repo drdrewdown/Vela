@@ -285,6 +285,16 @@ describe('indicatorLedger', () => {
         expect(indicatorLedger({ ...base, manifestSettled: false })).toEqual({ manifest: [], natives: [] });
     });
 
+    it('a native instance carries its input deltas, bare type when on defaults — or a reload forgets them', () => {
+        // The bug: natives persisted by TYPE only, so an edited MA length came back at its
+        // default after a refresh while a manifest study kept its values.
+        expect(indicatorLedger({ ...base, present: ['volume', { type: 'sma', inputs: { length: 50 } }] }))
+            .toEqual({ manifest: [], natives: ['volume', { type: 'sma', inputs: { length: 50 } }] });
+        // volume intent dedupes against an entry of either shape
+        expect(indicatorLedger({ ...base, volumePending: true, present: [{ type: 'volume', inputs: { ma: true } }] }))
+            .toEqual({ manifest: [], natives: [{ type: 'volume', inputs: { ma: true } }] });
+    });
+
     it('reports the volume INTENT until the auto-add had its chance, never duplicating', () => {
         expect(indicatorLedger({ ...base, volumePending: true })).toEqual({ manifest: [], natives: ['volume'] });
         expect(indicatorLedger({ ...base, volumePending: true, present: ['volume'] })).toEqual({ manifest: [], natives: ['volume'] });

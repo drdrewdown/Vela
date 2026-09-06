@@ -82,10 +82,10 @@ export interface CellState {
     rendererConfig?: unknown;
     /** The user-drawings document (`drawings.toJSON()`). */
     drawings?: unknown;
-    /** The indicator ledger: manifest entries + present native types. A manifest entry
-     *  is the bare NAME when every value sits on its declaration default, else the
+    /** The indicator ledger: manifest entries + present native instances. An entry is
+     *  the bare NAME / TYPE when every value sits on its declaration default, else the
      *  name plus the input/prop DELTAS (defaults are never frozen into documents). */
-    indicators?: { manifest: PersistedManifestEntry[]; natives: string[] };
+    indicators?: { manifest: PersistedManifestEntry[]; natives: PersistedNativeEntry[] };
     /** Third-party per-chart state, by namespaced key (`'vendor.feature'`) — written and
      *  read by registered state-persistence handlers (`registerStatePersistence`, scope
      *  `'cell'`). Values are OPAQUE here: the codec preserves entries verbatim — a key
@@ -96,6 +96,10 @@ export interface CellState {
 
 /** One persisted manifest-instance entry (see `CellState.indicators`). */
 export type PersistedManifestEntry = string | { name: string; inputs?: Record<string, unknown>; props?: Record<string, unknown> };
+
+/** One persisted native-instance entry: the bare TYPE when every input sits on its
+ *  descriptor default, else the type plus the input DELTAS. */
+export type PersistedNativeEntry = string | { type: string; inputs?: Record<string, unknown> };
 
 /** One entry of the document's `charts` array: a chart's state plus its cell IDENTITY. */
 export interface ChartState extends CellState {
@@ -245,7 +249,19 @@ function sanitizeCell(raw: unknown): CellState | null {
                   return [];
               })
             : [];
-        const natives = Array.isArray(ind.natives) ? ind.natives.filter((n): n is string => typeof n === 'string') : [];
+        // Natives: bare types pass as-is; object entries keep a string type and a plain-object
+        // input bag (the add path merges it over the descriptor defaults).
+        const natives: PersistedNativeEntry[] = Array.isArray(ind.natives)
+            ? ind.natives.flatMap((n): PersistedNativeEntry[] => {
+                  if (typeof n === 'string') return [n];
+                  if (n != null && typeof n === 'object' && typeof (n as { type?: unknown }).type === 'string') {
+                      const e = n as { type: string; inputs?: unknown };
+                      const inputs = e.inputs != null && typeof e.inputs === 'object' && !Array.isArray(e.inputs) ? (e.inputs as Record<string, unknown>) : undefined;
+                      return [inputs ? { type: e.type, inputs } : e.type];
+                  }
+                  return [];
+              })
+            : [];
         out.indicators = { manifest, natives };
     }
     const ext = sanitizeExt(c.ext);
