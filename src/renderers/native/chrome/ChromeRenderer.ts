@@ -28,6 +28,15 @@ import { tzOffsetMs } from './tz';
  * compute the drawing price-range that folds into autoscale (`paneDrawingsRange`).
  */
 /** Whether a series earns a price-scale value chip: visible, with points, and not opted out. */
+/** Height of every chip on the price scale. */
+const CHIP_H = 16;
+
+/** The one font every price-scale chip paints in — the current-price pair, the countdown
+ *  pill, the indicator value chips and the visible-range high/low read alike. */
+function chipFont(scene: { style: { fontSize: number } }, theme: { fontFamily: string }): string {
+    return `600 ${scene.style.fontSize}px ${theme.fontFamily}`;
+}
+
 export function seriesChipEligible(s: { visible?: boolean; scaleChip?: boolean; points?: readonly unknown[] }): boolean {
     return s.visible !== false && s.scaleChip !== false && !!s.points && s.points.length > 0;
 }
@@ -297,7 +306,7 @@ export class ChromeRenderer {
             const sTextColor = tagTextColor(sColor, theme.background);
             const wPrice = Math.max(ctx.measureText(sPriceText).width + 8, 56);
             const wTag = Math.max(ctx.measureText(tag).width + 8, 38);
-            const chipH = 16;
+            const chipH = CHIP_H;
             const top = Math.round(sY - chipH / 2);
 
             let xPrice, xTag;
@@ -346,7 +355,7 @@ export class ChromeRenderer {
         // 1. Indicator series chips (e.g. EMA9, EMA50, EMA100, EMA200, Key Levels, Volume Profile)
         const showIndicatorChips = scene.showIndicatorChips;
         if (showIndicatorChips) {
-            ctx.font = `600 ${Math.max(9, (scene.style?.fontSize ?? 11) - 1)}px ${theme.fontFamily}`;
+            ctx.font = chipFont(scene, theme);
             ctx.textBaseline = "middle";
 
             // Chip candidates are plain records built from the live model; typed loosely on purpose —
@@ -426,7 +435,6 @@ export class ChromeRenderer {
             // pushed upward and labels below are pushed downward, each stacking on its neighbour.
             // The centre block here is the ticker price chip plus the countdown pill beneath it.
             {
-                const CHIP_H = 16;
                 const GAP = 1;
                 const paneTop = pricePane.bounds.top;
                 const paneBottom = paneTop + pricePane.bounds.height;
@@ -434,7 +442,7 @@ export class ChromeRenderer {
                 const tickerHasLabel = !!scene.showPriceLabel;
                 const tickerHasCd = !!scene.showCountdown && coords.barInterval > 0;
                 const fixedTop = tickerTop;
-                const fixedBottom = tickerTop + (tickerHasLabel ? CHIP_H : 0) + (tickerHasCd ? 15 : 0);
+                const fixedBottom = tickerTop + (tickerHasLabel ? CHIP_H : 0) + (tickerHasCd ? CHIP_H + GAP : 0);
                 const hasFixed = fixedBottom > fixedTop;
                 const centerY = (fixedTop + fixedBottom) / 2;
                 const above = finalChips.filter((c) => c.sY <= centerY).sort((a, b) => b.sY - a.sY);
@@ -466,13 +474,13 @@ export class ChromeRenderer {
         const chipBg = chrome.chipBackground;
         const chipFg = chrome.chipText;
 
-        ctx.font = `${scene.style.fontSize}px ${theme.fontFamily}`;
+        ctx.font = chipFont(scene, theme);
         ctx.textBaseline = "middle";
 
         const priceText = formatAxisValue(pricePane.scale, pricePane.bounds.height, last.close, percentScaleFor(scene, pricePane), scene.priceMintick);
         const wPrice = Math.max(ctx.measureText(priceText).width + 8, 62);
         const wTicker = Math.max(ctx.measureText(tickerTag).width + 8, 36);
-        const chipH = 16;
+        const chipH = CHIP_H;
         const top = Math.round(y - chipH / 2);
 
         if (scene.showPriceLine) {
@@ -555,9 +563,9 @@ export class ChromeRenderer {
             const remainingMs = Math.max(0, target - now);
             const cdText = formatCountdown(remainingMs);
 
-            ctx.font = `600 ${Math.max(9, (scene.style?.fontSize ?? 11) - 2)}px ${theme.fontFamily}`;
+            ctx.font = chipFont(scene, theme);
             const wCd = ctx.measureText(cdText).width + 8;
-            const cdH = 14;
+            const cdH = CHIP_H;
             const cdTop = top + chipH + 1;
 
             if (isLeft) {
@@ -617,8 +625,7 @@ export class ChromeRenderer {
         const loText = "L " + formatAxisValue(pricePane.scale, pricePane.bounds.height, lo, percentScaleFor(scene, pricePane), scene.priceMintick);
         ctx.textBaseline = "middle";
         ctx.textAlign = "center";
-        const fontSize = Math.max(9, (scene.style?.fontSize ?? 11) - 1);
-        ctx.font = `600 ${fontSize}px ${theme.fontFamily}`;
+        ctx.font = chipFont(scene, theme);
 
         const chrome = resolveChrome(theme);
         if (hiY >= pricePane.bounds.top && hiY <= pricePane.bounds.top + pricePane.bounds.height && Math.abs(hiY - curY) >= 14) {
