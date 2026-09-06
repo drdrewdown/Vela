@@ -10,7 +10,7 @@ import { Menu } from '../ui/components/menu';
 import { segmentVisibility, statuslineMenuItems, type StatuslinePart } from './statusline-model';
 import { SESSION_PRE, SESSION_POST, SESSION_OFF } from '../core/palette';
 import { iconAt } from '../core/icons';
-import { fmtPrice, fmtChange, decimalsFor } from './format';
+import { fmtPrice, fmtChange, fmtVolume, decimalsFor } from './format';
 import { timeframeLabel } from './timeframe';
 import { tickerIconEl } from './symbol-icon';
 import { parseSymbol } from '../data/ProviderRegistry';
@@ -72,6 +72,8 @@ const CSS = `
 .vela-statusline .vela-sl-market { align-self: center; }
 .vela-statusline .vela-sl-ohlc { display: flex; gap: var(--vela-space-1); color: var(--vela-fg-muted); }
 .vela-statusline .vela-sl-ohlc b { color: var(--vela-fg); font-weight: 500; }
+.vela-statusline .vela-sl-volume { display: flex; gap: var(--vela-space-1); color: var(--vela-fg-muted); }
+.vela-statusline .vela-sl-volume b { color: var(--vela-fg); font-weight: 500; }
 /* The change value wears the SAME ink as the OHLC values (set inline per render) —
  * these are the pre-ink fallbacks only. */
 .vela-statusline .vela-sl-change[data-dir='up'] { color: var(--vela-up); }
@@ -132,6 +134,7 @@ const CSS = `
 [data-layout='mobile'] .vela-statusline .vela-sl-avatar,
 [data-layout='mobile'] .vela-statusline .vela-sl-market { align-self: center; }
 [data-layout='mobile'] .vela-statusline .vela-sl-ohlc { display: none !important; }
+[data-layout='mobile'] .vela-statusline .vela-sl-volume { display: none !important; }
 [data-layout='mobile'] .vela-statusline .vela-sl-change {
     /* Second row, under the text column — the avatar keeps the first column. */
     grid-column: 2 / -1;
@@ -163,6 +166,7 @@ interface BarLike {
     high: number;
     low: number;
     close: number;
+    volume?: number;
 }
 
 function baseOfTicker(ticker: string): string {
@@ -268,6 +272,7 @@ export interface StatuslineMenuHooks {
 export class Statusline {
     readonly el: HTMLElement;
     private readonly ohlcEl: HTMLElement;
+    private readonly volumeEl: HTMLElement;
     private readonly changeEl: HTMLElement;
     private readonly symbolEl: HTMLElement;
     private readonly marketEl: HTMLElement;
@@ -279,7 +284,7 @@ export class Statusline {
     private eyeTip!: Tooltip;
     private avatarEl: HTMLElement;
     private metaEl!: HTMLElement;
-    private readonly parts: Record<StatuslinePart, boolean> = { logo: true, name: true, market: true, ohlc: true, change: true };
+    private readonly parts: Record<StatuslinePart, boolean> = { logo: true, name: true, market: true, ohlc: true, volume: true, change: true };
     /** The right-click action menu — present once a host wires it via {@link attachMenu}. */
     private menu: Menu | null = null;
     private menuHooks: StatuslineMenuHooks | null = null;
@@ -337,6 +342,8 @@ export class Statusline {
         this.marketEl.classList.add('vela-sl-market');
         this.ohlcEl = doc.createElement('span');
         this.ohlcEl.className = 'vela-sl-ohlc';
+        this.volumeEl = doc.createElement('span');
+        this.volumeEl.className = 'vela-sl-volume';
         this.changeEl = doc.createElement('span');
         this.changeEl.className = 'vela-sl-change';
         // Show-chart eye: takes the value readout's place while the chart is hidden
@@ -352,7 +359,7 @@ export class Statusline {
             this.menuHooks?.setChartVisible(true);
             this.setChartHidden(false);
         });
-        this.el.append(this.avatarEl, this.symbolEl, this.metaEl, this.marketEl, this.ohlcEl, this.changeEl, this.eyeEl);
+        this.el.append(this.avatarEl, this.symbolEl, this.metaEl, this.marketEl, this.ohlcEl, this.volumeEl, this.changeEl, this.eyeEl);
         host.appendChild(this.el);
         // The tooltips portal to the nearest `.vela-ui` ancestor for theme tokens — resolve
         // them AFTER the statusline is in the DOM. The badge's content follows setMarketStatus.
@@ -404,6 +411,7 @@ export class Statusline {
         this.metaEl.style.display = seg.meta ? '' : 'none';
         this.marketEl.style.display = seg.market ? '' : 'none';
         this.ohlcEl.style.display = seg.ohlc ? '' : 'none';
+        this.volumeEl.style.display = seg.volume ? '' : 'none';
         this.changeEl.style.display = seg.change ? '' : 'none';
         this.eyeEl.style.display = seg.eye ? 'inline-flex' : 'none';
     }
@@ -573,6 +581,7 @@ export class Statusline {
         const bar = this.hoverBar ?? this.lastBar;
         if (!bar) {
             this.ohlcEl.replaceChildren();
+            this.volumeEl.replaceChildren();
             this.changeEl.textContent = '';
             return;
         }
@@ -582,19 +591,24 @@ export class Statusline {
         // ONE ink for the whole readout — OHLC values and the change share it, so the
         // row always reads in the color the plot wears at this bar.
         const ink = up ? (this.upColor ?? 'var(--vela-up)') : (this.downColor ?? 'var(--vela-down)');
-        const cell = (k: string, v: number) => {
+        const cell = (k: string, v: string) => {
             const s = doc.createElement('span');
             if (k) s.append(`${k} `);
             const b = doc.createElement('b');
-            b.textContent = fmtPrice(v, dp);
+            b.textContent = v;
             b.style.color = ink;
             s.appendChild(b);
             return s;
         };
+        const price = (k: string, v: number) => cell(k, fmtPrice(v, dp));
         // Bar-shaped styles read out all four values; a one-line style (line/area/baseline)
         // plots a single series, so its readout is just that value — the close.
-        if (this.readout === 'value') this.ohlcEl.replaceChildren(cell('', bar.close));
-        else this.ohlcEl.replaceChildren(cell('O', bar.open), cell('H', bar.high), cell('L', bar.low), cell('C', bar.close));
+        if (this.readout === 'value') this.ohlcEl.replaceChildren(price('', bar.close));
+        else this.ohlcEl.replaceChildren(price('O', bar.open), price('H', bar.high), price('L', bar.low), price('C', bar.close));
+        // A bar without volume (a feed that carries none) leaves the segment empty rather than
+        // printing a zero the trader would read as a real print.
+        if (bar.volume != null && Number.isFinite(bar.volume)) this.volumeEl.replaceChildren(cell('V', fmtVolume(bar.volume)));
+        else this.volumeEl.replaceChildren();
         this.changeEl.textContent = fmtChange(bar.open, bar.close);
         this.changeEl.dataset.dir = up ? 'up' : 'down';
         this.changeEl.style.color = ink;

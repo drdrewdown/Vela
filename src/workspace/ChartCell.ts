@@ -760,6 +760,13 @@ export class ChartCell {
                     },
                     {
                         kind: 'toggle',
+                        label: 'Volume',
+                        id: 'volume',
+                        get: () => sl.partVisible('volume'),
+                        set: (v: boolean) => this.setStatuslinePart('volume', v),
+                    },
+                    {
+                        kind: 'toggle',
                         label: 'Bar change values',
                         id: 'change',
                         get: () => sl.partVisible('change'),
@@ -823,7 +830,7 @@ export class ChartCell {
         const sl = this.statusline;
         return {
             parts: sl
-                ? { logo: sl.partVisible('logo'), name: sl.partVisible('name'), market: sl.partVisible('market'), ohlc: sl.partVisible('ohlc'), change: sl.partVisible('change') }
+                ? { logo: sl.partVisible('logo'), name: sl.partVisible('name'), market: sl.partVisible('market'), ohlc: sl.partVisible('ohlc'), volume: sl.partVisible('volume'), change: sl.partVisible('change') }
                 : null,
             indicatorTitles: this.indicatorTitlesOn,
             indicatorValues: this.indicatorValuesOn,

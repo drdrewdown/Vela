@@ -5,11 +5,11 @@
 import { describe, it, expect } from 'vitest';
 import { segmentVisibility, statuslineMenuItems, type StatuslinePart } from '../src/widget/statusline-model';
 
-const allOn: Record<StatuslinePart, boolean> = { logo: true, name: true, market: true, ohlc: true, change: true };
+const allOn: Record<StatuslinePart, boolean> = { logo: true, name: true, market: true, ohlc: true, volume: true, change: true };
 
 describe('segmentVisibility', () => {
     it('everything on shows every segment (and keeps the eye stowed)', () => {
-        expect(segmentVisibility(allOn)).toEqual({ avatar: true, symbol: true, meta: true, market: true, ohlc: true, change: true, eye: false });
+        expect(segmentVisibility(allOn)).toEqual({ avatar: true, symbol: true, meta: true, market: true, ohlc: true, volume: true, change: true, eye: false });
     });
 
     it("'logo' gates only the avatar", () => {
@@ -69,5 +69,20 @@ describe('statuslineMenuItems', () => {
         expect(shownItems[shownItems.length - 1]).toMatchObject({ id: 'chart', label: 'Hide chart', separatorBefore: true });
         const hiddenItems = statuslineMenuItems(allOn, false);
         expect(hiddenItems[hiddenItems.length - 1]).toMatchObject({ id: 'chart', label: 'Show chart' });
+    });
+});
+
+// The bar's volume is a value readout of its own: its part sits between OHLC and the bar
+// change, toggles on its own, and goes with the rest of the readout when the chart hides.
+describe("'volume' part", () => {
+    it('is its own segment, off with a hidden chart', () => {
+        expect(segmentVisibility({ ...allOn, volume: false }).volume).toBe(false);
+        expect(segmentVisibility({ ...allOn, ohlc: false }).volume).toBe(true);
+        expect(segmentVisibility(allOn, true).volume).toBe(false);
+    });
+
+    it('the menu lists it after the OHLC values', () => {
+        const ids = statuslineMenuItems(allOn, true).map((i) => i.id);
+        expect(ids.indexOf('part:volume')).toBe(ids.indexOf('part:ohlc') + 1);
     });
 });

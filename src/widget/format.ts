@@ -21,3 +21,13 @@ export function fmtChange(open: number | null | undefined, close: number | null 
     const sign = diff >= 0 ? '+' : '';
     return `${sign}${fmtPrice(diff, decimalsFor(close))} (${sign}${pct.toFixed(2)}%)`;
 }
+
+/** A bar's volume, abbreviated to the units a trader scans: whole below a thousand, then
+ *  `K` / `M` / `B` with two decimals. */
+export function fmtVolume(v: number): string {
+    const a = Math.abs(v);
+    if (a >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
+    if (a >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
+    if (a >= 1e3) return `${(v / 1e3).toFixed(2)}K`;
+    return String(Math.round(v));
+}
