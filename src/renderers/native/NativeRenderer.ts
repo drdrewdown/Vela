@@ -399,9 +399,8 @@ export class NativeRenderer implements IChartRenderer {
                 return;
             }
             case 'zoomAnchor':
-                this.zoomAnchorMode = value === 'right' ? 'right' : 'cursor';
-                if (this.input) this.input.rightEdgeZoom = this.zoomAnchorMode === 'right';
-                return; // affects the next wheel-zoom only — nothing to repaint
+                this.applyConfig({ timeScale: { zoomAnchor: value === 'right' ? 'right' : 'cursor' } });
+                return; // affects the next wheel only — nothing to repaint // affects the next wheel-zoom only — nothing to repaint
             case 'axisDrag':
                 this.axisDragEnabled = Boolean(value);
                 if (this.input) this.input.axisDrag = this.axisDragEnabled;
@@ -735,7 +734,7 @@ export class NativeRenderer implements IChartRenderer {
                 shortColor: this.scene.tradeMarkers.colors.short,
                 exitColor: this.scene.tradeMarkers.colors.exit,
             },
-            timeScale: { timezone: this.scene.timezone, hour12: this.scene.hour12 },
+            timeScale: { timezone: this.scene.timezone, hour12: this.scene.hour12, zoomAnchor: this.zoomAnchorMode },
             candles: {
                 upColor: this.candleUp,
                 downColor: this.candleDown,
@@ -890,6 +889,8 @@ export class NativeRenderer implements IChartRenderer {
         // time scale
         this.scene.timezone = next.timeScale.timezone;
         this.scene.hour12 = next.timeScale.hour12;
+        this.zoomAnchorMode = next.timeScale.zoomAnchor;
+        if (this.input) this.input.rightEdgeZoom = this.zoomAnchorMode === 'right';
         // candles
         this.candleUp = next.candles.upColor;
         this.candleDown = next.candles.downColor;

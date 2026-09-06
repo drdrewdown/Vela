@@ -431,6 +431,9 @@ export class SettingsDialog {
         body.append(sid(this.selectRowLabeled('Time zone', normalizeTimezone(config.timeScale.timezone), timezoneOptions(config.timeScale.timezone), (v) => this.emit({ timeScale: { timezone: v } })), 'symbol.timezone'));
         body.append(sid(this.selectRowLabeled('Clock', config.timeScale.hour12 ? '12h' : '24h', [['24h', '24-hour'], ['12h', '12-hour (AM/PM)']] as const, (v) => this.emit({ timeScale: { hour12: v === '12h' } })), 'symbol.timezone.clock'));
 
+        body.append(sid(this.sectionTitle('Navigation'), 'symbol.navigation'));
+        body.append(sid(this.selectRowLabeled('Wheel zoom', config.timeScale.zoomAnchor, [['right', 'Pin the latest bar'], ['cursor', 'Zoom at the pointer']] as const, (v) => this.emit({ timeScale: { zoomAnchor: v === 'cursor' ? 'cursor' : 'right' } })), 'symbol.navigation.wheel-zoom'));
+
         // ══ HOST SECTIONS — tabs contributed by the embedding app (widget Status line…) ══
         const renderHostSections = (placement: 'after-symbol' | 'end' | 'symbol'): void => {
             for (const hs of this.hostSections) {

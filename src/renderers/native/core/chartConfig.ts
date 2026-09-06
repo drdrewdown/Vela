@@ -273,6 +273,9 @@ export interface ChartConfig {
         timezone: string;
         /** Wall-clock format on the time axis, the crosshair time chip and the bottom-bar clock. */
         hour12: boolean;
+        /** What a wheel zoom keeps pinned: the latest bar (`right`, the common idiom) or the bar
+         *  under the pointer (`cursor`). Ctrl/⌘ + wheel zooms at the pointer in either mode. */
+        zoomAnchor: 'right' | 'cursor';
     };
     /** Per-chart-type settings (plugin SDK sections), keyed by type id then row key. */
     chartTypes: Record<string, Record<string, unknown>>;
@@ -657,6 +660,7 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
         timeScale: {
             timezone: typeof ts.timezone === 'string' && ts.timezone ? ts.timezone : base.timeScale.timezone,
             hour12: isBool(ts.hour12) ? ts.hour12 : base.timeScale.hour12,
+            zoomAnchor: ts.zoomAnchor === 'cursor' || ts.zoomAnchor === 'right' ? ts.zoomAnchor : base.timeScale.zoomAnchor,
         },
         candles: {
             upColor: isColor(candles.upColor) ? candles.upColor : base.candles.upColor,

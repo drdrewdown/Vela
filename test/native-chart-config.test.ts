@@ -125,7 +125,7 @@ describe('NativeRenderer.getConfig — defaults resolve to concrete values', () 
         expect(cfg.crosshair).toEqual({ color: '#9aa0ad', width: 1, style: 'dashed', opacity: 0.4, labelBackground: '#595959' });
         expect(cfg.priceScale).toEqual({ mode: 'price', side: 'right', log: false, invert: false, borderColor: '#161d2b', labelsVisible: true, currentPriceLine: true, priceLabel: true, countdown: true, animateLastPrice: false, rangeChips: true, indicatorChips: true, mergeChips: true });
         expect(cfg.panes).toEqual({ separatorColor: '#161d2b', weights: {} }); // inherits the theme border
-        expect(cfg.timeScale).toEqual({ timezone: 'UTC', hour12: false });
+        expect(cfg.timeScale).toEqual({ timezone: 'UTC', hour12: false, zoomAnchor: 'right' });
         expect(cfg.candles.upColor).toBe('#5aa1ff');
         expect(cfg.candles.downColor).toBe('#ff709a');
         expect(cfg.candles.borderUpColor).toBe('#5aa1ff'); // inherits the body color
