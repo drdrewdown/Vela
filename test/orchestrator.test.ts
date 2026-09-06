@@ -775,6 +775,54 @@ describe('EngineOrchestrator', () => {
         }
     });
 
+    it('a native hidden before it ever started keeps its legend row and starts fresh when shown', async () => {
+        registerNativeIndicator(testNativeDescriptor);
+        try {
+            const renderer = new FakeRenderer();
+            const chart = new Vela({} as unknown as HTMLElement, { live: false }, { renderer, engines: [], dataFeed: new MockDataFeed() });
+            const h = chart.addNativeIndicator('test-native');
+            h.setVisible(false); // a restored hidden study: hidden in the same tick it is added
+            await chart.ready();
+            await flush();
+            const inst = lastNative;
+
+            // never started, yet present: the legend row is mounted, hidden
+            expect(inst.calls.start).toBe(0);
+            expect(renderer.mountedModels.some((m) => m.id === h.id)).toBe(true);
+            expect(renderer.indicatorVisible.get(h.id)).toBe(false);
+
+            // show → a fresh start (there is no compute to resume), visuals mounted
+            h.setVisible(true);
+            await flush();
+            expect(inst.calls.start).toBe(1);
+            expect(inst.calls.resume).toBe(0);
+            expect(renderer.indicatorVisible.get(h.id)).toBe(true);
+            expect(renderer.mountedModels.filter((m) => m.id === h.id).pop()?.series.length).toBe(1);
+        } finally {
+            unregisterNativeIndicator('test-native');
+        }
+    });
+
+    it('a Pine indicator hidden before it ever ran keeps its legend row and runs when shown', async () => {
+        const renderer = new FakeRenderer();
+        const engine = new MockEngine();
+        const chart = new Vela({} as unknown as HTMLElement, { live: false }, { renderer, engines: [engine], dataFeed: new MockDataFeed() });
+        const ind = chart.addIndicator('//@version=5\nindicator("X", overlay=true)\nplot(close)');
+        ind.setVisible(false);
+        await chart.ready();
+        await flush();
+
+        expect(engine.runCount[ind.id] ?? 0).toBe(0);
+        expect(renderer.mountedModels.some((m) => m.id === ind.id)).toBe(true);
+        expect(renderer.indicatorVisible.get(ind.id)).toBe(false);
+
+        ind.setVisible(true);
+        await flush();
+        expect(engine.runCount[ind.id]).toBeGreaterThan(0);
+        expect(renderer.indicatorVisible.get(ind.id)).toBe(true);
+        expect(renderer.mountedModels.filter((m) => m.id === ind.id).pop()?.series.length).toBe(1);
+    });
+
     it('addNativeIndicator with an unregistered type returns a fail-soft handle (no mount, a warning)', async () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const renderer = new FakeRenderer();

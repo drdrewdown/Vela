@@ -1577,7 +1577,15 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
         try {
             await this.readyPromise;
             const record = this.registry.get(id);
-            if (!record?.native || record.hidden) return; // removed/hidden during the await
+            if (!record?.native) return; // removed during the await
+            if (record.hidden) {
+                // Hidden before it ever ran (a restored hidden study, or hidden in the tick
+                // it was added): keep a legend row so the eye can bring it back, and mark
+                // it stale so showing starts the instance — there is no compute to resume.
+                record.native.stale = true;
+                if (!record.renderHandle) this.mountPlaceholder(id, record, this.buildNativeModel(record, {}));
+                return;
+            }
             const ctx: NativeIndicatorContext = {
                 id,
                 chartId: this.aetherChartId,
@@ -1634,7 +1642,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
      * loading records) still mean "the indicator produced output".
      */
     private mountLoadingPlaceholder(id: string, record: IndicatorRecord): void {
-        if (record.renderHandle || record.hidden || !record.prepared) return;
+        if (record.renderHandle || !record.prepared) return;
         const meta = record.prepared.meta;
         const model: IndicatorModel = {
             id,
@@ -1652,13 +1660,25 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
             inputValues: record.inputValues,
             ...(record.prepared.props ? { props: record.prepared.props, propValues: record.propValues } : {}),
         };
+        this.mountPlaceholder(id, record, model);
+        this.setLoading(record, true);
+    }
+
+    /**
+     * Mount a legend-only presence for an indicator that has produced nothing yet: route
+     * its pane, record the model (keeps pane routing + remove-time pane cleanup consistent)
+     * and leave the record expecting a structural remount from the first real model. An
+     * indicator already hidden — one hidden before it ever ran — mounts with its visuals
+     * off, so the legend row (and its eye) exists while nothing is drawn.
+     */
+    private mountPlaceholder(id: string, record: IndicatorRecord, model: IndicatorModel): void {
         const paneId = this.routePane(id, model, record.options ?? {});
         this.placeModel(model, id, paneId);
-        record.model = model; // keeps pane routing + remove-time pane cleanup consistent
+        record.model = model;
         this.ensurePaneFor(paneId);
         record.renderHandle = this.renderer.mountIndicator(model);
-        record.pendingStructural = true; // the first computed model remounts over the placeholder
-        this.setLoading(record, true);
+        record.pendingStructural = true;
+        if (record.hidden) this.renderer.setIndicatorVisible?.(record.renderHandle, false);
     }
 
     /** Flip the record's loading state and reflect it in the legend row (spinner on/off). */
