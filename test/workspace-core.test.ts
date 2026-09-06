@@ -19,7 +19,7 @@ import {
 } from '../src/workspace/layouts';
 import { evenTracks, resizeTracks, trackOffsets, seamSegments, segmentSpanPx } from '../src/workspace/splitters';
 import { seedDefaults, cellChartDefaults, cellDrawings } from '../src/workspace/ChartCell';
-import { declaredOrder, nextAutoCellId } from '../src/workspace/VelaWorkspace';
+import { declaredOrder, nextAutoCellId, typingRoute } from '../src/workspace/VelaWorkspace';
 import { parseSymbol } from '../src/data/ProviderRegistry';
 
 registerBuiltinLayouts();
@@ -401,6 +401,27 @@ describe('cell identity ↔ slot position (declaredOrder / nextAutoCellId)', () 
         expect(nextAutoCellId(new Set())).toBe('c1');
         expect(nextAutoCellId(new Set(['c1', 'c2']))).toBe('c3');
         expect(nextAutoCellId(new Set(['btc', 'c1', 'c3']))).toBe('c2'); // holes fill first
+    });
+});
+
+describe('typingRoute — bare typing on the shell (pure)', () => {
+    const key = (k: string, extra: Partial<Parameters<typeof typingRoute>[0]> = {}) => ({ key: k, ctrlKey: false, metaKey: false, altKey: false, ...extra });
+
+    it('a letter opens the symbol search, a digit the timeframe entry, chords and other keys nothing', () => {
+        expect(typingRoute(key('e'))).toBe('symbol');
+        expect(typingRoute(key('E'))).toBe('symbol');
+        expect(typingRoute(key('5'))).toBe('timeframe');
+        expect(typingRoute(key('e', { ctrlKey: true }))).toBeNull();
+        expect(typingRoute(key('e', { altKey: true }))).toBeNull();
+        expect(typingRoute(key('?'))).toBeNull();
+        expect(typingRoute(key('Tab'))).toBeNull();
+    });
+
+    it('a key a binding already claimed routes nowhere', () => {
+        // The keymap listens on the same root and runs first; a host chord like Shift+F
+        // must not ALSO open the symbol search seeded with "F".
+        expect(typingRoute(key('F', { defaultPrevented: true }))).toBeNull();
+        expect(typingRoute(key('5', { defaultPrevented: true }))).toBeNull();
     });
 });
 

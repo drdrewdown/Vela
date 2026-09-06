@@ -380,7 +380,8 @@ The shell is keyboard-first (bindings act on the **active cell**):
 
 - Type a **letter** anywhere on a chart → the symbol search opens, seeded with it.
 - Type a **digit** → the timeframe entry opens (`15`, `4h`, `D`, `3M`, … — a bare
-  number is minutes, a bare letter means one unit).
+  number is minutes, a bare letter means one unit). A letter or digit a keymap binding
+  claimed first (a host's `shift+f`, say) is a shortcut, not typing.
 - `alt+S` → download a PNG of the visible layout (every chart, or the
   maximized one). `?` → the shortcuts panel.
 - `mod+↑/↓` glide-zoom, `mod+←/→` glide-pan with the exact feel and limits of a drag

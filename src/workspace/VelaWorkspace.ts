@@ -224,6 +224,17 @@ export function declaredOrder(cells: Record<string, unknown> | undefined): strin
     return names.filter((n) => !/^\d+$/.test(n));
 }
 
+/** Where a bare keystroke on the shell routes (pure): a letter opens the symbol search, a
+ *  digit the timeframe entry, anything chorded or non-printable nowhere. Returns null for
+ *  keys the shell does not route. */
+export function typingRoute(e: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey' | 'altKey'> & { defaultPrevented?: boolean }): 'symbol' | 'timeframe' | null {
+    if (e.ctrlKey || e.metaKey || e.altKey) return null;
+    if (e.defaultPrevented === true) return null; // a binding claimed it first (the keymap shares the root)
+    if (/^[a-zA-Z]$/.test(e.key)) return 'symbol';
+    if (/^[0-9]$/.test(e.key)) return 'timeframe';
+    return null;
+}
+
 /** The first `c<N>` name not already taken — identities for slots beyond the declared list. */
 export function nextAutoCellId(taken: ReadonlySet<string>): string {
     for (let i = 1; ; i += 1) {
@@ -2244,16 +2255,12 @@ export class VelaWorkspace {
     /** Bare-typing router: letters → symbol search (seeded), digits → timeframe entry. */
     private routeTyping(ev: KeyboardEvent): void {
         if (this.destroyed || this.openDialogs > 0) return;
-        if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
         if (isEditableTarget(ev)) return; // never hijack a keystroke someone is TYPING
-        const key = ev.key;
-        if (/^[a-zA-Z]$/.test(key)) {
-            ev.preventDefault();
-            this.symbolPicker.open(key.toUpperCase());
-        } else if (/^[0-9]$/.test(key)) {
-            ev.preventDefault();
-            this.tfQuick.open(key);
-        }
+        const route = typingRoute(ev);
+        if (route === null) return;
+        ev.preventDefault();
+        if (route === 'symbol') this.symbolPicker.open(ev.key.toUpperCase());
+        else this.tfQuick.open(ev.key);
     }
 
     private trackDialog(open: boolean): void {
