@@ -710,15 +710,28 @@ export class DrawingSceneRenderer {
                 item.px = DrawingSceneRenderer.pinnedX(item.lb.text, item.fontPx, item.px, W);
                 return item.px >= -50;
             });
-            // Group chips within MERGE_PX vertically — ticker-agnostic & zoom-adaptive
+            // Group chips within MERGE_PX vertically — ticker-agnostic & zoom-adaptive — and
+            // within MERGE_X_PX horizontally: chips at the margin share one x and merge, a
+            // previous session's chip mid-chart keeps its own place and its own name.
             placed.sort((a: any, b: any) => a.py - b.py);
             const MERGE_PX = 20;
+            const MERGE_X_PX = 40;
+            const rows: any[][] = [];
             let a = 0;
             while (a < placed.length) {
                 let b = a + 1;
                 while (b < placed.length && placed[b].py - placed[a].py <= MERGE_PX) b++;
-                const grp = placed.slice(a, b);
-
+                const row = placed.slice(a, b).sort((g1: any, g2: any) => g1.px - g2.px);
+                let c = 0;
+                while (c < row.length) {
+                    let d = c + 1;
+                    while (d < row.length && row[d].px - row[c].px <= MERGE_X_PX) d++;
+                    rows.push(row.slice(c, d));
+                    c = d;
+                }
+                a = b;
+            }
+            for (const grp of rows) {
                 if (grp.length === 1) {
                     renderList.push(grp[0]);
                 } else {
@@ -780,7 +793,6 @@ export class DrawingSceneRenderer {
                         fontPx: primary.fontPx,
                     });
                 }
-                a = b;
             }
 
             // 2. Process Rest (on-chart anchored labels)

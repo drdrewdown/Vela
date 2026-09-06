@@ -220,3 +220,21 @@ describe('pinned price chips — where a merged chip sits', () => {
         expect(texts[0]!.x).toBeGreaterThanOrEqual(340);
     });
 });
+
+// Chips pool across every study on the pane and merge by pixel distance. Grouping by
+// height alone merged a previous session's ladder chip mid-chart with a level chip at the
+// right margin — one chip, at one of the two places, naming both.
+describe('pinned price chips — merge only where they overlap', () => {
+    const pinned = (id: string, x: number, text: string): DrawingLabel =>
+        label({ id, x, text, style: 'label_left', yloc: 'price', y: 100, size: 'tiny' });
+
+    it('the same price at two different x stays two chips', () => {
+        const { texts } = paint([pinned('a', 200, 'R3 100'), pinned('b', 340, 'VAL 100')]);
+        expect(texts.map((t) => t.text).sort()).toEqual(['R3 100', 'VAL 100']);
+    });
+
+    it('chips pulled back to the margin share one x and still merge', () => {
+        const { texts } = paint([pinned('a', 900, 'POC 100'), pinned('b', 1200, 'VAL 100')]);
+        expect(texts.map((t) => t.text)).toEqual(['POC·VAL 100']);
+    });
+});
