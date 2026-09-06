@@ -2245,11 +2245,15 @@ export class VelaWorkspace {
             keys: '?',
             label: 'Show this shortcuts panel',
             category: 'Help',
-            run: () => {
-                this.shortcutsHelp ??= new ShortcutsHelp(this.keymap, this.root, (open) => this.trackDialog(open));
-                this.shortcutsHelp.open();
-            },
+            run: () => this.openShortcuts(),
         });
+    }
+
+    /** Open the shortcuts help panel — what `?` does — for a host's own help button. */
+    openShortcuts(): void {
+        if (this.destroyed) return;
+        this.shortcutsHelp ??= new ShortcutsHelp(this.keymap, this.root, (open) => this.trackDialog(open));
+        this.shortcutsHelp.open();
     }
 
     /** Bare-typing router: letters → symbol search (seeded), digits → timeframe entry. */

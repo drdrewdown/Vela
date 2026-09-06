@@ -393,6 +393,8 @@ The shell is keyboard-first (bindings act on the **active cell**):
 - Drawing keys (undo/redo, copy/paste, delete, nudge) come from the core — see
   [Drawing tools](./drawing-tools.md).
 
+`ws.openShortcuts()` opens that panel from a host's own help button.
+
 Bindings are declarative descriptors on `ws.keymap` — `register({ id, keys:
 'mod+shift+k', label, category, scope?, run })` — and are listed automatically in the
 `?` panel. `'mod'` is ⌘ on macOS and Ctrl elsewhere. Scopes stack: the shell pushes
