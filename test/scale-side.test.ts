@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { NativeRenderer } from '../src/renderers/native/NativeRenderer';
 import { mergeConfig } from '../src/renderers/native/core/chartConfig';
 import { CoordinateSystem } from '../src/renderers/native/core/CoordinateSystem';
-import { legendLeftPx } from '../src/renderers/shared/InputsUI';
+import { LEGEND_LEFT_CSS } from '../src/renderers/shared/InputsUI';
 
 // `priceScale.side` is the one place the scale's edge is decided; its pixel consequence is
 // `coords.leftOffsetPx`, which every painter reads instead of a global.
@@ -52,7 +52,21 @@ describe('price scale side', () => {
     });
 
     it('the legend column sits 10px into the plot, past whatever the scale reserves on the left', () => {
-        expect(legendLeftPx(0)).toBe(10);
-        expect(legendLeftPx(64)).toBe(74);
+        expect(LEGEND_LEFT_CSS).toContain('--vela-scale-gutter-left');
+        expect(LEGEND_LEFT_CSS).toContain('10px');
+    });
+
+    it("the renderer's own attribution mark clears a left-docked scale", () => {
+        const renderer = new NativeRenderer();
+        // The mark's ink lands through setProperty (a no-op here); its position is assigned as plain fields.
+        type FakeStyle = { left?: string; bottom?: string; setProperty(k: string, v: string): void; removeProperty(k: string): void };
+        const r = renderer as unknown as { attributionEl: { style: FakeStyle } | null; rightAxisW: number; positionAttribution(): void };
+        const style: FakeStyle = { setProperty: () => {}, removeProperty: () => {} };
+        r.attributionEl = { style };
+        r.positionAttribution();
+        expect(r.attributionEl.style.left).toBe('12px');
+        renderer.applyFeature('scaleSide', 'left');
+        r.positionAttribution();
+        expect(r.attributionEl.style.left).toBe(`${r.rightAxisW + 12}px`);
     });
 });

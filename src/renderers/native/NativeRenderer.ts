@@ -1525,7 +1525,7 @@ export class NativeRenderer implements IChartRenderer {
         });
         this.setKeyboardEnabled(this.keyboardEnabled); // accessible by default; wires focus + ARIA
 
-        this.inputsUI = new InputsUI(this.plot, theme, (paneId) => this.paneBoundsFor(paneId), () => this.coords.leftOffsetPx);
+        this.inputsUI = new InputsUI(this.plot, theme, (paneId) => this.paneBoundsFor(paneId));
         this.inputsUI.setLayoutMode(this.layoutMode);
         this.inputsUI.setTitlesVisible(this.indicatorTitlesOn); // a remount keeps the toggle state
         this.inputsUI.setValuesVisible(this.indicatorValuesOn);
@@ -3878,8 +3878,9 @@ export class NativeRenderer implements IChartRenderer {
         const paneBottom = dataHeight > 0 && visible.length
             ? Math.max(...visible.map((p) => p.bounds.top + p.bounds.height))
             : dataHeight;
+        const leftScale = this.scene.scaleSide === 'left' ? this.rightAxisW : 0; // the scale is a left gutter too
         Object.assign(this.attributionEl.style, {
-            left: `${(this.toolbarGutter || 0) + 12}px`,
+            left: `${(this.toolbarGutter || 0) + leftScale + 12}px`,
             bottom: `${TIME_AXIS_H + 10 + Math.max(0, dataHeight - paneBottom)}px`,
         });
     }
