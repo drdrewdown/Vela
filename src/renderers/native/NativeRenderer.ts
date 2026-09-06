@@ -198,6 +198,8 @@ export class NativeRenderer implements IChartRenderer {
     /** The indicator legend folded behind its chevron (`legend.folded`) — held here so a
      *  remount re-applies it. */
     private legendFolded = false;
+    /** Hover tips on indicator drawings (`tooltips.drawings`); off for a host with its own hover card. */
+    private drawingTooltips = true;
     /** Pane heights by id (`panes.weights`) — applied to panes as they appear. */
     private paneWeights: Record<string, number> = {};
     /** Host-contributed legend actions — held here so a rebuild of the legend re-wires them. */
@@ -345,7 +347,7 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     readonly name = 'native';
-    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'scaleSide', 'rangeChips', 'indicatorChips', 'mergeChips', 'legendFolded', 'invertScale', 'paneScales', 'autoScale', 'timezone', 'hour12', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'indicatorTitles', 'indicatorValues'];
+    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'scaleSide', 'rangeChips', 'indicatorChips', 'mergeChips', 'legendFolded', 'drawingTooltips', 'invertScale', 'paneScales', 'autoScale', 'timezone', 'hour12', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'indicatorTitles', 'indicatorValues'];
 
     /** Apply a render feature live — mutate the field + invalidate, no engine re-run. */
     applyFeature(key: string, value: unknown): void {
@@ -446,6 +448,9 @@ export class NativeRenderer implements IChartRenderer {
                 break;
             case 'legendFolded':
                 this.applyConfig({ legend: { folded: Boolean(value) } });
+                break;
+            case 'drawingTooltips':
+                this.applyConfig({ tooltips: { drawings: Boolean(value) } });
                 break;
             case 'axisLabels':
                 this.scene.showAxisLabels = Boolean(value);
@@ -562,6 +567,7 @@ export class NativeRenderer implements IChartRenderer {
             case 'hour12': return this.scene.hour12;
             case 'rangeChips': return this.scene.showRangeChips;
             case 'legendFolded': return this.legendFolded;
+            case 'drawingTooltips': return this.drawingTooltips;
             case 'indicatorChips': return this.scene.showIndicatorChips;
             case 'mergeChips': return this.scene.mergeChips;
             case 'axisLabels': return this.scene.showAxisLabels;
@@ -720,6 +726,7 @@ export class NativeRenderer implements IChartRenderer {
             },
             panes: { separatorColor: s.separatorColor ?? t.borderColor, weights: this.currentPaneWeights() },
             legend: { folded: this.legendFolded },
+            tooltips: { drawings: this.drawingTooltips },
             trades: {
                 visible: this.scene.tradeMarkers.visible,
                 labels: this.scene.tradeMarkers.labels,
@@ -863,6 +870,9 @@ export class NativeRenderer implements IChartRenderer {
         // legend
         this.legendFolded = next.legend.folded;
         this.inputsUI?.setLegendFolded(this.legendFolded);
+        // tooltips
+        this.drawingTooltips = next.tooltips.drawings;
+        this.syncLabelTooltip();
         // panes
         s.separatorColor = keepInherit(s.separatorColor, next.panes.separatorColor, prevTheme.borderColor);
         this.paneWeights = { ...next.panes.weights };
@@ -1314,6 +1324,21 @@ export class NativeRenderer implements IChartRenderer {
         };
     }
 
+    /** The label tip lives only while the plot is mounted and `tooltips.drawings` is on. */
+    private syncLabelTooltip(): void {
+        const want = this.drawingTooltips && this.plot != null;
+        if (want === (this.labelTooltip != null)) return;
+        if (want) {
+            this.labelTooltip = new LabelTooltip(this.plot, {
+                theme: () => this.chromeTheme(),
+                lookup: (x, y) => this.indicatorSlices.labelTooltipAt(x, y),
+            });
+        } else {
+            this.labelTooltip?.destroy();
+            this.labelTooltip = null;
+        }
+    }
+
     /** The colors the axis-scale gutters (price + time) paint with: the LIVE chart background
      *  (`layout.background`) and its contrast-corrected text, so the scales read as part of the
      *  plot. Only the toolbar/dialog chrome stays on the stable app-theme surface. */
@@ -1465,10 +1490,7 @@ export class NativeRenderer implements IChartRenderer {
 
         // Pine label tooltips: hover a label that carries one and a themed tip opens.
         // The hit-rects are collected by the slice prepainter (drawings paint there now).
-        this.labelTooltip = new LabelTooltip(this.plot, {
-            theme: () => this.chromeTheme(),
-            lookup: (x, y) => this.indicatorSlices.labelTooltipAt(x, y),
-        });
+        this.syncLabelTooltip();
 
         // User-drawings layer (paints L1.5 plus the interleave layers the geometry backend
         // composites into the series stack, and owns the interaction/settings popup). It

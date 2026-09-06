@@ -243,6 +243,13 @@ export interface ChartConfig {
          *  that remembers the trader's choice sets it here, and a rebuild keeps it. */
         folded: boolean;
     };
+    /** Hover tooltips the renderer opens itself. */
+    tooltips: {
+        /** Tips on indicator drawings — Pine labels, boxes and table cells that carry a
+         *  `tooltip`. A host that renders its own hover card from `readoutAt().labelTooltip`
+         *  turns this off; the hit regions and the readout stay. */
+        drawings: boolean;
+    };
     /** Stacked-pane chrome — the draggable line between an indicator's pane and the one above it. */
     panes: {
         separatorColor: string;
@@ -578,6 +585,7 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
     const cross = asObject(p.crosshair);
     const ps = asObject(p.priceScale);
     const legend = asObject(p.legend);
+    const tooltips = asObject(p.tooltips);
     const panes = asObject(p.panes);
     const trades = asObject(p.trades);
     const ts = asObject(p.timeScale);
@@ -633,6 +641,7 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
             mergeChips: isBool(ps.mergeChips) ? ps.mergeChips : base.priceScale.mergeChips,
         },
         legend: { folded: isBool(legend.folded) ? legend.folded : base.legend.folded },
+        tooltips: { drawings: isBool(tooltips.drawings) ? tooltips.drawings : base.tooltips.drawings },
         panes: {
             separatorColor: isColor(panes.separatorColor) ? panes.separatorColor : base.panes.separatorColor,
             weights: panes.weights === undefined ? base.panes.weights : paneWeights(panes.weights),
