@@ -136,6 +136,13 @@ export interface DrawingLabel {
     noFill?: boolean;
     /** `force_overlay` → render on the price pane regardless of the indicator's pane. */
     overlay?: boolean;
+    /**
+     * The segment this label describes, in the label's own `xloc`. A label that names a
+     * line (a structure break, a level) is placed at the midpoint of the segment's VISIBLE
+     * part instead of at `x`, so it stays on screen as long as any of the segment does;
+     * with the whole segment off-screen it is culled like any other label.
+     */
+    track?: { x1: number; x2: number };
 }
 
 /** One vertex of a polyline (Pine `chart.point`). `x` follows `xloc`; `price` is y. */

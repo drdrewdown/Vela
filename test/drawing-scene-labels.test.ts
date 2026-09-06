@@ -181,3 +181,19 @@ describe('label painting — off-screen labels cost nothing', () => {
         expect(lookups).toBe(1); // only the visible one
     });
 });
+
+describe('labels that track a segment', () => {
+    // A structure label sits at the midpoint of its line; zoomed in, that midpoint leaves the
+    // viewport while the line still crosses it, and the label vanished with the line in view.
+    // With `track` the label rides the visible part of the segment instead.
+    it('rides the midpoint of the visible part of its segment instead of an off-screen anchor', () => {
+        const midpointOffscreen = label({ style: 'none', x: 1500, track: { x1: 1000, x2: 2000 } }); // W=800: [1000, 2000] is off to the right
+        expect(paint([midpointOffscreen]).texts).toHaveLength(0);
+        const crossing = label({ style: 'none', x: 1000, track: { x1: 200, x2: 1800 } }); // visible part is [200, 800]
+        const { texts } = paint([crossing]);
+        expect(texts).toHaveLength(1);
+        expect(texts[0]!.x).toBe(500);
+        const inside = label({ style: 'none', x: 300, track: { x1: 100, x2: 500 } }); // fully in view: stays at its midpoint
+        expect(paint([inside]).texts[0]!.x).toBe(300);
+    });
+});

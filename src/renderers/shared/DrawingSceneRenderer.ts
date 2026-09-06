@@ -645,6 +645,14 @@ export class DrawingSceneRenderer {
         const rawList: any[] = [];
         for (const lb of this.set.labels) {
             let px = xOf(this.logicalOf(lb.xloc, lb.x));
+            if (lb.track) {
+                // A label describing a segment rides the midpoint of the segment's visible part.
+                const a = xOf(this.logicalOf(lb.xloc, lb.track.x1));
+                const b = xOf(this.logicalOf(lb.xloc, lb.track.x2));
+                const lo = Math.max(0, Math.min(a, b));
+                const hi = Math.min(W, Math.max(a, b));
+                if (lo <= hi) px = (lo + hi) / 2;
+            }
             // Cull by x BEFORE any bar lookup or price projection: a chart with tens of
             // thousands of bar-anchored labels (marker studies) must pay only for the ones
             // in view. Pinned price chips are exempt — they re-anchor to the margin below.
