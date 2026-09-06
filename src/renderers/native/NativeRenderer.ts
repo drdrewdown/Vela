@@ -2385,8 +2385,10 @@ export class NativeRenderer implements IChartRenderer {
     private anchoredRightOffset(barSpacing: number): number {
         // Pinning a pixel while zooming is a px→bar conversion, so it uses the EFFECTIVE pitch
         // (zoom × spacing multiplier) — otherwise the anchor drifts when the multiplier ≠ 1.
+        // `zoomAnchorX` is element-relative like `logicalToX`, so the distance to the right edge
+        // crosses the left scale gutter when the scale docks left.
         const pitch = barSpacing * this.coords.spacingScale;
-        return this.zoomAnchorLogical + (this.coords.width - this.zoomAnchorX) / pitch - (this.coords.barCount - 1);
+        return this.zoomAnchorLogical + (this.coords.leftOffsetPx + this.coords.width - this.zoomAnchorX) / pitch - (this.coords.barCount - 1);
     }
 
     /**
@@ -2883,7 +2885,7 @@ export class NativeRenderer implements IChartRenderer {
     private zoomByStep(direction: 1 | -1): void {
         const vp = this.coords.getViewport();
         const target = clampBarSpacing(vp.barSpacing * Math.exp(direction * KEY_ZOOM_STEP));
-        this.zoomTo(target, this.coords.rightEdgeLogical, this.coords.width);
+        this.zoomTo(target, this.coords.rightEdgeLogical, this.coords.leftOffsetPx + this.coords.width);
     }
 
     /** Move the focused bar by `delta` from the current crosshair bar (or the last bar). */

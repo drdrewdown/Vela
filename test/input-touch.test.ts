@@ -33,6 +33,18 @@ describe('pinch zoom math', () => {
         expect(cs.logicalToX(anchor)).toBeCloseTo(midX);
     });
 
+    it('with the price scale docked left the anchor still lands under the fingers', () => {
+        const cs = new CoordinateSystem();
+        cs.setSize(800, 200, 1, 74);
+        cs.setBars([1000, 2000, 3000, 4000, 5000]);
+        cs.setViewport({ barSpacing: 50, rightOffset: 2 });
+        const midX = 300;
+        const anchor = cs.xToLogical(midX);
+        const rightOffset = pinchPinnedRightOffset(anchor, cs.barCount, cs.width, midX, 80, cs.leftOffsetPx);
+        cs.setViewport({ barSpacing: 80, rightOffset });
+        expect(cs.logicalToX(anchor)).toBeCloseTo(midX);
+    });
+
     it('a pure pan (same spacing, moved midpoint) shifts the view with the fingers', () => {
         const cs = new CoordinateSystem();
         cs.setSize(800, 200, 1);

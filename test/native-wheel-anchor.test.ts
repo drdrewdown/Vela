@@ -27,6 +27,52 @@ describe('wheelZoomAnchor', () => {
     });
 });
 
+describe('wheelZoomAnchor with the price scale docked left', () => {
+    // Pixels are element-relative and the plot starts past the gutter, exactly as `logicalToX`
+    // places bars. The anchor must be pinned in that same frame or every notch walks the view.
+    function leftCoords(): CoordinateSystem {
+        const cs = new CoordinateSystem();
+        cs.setSize(800, 200, 1, 74);
+        cs.setBars([1000, 2000, 3000, 4000, 5000]);
+        cs.setViewport({ barSpacing: 100, rightOffset: 1 });
+        return cs;
+    }
+
+    it('cursor mode pins the logical under the pointer at the pointer pixel', () => {
+        const cs = leftCoords();
+        const a = wheelZoomAnchor(cs, 300, false);
+        expect(a.x).toBe(300);
+        expect(a.logical).toBe(cs.xToLogical(300));
+    });
+
+    it('right-edge mode pins the right edge logical at the TRUE right edge (past the gutter)', () => {
+        const cs = leftCoords();
+        const a = wheelZoomAnchor(cs, 300, true);
+        expect(a.x).toBe(874);
+        expect(cs.logicalToX(cs.rightEdgeLogical)).toBe(874);
+    });
+
+    it('the renderer keeps the anchored bar under the pointer after a zoom', () => {
+        /* eslint-disable @typescript-eslint/no-explicit-any -- driving the private zoom path is the point */
+        const r = new NativeRenderer();
+        const anyR = r as any;
+        anyR.coords.setSize(800, 200, 1, 74);
+        if (!anyR.scheduler) anyR.scheduler = { invalidate: () => {} };
+        if (!anyR.animator) anyR.animator = { active: false, start: () => {}, stop: () => {} };
+        anyR.introPlayed = true;
+        anyR.animZoom = false;
+        r.setBars(Array.from({ length: 100 }, (_, i) => ({ time: 1_000_000 + i * 1000, open: 1, high: 2, low: 0.5, close: 1.5, volume: 1 })));
+        anyR.coords.setViewport({ barSpacing: 10, rightOffset: 2 });
+        const cursorX = 300;
+        const logical = anyR.coords.xToLogical(cursorX);
+        anyR.zoomTo(20, logical, cursorX); // zoom in ×2, pinning the bar under the pointer
+        expect(anyR.coords.logicalToX(logical)).toBeCloseTo(cursorX, 6);
+        anyR.zoomTo(5, logical, cursorX); // and back out
+        expect(anyR.coords.logicalToX(logical)).toBeCloseTo(cursorX, 6);
+        /* eslint-enable @typescript-eslint/no-explicit-any */
+    });
+});
+
 describe('horizontal wheel / trackpad pans through time', () => {
     it('treats a horizontal-dominant gesture as a pan, a vertical-dominant one as a zoom', () => {
         expect(isHorizontalWheel(30, 4)).toBe(true); // sideways two-finger swipe → pan

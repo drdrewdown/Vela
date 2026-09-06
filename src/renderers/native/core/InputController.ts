@@ -119,11 +119,13 @@ type DragRegion = 'data' | 'price' | 'time' | 'separator' | 'drawing' | 'pinch' 
  * `cursor` pins the bar under the cursor (zoom toward the pointer).
  */
 export function wheelZoomAnchor(
-    coords: Pick<CoordinateSystem, 'xToLogical' | 'rightEdgeLogical' | 'width'>,
+    coords: Pick<CoordinateSystem, 'xToLogical' | 'rightEdgeLogical' | 'width' | 'leftOffsetPx'>,
     cursorX: number,
     rightEdge: boolean,
 ): { logical: number; x: number } {
-    if (rightEdge) return { logical: coords.rightEdgeLogical, x: coords.width };
+    // Pixels are element-relative, like `logicalToX`: the right edge sits past the left
+    // scale gutter when the scale docks left.
+    if (rightEdge) return { logical: coords.rightEdgeLogical, x: coords.leftOffsetPx + coords.width };
     return { logical: coords.xToLogical(cursorX), x: cursorX };
 }
 
@@ -173,12 +175,13 @@ export function pinchBarSpacing(startBarSpacing: number, startDist: number, dist
 
 /**
  * The rightOffset that pins logical index `anchorLogical` at pixel `x` for a given
- * effective pitch (barSpacing × spacing multiplier) — inverse of `logicalToX`. Pinning
- * the pinch's start-midpoint logical at the LIVE midpoint x makes the bars track the
- * fingers exactly: spread to zoom, drag both to pan, in one gesture.
+ * effective pitch (barSpacing × spacing multiplier) — inverse of `logicalToX`, so `x` is
+ * element-relative and `leftOffset` is the left scale gutter (0 unless the scale docks
+ * left). Pinning the pinch's start-midpoint logical at the LIVE midpoint x makes the bars
+ * track the fingers exactly: spread to zoom, drag both to pan, in one gesture.
  */
-export function pinchPinnedRightOffset(anchorLogical: number, barCount: number, width: number, x: number, pxPerBar: number): number {
-    return anchorLogical - (barCount - 1) + (width - x) / pxPerBar;
+export function pinchPinnedRightOffset(anchorLogical: number, barCount: number, width: number, x: number, pxPerBar: number, leftOffset = 0): number {
+    return anchorLogical - (barCount - 1) + (leftOffset + width - x) / pxPerBar;
 }
 
 /**
@@ -487,7 +490,7 @@ export class InputController {
         const midX = (a.x + b.x) / 2;
         this.deps.apply({
             barSpacing,
-            rightOffset: pinchPinnedRightOffset(this.pinchAnchorLogical, coords.barCount, coords.width, midX, barSpacing * pitchScale),
+            rightOffset: pinchPinnedRightOffset(this.pinchAnchorLogical, coords.barCount, coords.width, midX, barSpacing * pitchScale, coords.leftOffsetPx),
         });
     }
 
