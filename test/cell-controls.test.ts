@@ -138,6 +138,11 @@ describe('nearBottomCenter (pure)', () => {
     it('shifts right by half the toolbar gutter (drawings dock on the left)', () => {
         expect(plotCenterX(800, 44, 64)).toBe(390); // (800 + 44 − 64) / 2
     });
+
+    it('a left-docked scale is a left gutter too', () => {
+        expect(plotCenterX(800, 44, 0, 64)).toBe(454); // (800 + 44 + 64 − 0) / 2
+        expect(nearBottomCenter(454, 800 - 12 - 12, 800, 800, CELL_CONTROLS_PROXIMITY_PX, { toolbar: 44, scaleLeft: 64 })).toBe(true);
+    });
 });
 
 describe('CellControls — button set and gating', () => {
@@ -146,6 +151,7 @@ describe('CellControls — button set and gating', () => {
         new CellControls(host as never, makeDeps());
         expect(cluster(host).style.left).toBe(CLUSTER_LEFT_CSS);
         expect(cluster(host).style.left).toContain('--vela-scale-gutter');
+        expect(cluster(host).style.left).toContain('--vela-scale-gutter-left');
         expect(cluster(host).style.transform).toBe('translateX(-50%)');
     });
 

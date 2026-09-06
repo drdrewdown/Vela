@@ -26,11 +26,11 @@ const CLUSTER_PILL = 'rgba(0,0,0,0.65)';
 
 /**
  * CSS `left` that centers the cluster on the plot (candles), not the full cell.
- * `--vela-toolbar-gutter` / `--vela-scale-gutter` are published on the mount
- * container (the cell host) by the renderer.
+ * `--vela-toolbar-gutter` / `--vela-scale-gutter-left` / `--vela-scale-gutter` are
+ * published on the mount container (the cell host) by the renderer.
  */
 export const CLUSTER_LEFT_CSS =
-    'calc((100% + var(--vela-toolbar-gutter, 0px) - var(--vela-scale-gutter, 0px)) / 2)';
+    'calc((100% + var(--vela-toolbar-gutter, 0px) + var(--vela-scale-gutter-left, 0px) - var(--vela-scale-gutter, 0px)) / 2)';
 
 const STYLE_ID = 'vela-cell-controls';
 const CSS = `
@@ -42,10 +42,11 @@ const CSS = `
 .vela-cc-grip:active{cursor:grabbing;}
 `;
 
-/** Horizontal center of the plot (candles) in cell-local x — the scale gutter
- *  is the price axis, the toolbar gutter is the drawings dock. PURE. */
-export function plotCenterX(width: number, toolbarGutter = 0, scaleGutter = 0): number {
-    return (width + toolbarGutter - scaleGutter) / 2;
+/** Horizontal center of the plot (candles) in cell-local x — the scale gutters are
+ *  the price axis (right, or left when it docks there), the toolbar gutter is the
+ *  drawings dock. PURE. */
+export function plotCenterX(width: number, toolbarGutter = 0, scaleGutter = 0, scaleGutterLeft = 0): number {
+    return (width + toolbarGutter + scaleGutterLeft - scaleGutter) / 2;
 }
 
 /**
@@ -60,9 +61,9 @@ export function nearBottomCenter(
     width: number,
     height: number,
     proximityPx = CELL_CONTROLS_PROXIMITY_PX,
-    gutters: { toolbar?: number; scale?: number } = {},
+    gutters: { toolbar?: number; scale?: number; scaleLeft?: number } = {},
 ): boolean {
-    const cx = plotCenterX(width, gutters.toolbar ?? 0, gutters.scale ?? 0);
+    const cx = plotCenterX(width, gutters.toolbar ?? 0, gutters.scale ?? 0, gutters.scaleLeft ?? 0);
     const cy = height - CONTROLS_BOTTOM_PX - CLUSTER_H / 2;
     return Math.hypot(x - cx, y - cy) <= proximityPx;
 }
@@ -225,13 +226,14 @@ export class CellControls {
     }
 
     /** Live renderer gutters on the cell host (0 when unpublished — a test stub). */
-    private hostGutters(): { toolbar: number; scale: number } {
+    private hostGutters(): { toolbar: number; scale: number; scaleLeft: number } {
         const view = this.host.ownerDocument.defaultView;
-        if (!view) return { toolbar: 0, scale: 0 };
+        if (!view) return { toolbar: 0, scale: 0, scaleLeft: 0 };
         const cs = view.getComputedStyle(this.host);
         return {
             toolbar: Number.parseFloat(cs.getPropertyValue('--vela-toolbar-gutter')) || 0,
             scale: Number.parseFloat(cs.getPropertyValue('--vela-scale-gutter')) || 0,
+            scaleLeft: Number.parseFloat(cs.getPropertyValue('--vela-scale-gutter-left')) || 0,
         };
     }
 

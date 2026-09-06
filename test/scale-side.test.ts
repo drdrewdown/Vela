@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { NativeRenderer } from '../src/renderers/native/NativeRenderer';
 import { mergeConfig } from '../src/renderers/native/core/chartConfig';
 import { CoordinateSystem } from '../src/renderers/native/core/CoordinateSystem';
+import { legendLeftPx } from '../src/renderers/shared/InputsUI';
 
 // `priceScale.side` is the one place the scale's edge is decided; its pixel consequence is
 // `coords.leftOffsetPx`, which every painter reads instead of a global.
@@ -29,5 +30,29 @@ describe('price scale side', () => {
         c.setSize(300, 100, 1, 60);
         expect(c.logicalToX(2)).toBe(xRight + 60);
         expect(c.xToLogical(c.logicalToX(1))).toBeCloseTo(1, 9);
+    });
+
+    it('publishes the left scale gutter for host overlays, and clears it when the scale docks right', () => {
+        // Overlays that share the mount container (status line, attribution mark, cell
+        // controls) anchor to the plot's edges through published CSS variables; a
+        // left-docked scale is an edge too, or they overlap the axis.
+        const props = new Map<string, string>();
+        const host = { style: { setProperty: (k: string, v: string) => void props.set(k, v), getPropertyValue: (k: string) => props.get(k) ?? '', removeProperty: (k: string) => void props.delete(k) } };
+        const renderer = new NativeRenderer();
+        const r = renderer as unknown as { mountContainer: typeof host | null; rightAxisW: number; publishGutters(): void };
+        r.mountContainer = host;
+        renderer.applyFeature('scaleSide', 'left');
+        r.publishGutters();
+        expect(host.style.getPropertyValue('--vela-scale-gutter-left')).toBe(`${r.rightAxisW}px`);
+        expect(host.style.getPropertyValue('--vela-scale-gutter')).toBe('0px');
+        renderer.applyFeature('scaleSide', 'right');
+        r.publishGutters();
+        expect(host.style.getPropertyValue('--vela-scale-gutter-left')).toBe('0px');
+        expect(host.style.getPropertyValue('--vela-scale-gutter')).toBe(`${r.rightAxisW}px`);
+    });
+
+    it('the legend column sits 10px into the plot, past whatever the scale reserves on the left', () => {
+        expect(legendLeftPx(0)).toBe(10);
+        expect(legendLeftPx(64)).toBe(74);
     });
 });

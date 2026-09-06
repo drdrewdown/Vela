@@ -571,7 +571,7 @@ export class VelaWorkspace {
                     ? createCustomMark(doc, attribution, background)
                     : createAttributionMark(doc, background);
             Object.assign(mark.style, {
-                left: 'calc(var(--vela-toolbar-gutter, 0px) + 12px)',
+                left: 'calc(var(--vela-toolbar-gutter, 0px) + var(--vela-scale-gutter-left, 0px) + 12px)',
                 bottom: `calc(var(--vela-bottom-gutter, ${TIME_AXIS_H}px) + 10px)`,
                 zIndex: '11',
             });

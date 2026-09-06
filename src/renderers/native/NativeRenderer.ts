@@ -1525,7 +1525,7 @@ export class NativeRenderer implements IChartRenderer {
         });
         this.setKeyboardEnabled(this.keyboardEnabled); // accessible by default; wires focus + ARIA
 
-        this.inputsUI = new InputsUI(this.plot, theme, (paneId) => this.paneBoundsFor(paneId), () => this.scene.scaleSide);
+        this.inputsUI = new InputsUI(this.plot, theme, (paneId) => this.paneBoundsFor(paneId), () => this.coords.leftOffsetPx);
         this.inputsUI.setLayoutMode(this.layoutMode);
         this.inputsUI.setTitlesVisible(this.indicatorTitlesOn); // a remount keeps the toggle state
         this.inputsUI.setValuesVisible(this.indicatorValuesOn);
@@ -1776,6 +1776,7 @@ export class NativeRenderer implements IChartRenderer {
         this.attributionEl?.remove();
         this.attributionEl = null;
         this.mountContainer?.style.removeProperty('--vela-toolbar-gutter');
+        this.mountContainer?.style.removeProperty('--vela-scale-gutter-left');
         this.mountContainer?.style.removeProperty('--vela-scale-gutter');
         this.mountContainer?.style.removeProperty('--vela-bottom-gutter');
         this.mountContainer?.style.removeProperty('--vela-price-pane-top');
@@ -3819,14 +3820,16 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     /** Publish the gutters on the mount container as `--vela-toolbar-gutter` (left,
-     *  drawings toolbar) and `--vela-scale-gutter` (right, the full price-scale width
-     *  incl. merged own-scale columns), so host overlays sharing that container (a
-     *  status line, a watermark, a custom legend) can anchor to the plot's edges
-     *  without reaching into the renderer's DOM. */
+     *  drawings toolbar), `--vela-scale-gutter-left` (the price scale when it docks
+     *  left, else 0) and `--vela-scale-gutter` (right, the full price-scale width incl.
+     *  merged own-scale columns, 0 when the scale docks left), so host overlays sharing
+     *  that container (a status line, a watermark, a custom legend) can anchor to the
+     *  plot's edges without reaching into the renderer's DOM. */
     private publishGutters(): void {
         const isLeft = this.scene.scaleSide === 'left';
         this.mountContainer?.style.setProperty('--vela-toolbar-gutter', `${this.toolbarGutter}px`);
-        this.mountContainer?.style.setProperty("--vela-scale-gutter", `${isLeft ? 0 : this.rightAxisW}px`);
+        this.mountContainer?.style.setProperty('--vela-scale-gutter-left', `${isLeft ? this.rightAxisW : 0}px`);
+        this.mountContainer?.style.setProperty('--vela-scale-gutter', `${isLeft ? 0 : this.rightAxisW}px`);
     }
 
     /** Publish the price pane's vertical insets as `--vela-price-pane-top` /

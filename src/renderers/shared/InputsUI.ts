@@ -140,6 +140,15 @@ export function legendCalloutsDisplay(open: boolean, hasCallouts: boolean): 'inl
  * study's legend sits in its pane, not the price pane). Without the resolver every
  * legend stacks at the top of the container.
  */
+/** The legend column's inset from the plot's left edge. */
+const LEGEND_LEFT_PX = 10;
+
+/** Where the legend column sits: 10px into the plot, past whatever the price scale reserves
+ *  on the left (`coords.leftOffsetPx` — 0 unless the scale docks left). PURE. */
+export function legendLeftPx(leftInsetPx: number): number {
+    return leftInsetPx + LEGEND_LEFT_PX;
+}
+
 export class InputsUI {
     private readonly legends = new Map<string, HTMLElement>(); // paneId → legend container
     private readonly rows = new Map<string, LegendRow>();
@@ -219,7 +228,7 @@ export class InputsUI {
         private readonly container: HTMLElement,
         private theme: VelaTheme,
         private readonly paneBoundsOf?: (paneId: string) => { top: number; height: number },
-        private readonly scaleSideOf?: () => 'left' | 'right',
+        private readonly leftInsetOf?: () => number,
     ) {
         if (!container.style.position) container.style.position = 'relative';
         if (typeof document !== 'undefined') document.addEventListener('click', this.onDocClick);
@@ -627,7 +636,7 @@ export class InputsUI {
             const rowH = lg.offsetHeight || 20;
             top = bounds.top + Math.max(1, Math.round((bounds.height - rowH) / 2));
         }
-        lg.style.left = `${this.scaleSideOf?.() === 'left' ? 110 : 10}px`;
+        lg.style.left = `${legendLeftPx(this.leftInsetOf?.() ?? 0)}px`;
         lg.style.top = `${top}px`;
     }
 

@@ -22,10 +22,11 @@ const CSS = `
     position: absolute;
     top: var(--vela-space-2);
     /* Track the indicator legend's left edge: the renderer publishes its toolbar gutter
-     * on the mount container, and the legend sits 10px into the plot to its right —
-     * so the two columns stay aligned whether the toolbar is docked (44px), collapsed
-     * (16px), or absent entirely (a workspace cell: 0). */
-    left: calc(var(--vela-toolbar-gutter, 0px) + 10px);
+     * and the left scale gutter on the mount container, and the legend sits 10px into
+     * the plot to their right — so the two columns stay aligned whether the toolbar is
+     * docked (44px), collapsed (16px), or absent entirely (a workspace cell: 0), and
+     * whether the price scale docks right (0) or left (its width). */
+    left: calc(var(--vela-toolbar-gutter, 0px) + var(--vela-scale-gutter-left, 0px) + 10px);
     z-index: 10;
     display: flex;
     align-items: baseline;
@@ -114,7 +115,7 @@ const CSS = `
     justify-content: start;
     align-items: center;
     row-gap: 1px;
-    max-width: calc(100% - var(--vela-toolbar-gutter, 0px) - var(--vela-scale-gutter, 0px) - 24px);
+    max-width: calc(100% - var(--vela-toolbar-gutter, 0px) - var(--vela-scale-gutter-left, 0px) - var(--vela-scale-gutter, 0px) - 24px);
     font-size: var(--vela-font-size-sm);
 }
 [data-layout='mobile'] .vela-statusline .vela-sl-symbol {
