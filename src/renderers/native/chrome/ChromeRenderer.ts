@@ -27,6 +27,11 @@ import { tzOffsetMs } from './tz';
  * their model's z slot — this layer only keeps the shared DrawingSceneRenderer to
  * compute the drawing price-range that folds into autoscale (`paneDrawingsRange`).
  */
+/** Whether a series earns a price-scale value chip: visible, with points, and not opted out. */
+export function seriesChipEligible(s: { visible?: boolean; scaleChip?: boolean; points?: readonly unknown[] }): boolean {
+    return s.visible !== false && s.scaleChip !== false && !!s.points && s.points.length > 0;
+}
+
 export class ChromeRenderer {
     /** Aether: hit regions of the price-scale chips drawn on the last frame (price box + on-canvas
      *  tag per chip), in canvas CSS pixels. Read by the host's hover HUD for THIS chart. */
@@ -352,7 +357,7 @@ export class ChromeRenderer {
                 for (const m of scene.indicators.values() as Iterable<any>) {
                     if (!m.series || (m.paneId && m.paneId !== pricePane.id)) continue;
                     for (const s of m.series) {
-                        if (s.visible === false || !s.points || s.points.length === 0) continue;
+                        if (!seriesChipEligible(s)) continue;
                         let lastVal = null;
                         let ptColor = null;
                         for (let pIdx = s.points.length - 1; pIdx >= 0; pIdx--) {

@@ -70,6 +70,10 @@ interface SeriesBase {
     visible?: boolean;
     /** `force_overlay` → render on the price pane regardless of the indicator's pane. */
     overlay?: boolean;
+    /** Price-scale value chip for a line-like series on the price pane (default true). A
+     *  study whose lines are levels rather than a reading of price — bands, anchors — opts
+     *  out so the scale shows only what the trader reads there. */
+    scaleChip?: boolean;
 }
 
 export interface LineLikeSeries extends SeriesBase {
