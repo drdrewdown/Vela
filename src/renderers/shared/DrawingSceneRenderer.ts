@@ -701,15 +701,23 @@ export class DrawingSceneRenderer {
                 }
             }
 
-            // 1. Process Pinned Price Chips (AetherTrade parity label merge)
-            // Group chips within MERGE_PX (18px) vertically — ticker-agnostic & zoom-adaptive
-            pinnedChips.sort((a: any, b: any) => a.py - b.py);
+            // 1. Pinned price chips. Where a chip paints is settled BEFORE any merge: past the
+            // right edge it comes back to the margin, and off the left edge it does not paint —
+            // so it takes no part in a merge either. A merged chip then sits at its rightmost
+            // member: the mean of the anchors let one chip anchored far off the left drag the
+            // level it merged with under the axis, or off the canvas altogether.
+            const placed = pinnedChips.filter((item: any) => {
+                item.px = DrawingSceneRenderer.pinnedX(item.lb.text, item.fontPx, item.px, W);
+                return item.px >= -50;
+            });
+            // Group chips within MERGE_PX vertically — ticker-agnostic & zoom-adaptive
+            placed.sort((a: any, b: any) => a.py - b.py);
             const MERGE_PX = 20;
             let a = 0;
-            while (a < pinnedChips.length) {
+            while (a < placed.length) {
                 let b = a + 1;
-                while (b < pinnedChips.length && pinnedChips[b].py - pinnedChips[a].py <= MERGE_PX) b++;
-                const grp = pinnedChips.slice(a, b);
+                while (b < placed.length && placed[b].py - placed[a].py <= MERGE_PX) b++;
+                const grp = placed.slice(a, b);
 
                 if (grp.length === 1) {
                     renderList.push(grp[0]);
@@ -754,7 +762,7 @@ export class DrawingSceneRenderer {
                     const mergedTooltip = grp.map((g: any) => g.lb.tooltip).filter(Boolean).join("\n──────\n");
 
                     const avgY = Math.round(grp.reduce((sum, g) => sum + g.py, 0) / grp.length);
-                    const avgPx = Math.round(grp.reduce((sum, g) => sum + g.px, 0) / grp.length);
+                    const rightPx = Math.max(...grp.map((g: any) => g.px));
 
                     const mergedLb = {
                         ...primary.lb,
@@ -766,7 +774,7 @@ export class DrawingSceneRenderer {
 
                     renderList.push({
                         lb: mergedLb,
-                        px: avgPx,
+                        px: rightPx,
                         py: avgY,
                         color: primary.color,
                         fontPx: primary.fontPx,
@@ -813,12 +821,10 @@ export class DrawingSceneRenderer {
         for (const item of renderList) {
             let { lb, px, py, color, fontPx } = item;
 
-            // Pinned margin price chips: keep on-canvas near right pane edge
+            // Pinned margin price chips: keep on-canvas near the right pane edge (a merged chip
+            // is wider than the member that placed it, so the margin is settled again here).
             if (lb.style === "label_left" && lb.yloc === "price") {
-                const estW = Math.max(45, (lb.text?.length || 6) * (fontPx * 0.65) + 16);
-                if (px + estW + 14 > W) {
-                    px = W - estW - 14;
-                }
+                px = DrawingSceneRenderer.pinnedX(lb.text, fontPx, px, W);
                 if (px < -50) continue;
             } else {
                 if (px < -50 || px > W + 50) continue;
@@ -841,6 +847,13 @@ export class DrawingSceneRenderer {
                 if (lb.tooltip) this.tipRegions.push({ left: r.x, top: r.y, right: r.x + r.w, bottom: r.y + r.h, text: lb.tooltip });
             }
         }
+    }
+
+    /** Where a pinned price chip paints: at its anchor, or pulled back to the right margin
+     *  when the anchor lies past the edge (the width is estimated from the text). */
+    private static pinnedX(text: string | undefined, fontPx: number, px: number, W: number): number {
+        const estW = Math.max(45, (text?.length || 6) * (fontPx * 0.65) + 16);
+        return px + estW + 14 > W ? W - estW - 14 : px;
     }
 
     private labelFont(lb: DrawingLabel, fontPx: number): string {

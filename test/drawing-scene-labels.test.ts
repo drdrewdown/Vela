@@ -197,3 +197,26 @@ describe('labels that track a segment', () => {
         expect(paint([inside]).texts[0]!.x).toBe(300);
     });
 });
+
+// A pinned price chip (`label_left` at a price) re-anchors to the right margin when its
+// anchor is past the edge and is dropped when its anchor is off the LEFT edge. Merged
+// chips used to sit at the AVERAGE of their members' anchors — a ladder chip anchored
+// far off the left dragged the level chip it merged with under the axis or off the
+// canvas entirely, and the level "lost its label" whenever the price scale brought the
+// two within the merge distance.
+describe('pinned price chips — where a merged chip sits', () => {
+    const pinned = (id: string, x: number, text: string): DrawingLabel =>
+        label({ id, x, text, style: 'label_left', yloc: 'price', y: 100, size: 'tiny' });
+
+    it('a chip that would not paint on its own does not drag the chip it merges with off the canvas', () => {
+        const { texts } = paint([pinned('a', -600, 'R5 100'), pinned('b', 340, 'VAH 100')]);
+        expect(texts.map((t) => t.text)).toEqual(['VAH 100']);
+        expect(texts[0]!.x).toBeGreaterThanOrEqual(340);
+    });
+
+    it('a merged chip sits at its rightmost member, never at the mean of the anchors', () => {
+        const { texts } = paint([pinned('a', 300, 'POC 100'), pinned('b', 340, 'VAL 100')]);
+        expect(texts.map((t) => t.text)).toEqual(['POC·VAL 100']);
+        expect(texts[0]!.x).toBeGreaterThanOrEqual(340);
+    });
+});
