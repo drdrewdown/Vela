@@ -25,3 +25,12 @@ export function axisColumnX(dataW: number, column: number): number {
 export function axisColumnWidth(column: number): number {
     return column === 0 ? AXIS_MASTER_W : AXIS_MERGED_W;
 }
+
+/**
+ * The width of the gutter to the RIGHT of a pane's data area. With the price scale docked
+ * right it is the axis column; docked left the axis becomes a left gutter and nothing sits
+ * to the right — a control pinned "just left of the axis" must then pin to the plot's edge.
+ */
+export function rightGutterPx(scaleSide: 'left' | 'right', rightAxisW: number): number {
+    return scaleSide === 'left' ? 0 : rightAxisW;
+}

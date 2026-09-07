@@ -47,7 +47,7 @@ import { Canvas2dBackend } from './backend/Canvas2dBackend';
 import type { IRenderBackend } from './backend/IRenderBackend';
 import { ChromeRenderer } from './chrome/ChromeRenderer';
 import { LabelTooltip } from './chrome/LabelTooltip';
-import { AXIS_MASTER_W, AXIS_MERGED_W } from './chrome/axisLayout';
+import { AXIS_MASTER_W, AXIS_MERGED_W, rightGutterPx } from './chrome/axisLayout';
 import { CrosshairRenderer } from './chrome/CrosshairRenderer';
 import { SettingsDialog } from './chrome/SettingsDialog';
 import { UserDrawingController } from './drawings/UserDrawingController';
@@ -1588,7 +1588,7 @@ export class NativeRenderer implements IChartRenderer {
 
         this.paneControls = new PaneControls(this.plot, theme, {
             panes: () => this.paneControlViews(),
-            rightAxis: () => this.rightAxisW,
+            rightAxis: () => rightGutterPx(this.scene.scaleSide, this.rightAxisW),
             onMove: (paneId, dir) => this.movePaneLocal(paneId, dir),
             onToggleCollapse: (paneId) => {
                 const pane = this.scene.panes.get(paneId);

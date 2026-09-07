@@ -3,6 +3,7 @@ import { NativeRenderer } from '../src/renderers/native/NativeRenderer';
 import { mergeConfig } from '../src/renderers/native/core/chartConfig';
 import { CoordinateSystem } from '../src/renderers/native/core/CoordinateSystem';
 import { LEGEND_LEFT_CSS } from '../src/renderers/shared/InputsUI';
+import { rightGutterPx } from '../src/renderers/native/chrome/axisLayout';
 
 // `priceScale.side` is the one place the scale's edge is decided; its pixel consequence is
 // `coords.leftOffsetPx`, which every painter reads instead of a global.
@@ -68,5 +69,15 @@ describe('price scale side', () => {
         renderer.applyFeature('scaleSide', 'left');
         r.positionAttribution();
         expect(r.attributionEl.style.left).toBe(`${r.rightAxisW + 12}px`);
+    });
+});
+
+// The per-pane control cluster (maximize, collapse, move) pins "just left of the axis". With
+// the scale docked left it kept reserving the axis width on the RIGHT, so the cluster floated
+// an axis-width in from the plot's edge over a gutter that was no longer there.
+describe('pane controls and the left-docked scale', () => {
+    it('the right gutter is the axis column only while the scale is docked right', () => {
+        expect(rightGutterPx('right', 74)).toBe(74);
+        expect(rightGutterPx('left', 74)).toBe(0);
     });
 });
