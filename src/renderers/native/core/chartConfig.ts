@@ -284,11 +284,14 @@ export interface ChartConfig {
         downColor: string;
         bodyVisible: boolean;
         borderVisible: boolean;
-        borderUpColor: string;
-        borderDownColor: string;
+        /** Border and wick colours are STORED, not resolved: null follows the body colour, which
+         *  the painters resolve per frame. A document that resolved them could not round-trip —
+         *  applied back, it froze the choice on the body colour of the moment. */
+        borderUpColor: string | null;
+        borderDownColor: string | null;
         wickVisible: boolean;
-        wickUpColor: string;
-        wickDownColor: string;
+        wickUpColor: string | null;
+        wickDownColor: string | null;
     };
     /** OHLC-bars style — its own up/down (independent of the candle body colors). */
     bars: {

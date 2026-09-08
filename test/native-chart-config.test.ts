@@ -128,8 +128,8 @@ describe('NativeRenderer.getConfig — defaults resolve to concrete values', () 
         expect(cfg.timeScale).toEqual({ timezone: 'UTC', hour12: false, zoomAnchor: 'right' });
         expect(cfg.candles.upColor).toBe('#5aa1ff');
         expect(cfg.candles.downColor).toBe('#ff709a');
-        expect(cfg.candles.borderUpColor).toBe('#5aa1ff'); // inherits the body color
-        expect(cfg.candles.wickDownColor).toBe('#ff709a');
+        expect(cfg.candles.borderUpColor).toBeNull(); // follows the body colour — stored as such, so it round-trips
+        expect(cfg.candles.wickDownColor).toBeNull();
         expect(cfg.series).toEqual({ style: 'candles', baseline: null, spacing: 1 });
     });
 

@@ -337,12 +337,12 @@ export class SettingsDialog {
             this.swatch(config.candles.downColor, (v) => this.emit({ candles: { downColor: v } })),
         ]), 'symbol.style.candles.body'));
         candles.append(sid(this.toggleRow('Borders', config.candles.borderVisible, (v) => this.emit({ candles: { borderVisible: v } }), [
-            this.swatch(config.candles.borderUpColor, (v) => this.emit({ candles: { borderUpColor: v } })),
-            this.swatch(config.candles.borderDownColor, (v) => this.emit({ candles: { borderDownColor: v } })),
+            this.swatch(config.candles.borderUpColor ?? config.candles.upColor, (v) => this.emit({ candles: { borderUpColor: v } })),
+            this.swatch(config.candles.borderDownColor ?? config.candles.downColor, (v) => this.emit({ candles: { borderDownColor: v } })),
         ]), 'symbol.style.candles.borders'));
         candles.append(sid(this.toggleRow('Wick', config.candles.wickVisible, (v) => this.emit({ candles: { wickVisible: v } }), [
-            this.swatch(config.candles.wickUpColor, (v) => this.emit({ candles: { wickUpColor: v } })),
-            this.swatch(config.candles.wickDownColor, (v) => this.emit({ candles: { wickDownColor: v } })),
+            this.swatch(config.candles.wickUpColor ?? config.candles.upColor, (v) => this.emit({ candles: { wickUpColor: v } })),
+            this.swatch(config.candles.wickDownColor ?? config.candles.downColor, (v) => this.emit({ candles: { wickDownColor: v } })),
         ]), 'symbol.style.candles.wick'));
         candles.append(sid(this.numberRow('Spacing', config.series.spacing, 0.1, 10, 0.1, (v) => this.emit({ series: { spacing: v } })), 'symbol.style.candles.spacing'));
         groups.candles = candles;
@@ -405,12 +405,12 @@ export class SettingsDialog {
                 this.swatch(colorOf('candleDownColor', config.candles.downColor), (v) => this.emitType(def.id, 'candleDownColor', v)),
             ]), `symbol.style.${def.id}.body`));
             g.append(sid(this.toggleRow('Borders', boolOf('candleBorderVisible', config.candles.borderVisible), (v) => this.emitType(def.id, 'candleBorderVisible', v), [
-                this.swatch(colorOf('candleBorderUpColor', config.candles.borderUpColor), (v) => this.emitType(def.id, 'candleBorderUpColor', v)),
-                this.swatch(colorOf('candleBorderDownColor', config.candles.borderDownColor), (v) => this.emitType(def.id, 'candleBorderDownColor', v)),
+                this.swatch(colorOf('candleBorderUpColor', config.candles.borderUpColor ?? config.candles.upColor), (v) => this.emitType(def.id, 'candleBorderUpColor', v)),
+                this.swatch(colorOf('candleBorderDownColor', config.candles.borderDownColor ?? config.candles.downColor), (v) => this.emitType(def.id, 'candleBorderDownColor', v)),
             ]), `symbol.style.${def.id}.borders`));
             g.append(sid(this.toggleRow('Wick', boolOf('candleWickVisible', config.candles.wickVisible), (v) => this.emitType(def.id, 'candleWickVisible', v), [
-                this.swatch(colorOf('candleWickUpColor', config.candles.wickUpColor), (v) => this.emitType(def.id, 'candleWickUpColor', v)),
-                this.swatch(colorOf('candleWickDownColor', config.candles.wickDownColor), (v) => this.emitType(def.id, 'candleWickDownColor', v)),
+                this.swatch(colorOf('candleWickUpColor', config.candles.wickUpColor ?? config.candles.upColor), (v) => this.emitType(def.id, 'candleWickUpColor', v)),
+                this.swatch(colorOf('candleWickDownColor', config.candles.wickDownColor ?? config.candles.downColor), (v) => this.emitType(def.id, 'candleWickDownColor', v)),
             ]), `symbol.style.${def.id}.wick`));
             g.append(sid(this.numberRow('Spacing', config.series.spacing, 0.1, 10, 0.1, (v) => this.emit({ series: { spacing: v } })), `symbol.style.${def.id}.spacing`));
             groups[def.id] = g;

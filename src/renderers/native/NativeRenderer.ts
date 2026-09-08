@@ -740,11 +740,15 @@ export class NativeRenderer implements IChartRenderer {
                 downColor: this.candleDown,
                 bodyVisible: s.candle.bodyVisible,
                 borderVisible: s.candle.borderVisible,
-                borderUpColor: s.candle.borderUpColor ?? this.candleUp,
-                borderDownColor: s.candle.borderDownColor ?? this.candleDown,
+                // Stored, not resolved: null means "follow the body colour" (the painters resolve
+                // it per frame). Reporting the resolved colour here froze that choice on every
+                // config round-trip — applyConfig merges over getConfig() — so a body colour
+                // change left the wicks and borders on the previous colour.
+                borderUpColor: s.candle.borderUpColor,
+                borderDownColor: s.candle.borderDownColor,
                 wickVisible: s.candle.wickVisible,
-                wickUpColor: s.candle.wickUpColor ?? this.candleUp,
-                wickDownColor: s.candle.wickDownColor ?? this.candleDown,
+                wickUpColor: s.candle.wickUpColor,
+                wickDownColor: s.candle.wickDownColor,
             },
             bars: {
                 upColor: s.bars.upColor ?? this.candleUp,
