@@ -428,12 +428,8 @@ export class ChromeRenderer {
                 }
             }
 
-            // Price-scale label alignment — parity with lightweight-charts' PriceAxisWidget
-            // (_alignLabels / recalculateOverlapping), which is what the original AetherTrade axis
-            // does: the current-price label is the fixed centre; every other label keeps its own
-            // price position unless it would collide, in which case labels above the centre are
-            // pushed upward and labels below are pushed downward, each stacking on its neighbour.
-            // The centre block here is the ticker price chip plus the countdown pill beneath it.
+            // The current-price block (price chip plus the countdown pill beneath it) is the fixed
+            // centre every other chip is aligned against; see alignScaleChips.
             {
                 const GAP = 1;
                 const paneTop = pricePane.bounds.top;
@@ -441,22 +437,8 @@ export class ChromeRenderer {
                 const tickerTop = Math.round(y - CHIP_H / 2);
                 const tickerHasLabel = !!scene.showPriceLabel;
                 const tickerHasCd = !!scene.showCountdown && coords.barInterval > 0;
-                const fixedTop = tickerTop;
                 const fixedBottom = tickerTop + (tickerHasLabel ? CHIP_H : 0) + (tickerHasCd ? CHIP_H + GAP : 0);
-                const hasFixed = fixedBottom > fixedTop;
-                const centerY = (fixedTop + fixedBottom) / 2;
-                const above = finalChips.filter((c) => c.sY <= centerY).sort((a, b) => b.sY - a.sY);
-                const below = finalChips.filter((c) => c.sY > centerY).sort((a, b) => a.sY - b.sY);
-                let limit = hasFixed ? fixedTop - GAP : Infinity;
-                for (const c of above) {
-                    if (c.sY + CHIP_H / 2 > limit) c.sY = limit - CHIP_H / 2;
-                    limit = c.sY - CHIP_H / 2 - GAP;
-                }
-                limit = hasFixed ? fixedBottom + GAP : -Infinity;
-                for (const c of below) {
-                    if (c.sY - CHIP_H / 2 < limit) c.sY = limit + CHIP_H / 2;
-                    limit = c.sY + CHIP_H / 2 + GAP;
-                }
+                alignScaleChips(finalChips, y, fixedBottom > tickerTop ? { top: tickerTop, bottom: fixedBottom } : null, CHIP_H, GAP);
                 for (const c of finalChips) {
                     if (c.sY - CHIP_H / 2 < paneTop || c.sY + CHIP_H / 2 > paneBottom) continue;
                     drawChip(c.sPriceText, c.tag, c.sColor, c.sY, c.tip, c.title, c.meta);
@@ -724,6 +706,34 @@ function setDash(ctx: CanvasRenderingContext2D, style: LineStyle): void {
     if (style === 'dashed') ctx.setLineDash([6, 4]);
     else if (style === 'dotted') ctx.setLineDash([2, 3]);
     else ctx.setLineDash([]);
+}
+
+/**
+ * Price-scale label alignment — parity with lightweight-charts' PriceAxisWidget
+ * (_alignLabels / recalculateOverlapping): the current-price block is the fixed centre; every
+ * other label keeps its own price position unless it would collide, in which case labels above
+ * the price are pushed upward and labels below are pushed downward, each stacking on its
+ * neighbour. `priceY` is the market price's own y; `fixed` the block's top and bottom, or null
+ * when neither the price chip nor the countdown is shown. Mutates `sY` in place.
+ */
+export function alignScaleChips<T extends { sY: number }>(chips: T[], priceY: number, fixed: { top: number; bottom: number } | null, chipH: number, gap = 1): void {
+    // Sides are decided against the PRICE's y, never the centre of the fixed block: with the
+    // countdown pill on, that block extends a chip below the price, and a label at a price just
+    // under the market used to land above it — the scale read the wrong way round.
+    const above = chips.filter((c) => c.sY <= priceY).sort((a, b) => b.sY - a.sY);
+    const below = chips.filter((c) => c.sY > priceY).sort((a, b) => a.sY - b.sY);
+    let limit = fixed ? fixed.top - gap : Infinity;
+    for (const c of above) {
+        if (c.sY + chipH / 2 > limit) c.sY = limit - chipH / 2;
+        limit = c.sY - chipH / 2 - gap;
+    }
+    // Without a fixed block the lower stack still starts beneath the nearest upper chip.
+    const nearestAbove = above[0];
+    limit = fixed ? fixed.bottom + gap : nearestAbove ? nearestAbove.sY + chipH / 2 + gap : -Infinity;
+    for (const c of below) {
+        if (c.sY - chipH / 2 < limit) c.sY = limit + chipH / 2;
+        limit = c.sY + chipH / 2 + gap;
+    }
 }
 
 /** `M:SS` (or `H:MM:SS` past an hour) for the ms remaining until the bar closes; clamped at 0. */
