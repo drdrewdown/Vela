@@ -77,13 +77,15 @@ export function tickDecimals(tick: number): number {
 /**
  * Decimals for a price-axis label, by precedence:
  *  1. the exchange symbol's tick size (`mintick`) when known — the instrument's TRUE
- *     precision, so it doesn't drift with zoom;
+ *     precision, so it doesn't drift with zoom. An instrument that trades in whole
+ *     units (a tick of 1) reads as whole units: decimals it cannot trade in are noise;
  *  2. otherwise the zoom-derived "nice step" formula (the only source before symbol
- *     metadata loads, or for offline / non-exchange data).
- * A result of 0 is floored to 2 so a price never renders as a bare integer.
+ *     metadata loads, or for offline / non-exchange data), floored at 2 so a price of
+ *     unknown precision never renders as a bare integer.
  */
 export function axisDecimals(scale: { min: number; max: number }, heightPx: number, mintick?: number): number {
-    const d = mintick != null && mintick > 0 ? tickDecimals(mintick) : priceDecimals(scale.min, scale.max, tickCount(heightPx));
+    if (mintick != null && mintick > 0) return tickDecimals(mintick);
+    const d = priceDecimals(scale.min, scale.max, tickCount(heightPx));
     return d === 0 ? 2 : d;
 }
 

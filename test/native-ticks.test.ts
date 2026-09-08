@@ -55,7 +55,7 @@ describe('native ticks · tickDecimals', () => {
     });
 });
 
-describe('native ticks · axisDecimals (tick size vs formula, floor 2)', () => {
+describe('native ticks · axisDecimals (tick size vs formula, the formula floored at 2)', () => {
     const wide = { min: 58000, max: 67000 }; // zoom-out: the formula gives 0 decimals here
 
     it('uses the exchange tick size when known, regardless of zoom', () => {
@@ -69,9 +69,11 @@ describe('native ticks · axisDecimals (tick size vs formula, floor 2)', () => {
         expect(axisDecimals({ min: 100, max: 101 }, 600)).toBe(axisDecimals({ min: 100, max: 101 }, 600, undefined));
     });
 
-    it('floors a zero-decimal result at 2 (never a bare integer), from either source', () => {
-        expect(axisDecimals(wide, 600, 1)).toBe(2); // tick=1 → 0 decimals → floored to 2
+    it('a whole-unit tick reads as whole units; only the formula is floored at 2', () => {
+        expect(axisDecimals(wide, 600, 1)).toBe(0); // an instrument that trades in whole points
+        expect(axisDecimals(wide, 600, 0.5)).toBe(1);
         expect(axisDecimals(wide, 600)).toBe(2); // formula → 0 → floored to 2
+        expect(formatPriceLabel(wide, 600, 52890, 1)).toBe('52890');
     });
 });
 
