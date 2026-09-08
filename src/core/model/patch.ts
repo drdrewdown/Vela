@@ -3,6 +3,7 @@ import type { OHLCV } from './ohlcv';
 import type { SeriesPoint, SeriesSpec, MarkerPoint } from './series';
 import type { DrawingLine, DrawingBox, DrawingLabel, DrawingPolyline, DrawingLinefill, DrawingTable } from './drawings';
 import type { TradeExecution } from './trades';
+import type { Fill } from './scene';
 
 /** @deprecated No renderer consumes a patch's dirty range; the orchestrator no longer
  *  computes one (it cost a walk over every point of every series per emit). */
@@ -46,6 +47,9 @@ export interface ValuePatch {
     polylines?: DrawingPolyline[];
     linefills?: DrawingLinefill[];
     tables?: DrawingTable[];
+    /** Series-to-series fills, per-point colours included — a streamed study re-emits them
+     *  every tick, and a fill left at its mount length stops short of the series it fills. */
+    fills?: Fill[];
     /** Trade executions follow the same full-snapshot-per-tick pattern as the drawings. */
     trades?: TradeExecution[];
 }
