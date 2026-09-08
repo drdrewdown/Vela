@@ -1,6 +1,6 @@
 import type { VelaTheme } from '../../../core/options';
 import { attachChromeTooltip } from '../../shared/chrome-tooltip';
-import { AXIS_MASTER_W } from './axisLayout';
+import { AXIS_MASTER_W, masterColumnX } from './axisLayout';
 
 /** A pane as seen by the axis scale buttons (its pixel band + current scale state). */
 export interface AxisScaleView {
@@ -15,8 +15,10 @@ export interface AxisScaleView {
 
 export interface AxisScaleButtonsDeps {
     panes(): AxisScaleView[];
-    /** Total right-gutter width in px (master column + merged-scale columns). */
-    rightAxis(): number;
+    /** Total scale-gutter width in px (master column + merged-scale columns), whichever side it docks. */
+    axisGutter(): number;
+    /** The side the price scale docks on — the buttons live on its master column. */
+    scaleSide(): 'left' | 'right';
     onToggleAuto(paneId: string): void;
     onToggleLog(paneId: string): void;
 }
@@ -117,9 +119,9 @@ export class AxisScaleButtons {
         if (e.pointerType !== 'mouse') return;
         const rect = this.plot.getBoundingClientRect();
         const x = e.clientX - rect.left;
-        const gutterLeft = rect.width - this.deps.rightAxis();
+        const columnLeft = masterColumnX(this.deps.scaleSide(), this.deps.axisGutter(), rect.width);
         let hit: string | null = null;
-        if (x >= gutterLeft && x <= gutterLeft + AXIS_MASTER_W) {
+        if (x >= columnLeft && x <= columnLeft + AXIS_MASTER_W) {
             const y = e.clientY - rect.top;
             for (const p of this.deps.panes()) {
                 if (p.collapsed || p.height < MIN_PANE_H) continue;
@@ -156,9 +158,14 @@ export class AxisScaleButtons {
             this.cluster.style.display = 'none';
             return;
         }
-        // Flush with the pane's bottom edge, inset 1px from the axis frame so the scale
-        // border stays visible. The extra PAD_TOP is the air above the letters.
-        this.cluster.style.right = `${this.deps.rightAxis() - AXIS_MASTER_W}px`;
+        // Over the master column on whichever side the scale docks, flush with the pane's
+        // bottom edge, inset 1px from the axis frame at the data seam so the scale border stays
+        // visible (the seam is the column's left edge docked right, its right edge docked left).
+        // The extra PAD_TOP is the air above the letters.
+        const side = this.deps.scaleSide();
+        const columnLeft = masterColumnX(side, this.deps.axisGutter(), this.plot.getBoundingClientRect().width);
+        this.cluster.style.left = `${columnLeft + (side === 'right' ? AXIS_BORDER : 0)}px`;
+        this.cluster.style.right = '';
         this.cluster.style.top = `${pane.top + pane.height - CLUSTER_H}px`;
         this.cluster.style.display = 'flex';
         this.sync();

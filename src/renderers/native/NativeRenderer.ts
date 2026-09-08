@@ -1614,7 +1614,8 @@ export class NativeRenderer implements IChartRenderer {
 
         this.axisScaleButtons = new AxisScaleButtons(this.plot, theme, {
             panes: () => this.axisScaleViews(),
-            rightAxis: () => this.rightAxisW,
+            axisGutter: () => this.rightAxisW,
+            scaleSide: () => this.scene.scaleSide,
             onToggleAuto: (paneId) => this.togglePaneAuto(paneId),
             onToggleLog: (paneId) => {
                 const pane = this.scene.panes.get(paneId);

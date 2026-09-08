@@ -3,7 +3,7 @@ import { NativeRenderer } from '../src/renderers/native/NativeRenderer';
 import { mergeConfig } from '../src/renderers/native/core/chartConfig';
 import { CoordinateSystem } from '../src/renderers/native/core/CoordinateSystem';
 import { LEGEND_LEFT_CSS } from '../src/renderers/shared/InputsUI';
-import { rightGutterPx } from '../src/renderers/native/chrome/axisLayout';
+import { AXIS_MASTER_W, masterColumnX, rightGutterPx } from '../src/renderers/native/chrome/axisLayout';
 
 // `priceScale.side` is the one place the scale's edge is decided; its pixel consequence is
 // `coords.leftOffsetPx`, which every painter reads instead of a global.
@@ -79,5 +79,15 @@ describe('pane controls and the left-docked scale', () => {
     it('the right gutter is the axis column only while the scale is docked right', () => {
         expect(rightGutterPx('right', 74)).toBe(74);
         expect(rightGutterPx('left', 74)).toBe(0);
+    });
+
+    it('the master scale column moves with the scale, so the auto/log buttons follow it', () => {
+        // Docked right the column starts where the data ends; docked left it is the innermost
+        // AXIS_MASTER_W of the left gutter. The A / L buttons used to pin to the right edge
+        // either way, and sat over the plot's bottom-right corner with the scale on the left.
+        expect(masterColumnX('right', 64, 800)).toBe(736);
+        expect(masterColumnX('left', 64, 800)).toBe(0);
+        expect(masterColumnX('left', 64 + 56, 800)).toBe(56); // a merged column sits further out
+        expect(masterColumnX('left', 64, 800) + AXIS_MASTER_W).toBe(64); // the column ends at the data seam
     });
 });

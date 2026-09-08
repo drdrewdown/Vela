@@ -34,3 +34,14 @@ export function axisColumnWidth(column: number): number {
 export function rightGutterPx(scaleSide: 'left' | 'right', rightAxisW: number): number {
     return scaleSide === 'left' ? 0 : rightAxisW;
 }
+
+/**
+ * Left x, within the plot, of a pane's MASTER scale column — the column nearest the data,
+ * on whichever side the scale docks. Docked right it starts where the data area ends;
+ * docked left it is the innermost `AXIS_MASTER_W` of the left gutter (merged columns sit
+ * further out). Anything that lives on the master column — the auto/log buttons — reads this
+ * rather than assuming the right edge.
+ */
+export function masterColumnX(scaleSide: 'left' | 'right', axisW: number, plotW: number): number {
+    return scaleSide === 'left' ? axisW - AXIS_MASTER_W : plotW - axisW;
+}
