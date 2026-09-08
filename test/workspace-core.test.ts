@@ -19,7 +19,7 @@ import {
 } from '../src/workspace/layouts';
 import { evenTracks, resizeTracks, trackOffsets, seamSegments, segmentSpanPx } from '../src/workspace/splitters';
 import { seedDefaults, cellChartDefaults, cellDrawings } from '../src/workspace/ChartCell';
-import { declaredOrder, nextAutoCellId, typingRoute } from '../src/workspace/VelaWorkspace';
+import { declaredOrder, nextAutoCellId, resolveTyping } from '../src/workspace/VelaWorkspace';
 import { parseSymbol } from '../src/data/ProviderRegistry';
 
 registerBuiltinLayouts();
@@ -404,24 +404,38 @@ describe('cell identity ↔ slot position (declaredOrder / nextAutoCellId)', () 
     });
 });
 
-describe('typingRoute — bare typing on the shell (pure)', () => {
-    const key = (k: string, extra: Partial<Parameters<typeof typingRoute>[0]> = {}) => ({ key: k, ctrlKey: false, metaKey: false, altKey: false, ...extra });
+describe('resolveTyping — bare keystrokes on the workspace root', () => {
+    const idle = { dialogs: 0, symbolSearch: false, timeframeEntry: false };
 
-    it('a letter opens the symbol search, a digit the timeframe entry, chords and other keys nothing', () => {
-        expect(typingRoute(key('e'))).toBe('symbol');
-        expect(typingRoute(key('E'))).toBe('symbol');
-        expect(typingRoute(key('5'))).toBe('timeframe');
-        expect(typingRoute(key('e', { ctrlKey: true }))).toBeNull();
-        expect(typingRoute(key('e', { altKey: true }))).toBeNull();
-        expect(typingRoute(key('?'))).toBeNull();
-        expect(typingRoute(key('Tab'))).toBeNull();
+    it('with nothing open: a letter seeds symbol search, a digit the timeframe entry', () => {
+        expect(resolveTyping('n', idle)).toEqual({ target: 'symbol', text: 'N' });
+        expect(resolveTyping('Q', idle)).toEqual({ target: 'symbol', text: 'Q' });
+        expect(resolveTyping('1', idle)).toEqual({ target: 'timeframe', text: '1' });
+        expect(resolveTyping('Escape', idle)).toBeNull();
+        expect(resolveTyping(' ', idle)).toBeNull();
     });
 
     it('a key a binding already claimed routes nowhere', () => {
         // The keymap listens on the same root and runs first; a host chord like Shift+F
         // must not ALSO open the symbol search seeded with "F".
-        expect(typingRoute(key('F', { defaultPrevented: true }))).toBeNull();
-        expect(typingRoute(key('5', { defaultPrevented: true }))).toBeNull();
+        expect(resolveTyping('F', { ...idle, claimed: true })).toBeNull();
+        expect(resolveTyping('5', { ...idle, claimed: true })).toBeNull();
+        expect(resolveTyping('q', { dialogs: 1, symbolSearch: true, timeframeEntry: false, claimed: true })).toBeNull();
+    });
+
+    it('hands the next keystroke to the entry dialog that just opened (fast typing `NQ`, `15`)', () => {
+        // The dialog reports open before its field takes focus; the second key lands
+        // on the root in that gap and must extend the query, not vanish.
+        expect(resolveTyping('q', { dialogs: 1, symbolSearch: true, timeframeEntry: false })).toEqual({ target: 'symbol', text: 'Q' });
+        expect(resolveTyping('2', { dialogs: 1, symbolSearch: true, timeframeEntry: false })).toEqual({ target: 'symbol', text: '2' });
+        expect(resolveTyping('5', { dialogs: 1, symbolSearch: false, timeframeEntry: true })).toEqual({ target: 'timeframe', text: '5' });
+        expect(resolveTyping('m', { dialogs: 1, symbolSearch: false, timeframeEntry: true })).toEqual({ target: 'timeframe', text: 'm' });
+        expect(resolveTyping('Enter', { dialogs: 1, symbolSearch: true, timeframeEntry: false })).toBeNull();
+    });
+
+    it('any other open dialog swallows bare typing', () => {
+        expect(resolveTyping('n', { dialogs: 1, symbolSearch: false, timeframeEntry: false })).toBeNull();
+        expect(resolveTyping('1', { dialogs: 2, symbolSearch: false, timeframeEntry: false })).toBeNull();
     });
 });
 
