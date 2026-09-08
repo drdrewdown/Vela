@@ -99,6 +99,10 @@ const GAP_FACTOR = 1.5;
  * the cooldown a discontinuous bar is accepted as a real market gap.
  */
 const HEAL_COOLDOWN_MS = 5_000;
+/** How long a gap heal may hold the live ticks it buffers. A ranged fetch that never returns
+ *  (a stalled connection, a provider without a timeout) must not freeze the chart: past this
+ *  the heal gives up, the buffered ticks apply, and a later discontinuity re-triggers it. */
+const HEAL_TIMEOUT_MS = 15_000;
 
 /**
  * Renderer- and engine-agnostic orchestration: owns market data (via the injected
@@ -1142,13 +1146,19 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
         const gen = this.generation;
         this.healing = true;
         this.lastHealAt = Date.now();
+        let timer: ReturnType<typeof setTimeout> | null = null;
         try {
-            const bars = await this.feed.loadRange!(this.config.market, { from: fromMs });
+            const bars = await Promise.race([
+                this.feed.loadRange!(this.config.market, { from: fromMs }),
+                new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('heal timed out')), HEAL_TIMEOUT_MS); }),
+            ]);
             if (this.generation !== gen) return; // market switched / chart destroyed mid-heal — drop the stale bars
             for (const b of bars) this.applyBar(b, false);
         } catch {
-            // transient — the buffered ticks still apply; a later discontinuity re-triggers the heal
+            // transient, or the fetch never returned — the buffered ticks still apply; a later
+            // discontinuity re-triggers the heal
         } finally {
+            if (timer) clearTimeout(timer);
             // A superseded heal leaves the state alone: setMarket/destroy already reset it,
             // and replaying its buffer would push the OLD market's bars into the new array.
             if (this.generation === gen) {

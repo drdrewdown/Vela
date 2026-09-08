@@ -667,6 +667,37 @@ describe('EngineOrchestrator', () => {
         expect(seen[seen.length - 1]).toBe(lastT + 3 * HOUR);
     });
 
+    it('a heal whose ranged fetch never returns releases the buffered ticks after a timeout', async () => {
+        // The chart used to freeze here: every live tick was buffered behind a fetch that never
+        // settled (a stalled connection, a provider without a timeout), until a reload or a
+        // symbol switch rebuilt the orchestrator.
+        const HOUR = 3_600_000;
+        const feed = new GapFeed(10);
+        feed.loadRange = (_cfg: unknown, range: BarRange): Promise<OHLCV[]> => { feed.rangeCalls.push(range); return new Promise(() => {}); };
+        const chart = new Vela({} as unknown as HTMLElement, { live: true }, { renderer: new FakeRenderer(), engines: [], dataFeed: feed });
+        const seen: number[] = [];
+        chart.on('bar', (b) => seen.push(b.time));
+        await chart.ready();
+        await flush();
+        const lastT = 1_700_000_000_000 + 9 * HOUR;
+        vi.useFakeTimers();
+        try {
+            feed.push!(mkBar(lastT + 3 * HOUR, 999));
+            feed.push!(mkBar(lastT + 3 * HOUR, 1000));
+            await vi.advanceTimersByTimeAsync(1_000);
+            expect(feed.rangeCalls.length).toBe(1);
+            expect(seen).toEqual([]); // held while the heal is in flight
+            await vi.advanceTimersByTimeAsync(20_000);
+            expect(seen).toEqual([lastT + 3 * HOUR, lastT + 3 * HOUR]); // released, in order
+            // the chart is live again: the next tick applies directly
+            feed.push!(mkBar(lastT + 3 * HOUR, 1001));
+            await vi.advanceTimersByTimeAsync(10);
+            expect(seen.length).toBe(3);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('accepts a legitimate market gap after an empty heal (cooldown — no refetch loop)', async () => {
         const HOUR = 3_600_000;
         const feed = new GapFeed(10);
