@@ -14,7 +14,7 @@ import { renderTradeMarkers } from '../../shared/trade-markers';
 import type { TradeExecution } from '../../../core/model/trades';
 import { paneAxisTicks, formatAxisValue, timeTicks } from './ticks';
 import { axisColumnX, PANE_SEPARATOR_PX } from './axisLayout';
-import { parseColor, tagText } from '../backend/gl/color';
+import { parseColor, readableText } from '../backend/gl/color';
 import { DARK_THEME } from '../../../core/theme';
 import { tzOffsetMs } from './tz';
 
@@ -303,7 +303,7 @@ export class ChromeRenderer {
 
         // Helper to render a split chip and record its bounds
         const drawChip = (sPriceText: string, tag: string, sColor: string, sY: number, tooltipText?: string, titleText?: string, meta?: any) => {
-            const sTextColor = tagText(sColor, theme.background);
+            const sTextColor = readableText(sColor, theme.background);
             const wPrice = Math.max(ctx.measureText(sPriceText).width + 8, 56);
             const wTag = Math.max(ctx.measureText(tag).width + 8, 38);
             const chipH = CHIP_H;

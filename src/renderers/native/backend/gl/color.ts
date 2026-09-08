@@ -75,34 +75,6 @@ export function readableText(bg: string, over = '#000000'): string {
 }
 
 /** sRGB channel [0,1] → linear-light, for a perceptual (relative-luminance) weighting. */
-/**
- * Text for a coloured price-scale chip: white for as long as white still reads, black once it
- * does not. `readableText` flips at the WCAG crossover (L ≈ 0.18), which on a mid-tone fill —
- * a saturated candle colour, say — perceptually over-picks black; a chip prefers white there.
- * The bias holds only while white clears 3:1 against the fill (the AA floor for large text,
- * L ≤ 0.30): a bright pink or a light blue sits just above it, and white on those fell to
- * roughly 2.6:1, where black reads at 8:1. A translucent `bg` is composited over `over` first.
- */
-export function tagText(bg: string, over = '#000000'): string {
-    const L = luminanceOver(bg, over);
-    return 1.05 / (L + 0.05) >= 3 ? '#ffffff' : '#000000';
-}
-
-/** Relative luminance of `bg` as seen over `over` (a translucent `bg` is composited first). */
-function luminanceOver(bg: string, over: string): number {
-    const [r, g, b, a] = parseColor(bg);
-    let R = r;
-    let G = g;
-    let B = b;
-    if (a < 1) {
-        const [or, og, ob] = parseColor(over);
-        R = r * a + or * (1 - a);
-        G = g * a + og * (1 - a);
-        B = b * a + ob * (1 - a);
-    }
-    return 0.2126 * linearize(R) + 0.7152 * linearize(G) + 0.0722 * linearize(B);
-}
-
 function linearize(c: number): number {
     return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
 }
