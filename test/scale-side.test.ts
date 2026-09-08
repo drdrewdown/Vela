@@ -3,7 +3,7 @@ import { NativeRenderer } from '../src/renderers/native/NativeRenderer';
 import { mergeConfig } from '../src/renderers/native/core/chartConfig';
 import { CoordinateSystem } from '../src/renderers/native/core/CoordinateSystem';
 import { LEGEND_LEFT_CSS } from '../src/renderers/shared/InputsUI';
-import { AXIS_MASTER_W, masterColumnX, rightGutterPx } from '../src/renderers/native/chrome/axisLayout';
+import { AXIS_MASTER_W, AXIS_MERGED_W, masterColumnX, rightGutterPx, scaleColumnX } from '../src/renderers/native/chrome/axisLayout';
 
 // `priceScale.side` is the one place the scale's edge is decided; its pixel consequence is
 // `coords.leftOffsetPx`, which every painter reads instead of a global.
@@ -89,5 +89,17 @@ describe('pane controls and the left-docked scale', () => {
         expect(masterColumnX('left', 64, 800)).toBe(0);
         expect(masterColumnX('left', 64 + 56, 800)).toBe(56); // a merged column sits further out
         expect(masterColumnX('left', 64, 800) + AXIS_MASTER_W).toBe(64); // the column ends at the data seam
+    });
+
+    it('a merged-indicator scale column sits outward of the master on either dock', () => {
+        // Docked right the merged column follows the master rightward; docked left it sits to
+        // the master's LEFT. The painter used the right-dock position on both, so an own-scale
+        // indicator's numbers landed at the plot's right edge with the scale on the left.
+        const axis = AXIS_MASTER_W + AXIS_MERGED_W;
+        expect(scaleColumnX('right', axis, 800, 0)).toBe(masterColumnX('right', axis, 800));
+        expect(scaleColumnX('right', axis, 800, 1)).toBe(800 - axis + AXIS_MASTER_W);
+        expect(scaleColumnX('left', axis, 800, 0)).toBe(masterColumnX('left', axis, 800));
+        expect(scaleColumnX('left', axis, 800, 1)).toBe(0);
+        expect(scaleColumnX('left', axis + AXIS_MERGED_W, 800, 2)).toBe(0); // two merged columns: the outer one at the edge
     });
 });

@@ -43,5 +43,15 @@ export function rightGutterPx(scaleSide: 'left' | 'right', rightAxisW: number): 
  * rather than assuming the right edge.
  */
 export function masterColumnX(scaleSide: 'left' | 'right', axisW: number, plotW: number): number {
-    return scaleSide === 'left' ? axisW - AXIS_MASTER_W : plotW - axisW;
+    return scaleColumnX(scaleSide, axisW, plotW, 0);
+}
+
+/**
+ * Left x, within the plot, of any scale column on whichever side the scale docks: column 0
+ * is the master scale (see {@link masterColumnX}); columns ≥ 1 are the merged-indicator
+ * scales, each one further OUT from the data — rightward docked right, leftward docked left.
+ */
+export function scaleColumnX(scaleSide: 'left' | 'right', axisW: number, plotW: number, column: number): number {
+    if (scaleSide === 'left') return axisW - AXIS_MASTER_W - column * AXIS_MERGED_W;
+    return axisColumnX(plotW - axisW, column);
 }

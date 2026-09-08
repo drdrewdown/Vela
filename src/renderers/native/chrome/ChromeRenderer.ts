@@ -13,7 +13,7 @@ import { DrawingSceneRenderer, modelDrawingSet, type DrawingSet, type TimeWindow
 import { renderTradeMarkers } from '../../shared/trade-markers';
 import type { TradeExecution } from '../../../core/model/trades';
 import { paneAxisTicks, formatAxisValue, timeTicks } from './ticks';
-import { axisColumnX, PANE_SEPARATOR_PX } from './axisLayout';
+import { AXIS_MERGED_W, PANE_SEPARATOR_PX, scaleColumnX } from './axisLayout';
 import { parseColor, readableText } from '../backend/gl/color';
 import { DARK_THEME } from '../../../core/theme';
 import { tzOffsetMs } from './tz';
@@ -251,14 +251,18 @@ export class ChromeRenderer {
     }
 
     /**
-     * Draw an axis column per merged (own-scale) indicator, to the right of each pane's
-     * master scale — tick labels in the chart's axis text color. Columns are told apart by
-     * spacing alone (no divider line), and a collapsed pane's columns are skipped entirely.
-     * This is what makes a merged indicator readable on its own values while sharing the pane.
+     * Draw an axis column per merged (own-scale) indicator, outward of each pane's master
+     * scale on whichever side the scale docks — tick labels in the chart's axis text color,
+     * read toward the data like the master's. Columns are told apart by spacing alone (no
+     * divider line), and a collapsed pane's columns are skipped entirely. This is what makes
+     * a merged indicator readable on its own values while sharing the pane.
      */
     private drawMergedScaleColumns(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem, dataW: number): void {
         if (!scene.showAxisLabels) return;
-        ctx.textAlign = 'left';
+        const isLeft = coords.leftOffsetPx > 0; // the scale docks left
+        const fullW = ctx.canvas.width / coords.dpr;
+        const axisW = fullW - dataW;
+        ctx.textAlign = isLeft ? 'right' : 'left';
         // A merged column reads with the same axis text color as the master scale (from the
         // chart's settings) — no per-indicator tint, so the gutter stays uniform.
         ctx.fillStyle = this.axisTextColor;
@@ -268,11 +272,12 @@ export class ChromeRenderer {
             merged.forEach((model, k) => {
                 const sc = scene.indicatorScales.get(model.id)?.scale;
                 if (!sc) return;
-                const x = axisColumnX(dataW, k + 1); // column 0 is the master scale
+                const x = scaleColumnX(isLeft ? 'left' : 'right', axisW, fullW, k + 1); // column 0 is the master scale
+                const textX = isLeft ? x + AXIS_MERGED_W - 5 : x + 5;
                 for (const t of paneAxisTicks(sc, pane.bounds.height, undefined, scene.priceMintick)) {
                     const y = coords.priceToY(t.price, sc, pane.bounds);
                     if (y < pane.bounds.top + 6 || y > pane.bounds.top + pane.bounds.height - 4) continue;
-                    ctx.fillText(t.label, x + 5, y);
+                    ctx.fillText(t.label, textX, y);
                 }
             });
         }
