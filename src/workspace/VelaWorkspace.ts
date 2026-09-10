@@ -343,6 +343,8 @@ export class VelaWorkspace {
     private readonly persistKey: string | null;
     private readonly storage: WorkspaceStorage;
     private stateTimer: ReturnType<typeof setTimeout> | null = null;
+    /** Set at the end of a successful construction; nothing persists before it. */
+    private booted = false;
     private readonly onUnload = (): void => this.persistNow();
     /** Re-entrance guard around one propagation tick: followers' synchronous echoes
      *  (their setVisibleRange re-emits viewport:changed) must not re-propagate. */
@@ -418,7 +420,6 @@ export class VelaWorkspace {
                     if (!this.destroyed && r) this.applyState(decodeState(r));
                 });
             }
-            if (typeof window !== 'undefined') window.addEventListener('beforeunload', this.onUnload);
         }
         this.timezone = boot?.timezone ?? opts.timezone ?? 'Etc/UTC';
         if (boot?.favorites) this.favs = [...boot.favorites];
@@ -760,6 +761,12 @@ export class VelaWorkspace {
         // is fully built (cells live, attachments mounted). The async-adapter boot and
         // host `applyState` calls reach the same handlers through applyState.
         this.restoreGlobalExt();
+        // The unload save is armed LAST: a constructor that throws mid-restore (a cell whose
+        // indicator failed to boot) must leave the saved document alone. Armed earlier, the
+        // half-built workspace saved its empty cell list on the next unload and wiped the
+        // document the user would have recovered by fixing the indicator.
+        this.booted = true;
+        if (this.persistKey !== null && typeof window !== 'undefined') window.addEventListener('beforeunload', this.onUnload);
     }
 
     // ── access ──────────────────────────────────────────────────
@@ -1358,7 +1365,7 @@ export class VelaWorkspace {
     /** Debounced dirty mark: one `state:changed` (+ one storage write in persist mode)
      *  per burst of edits, flushed hard on unload/destroy. */
     private markStateDirty(): void {
-        if (this.destroyed) return;
+        if (this.destroyed || !this.booted) return;
         if (this.stateTimer != null) clearTimeout(this.stateTimer);
         this.stateTimer = setTimeout(() => {
             this.stateTimer = null;
@@ -1369,7 +1376,7 @@ export class VelaWorkspace {
 
     /** Write the current state through the storage adapter now (fire-and-forget). */
     private persistNow(): void {
-        if (this.persistKey === null || this.destroyed) return;
+        if (this.persistKey === null || this.destroyed || !this.booted) return;
         try {
             void this.storage.set(this.persistKey, encodeState(this.getState()));
         } catch {
