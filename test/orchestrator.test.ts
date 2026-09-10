@@ -2583,3 +2583,67 @@ describe('native indicators — legend: false (host-owned chrome)', () => {
         }
     });
 });
+
+// A native indicator receives its inputs at `start(ctx, inputs)`. Until then it has no
+// context — no bars, nothing to emit to — so an input change must wait for start rather than
+// be pushed through `setInputs`. The orchestrator pushed it anyway: a workspace restore that
+// converged a native's stored inputs before its bars had landed called setInputs on an
+// instance that had never started, the instance read its missing context, and the throw took
+// the whole workspace instantiation down — the host then saved an empty document.
+class HeldFeed implements MarketDataFeed {
+    private release: (() => void) | null = null;
+    load(): Promise<OHLCV[]> {
+        return new Promise((resolve) => { this.release = () => resolve(makeBars(3)); });
+    }
+    loadRange(): Promise<OHLCV[]> { return Promise.resolve([]); }
+    subscribe(): Unsubscribe { return () => {}; }
+    open(): void { this.release?.(); }
+}
+
+class StrictNative implements NativeIndicator {
+    static last: StrictNative | null = null;
+    startInputs: Record<string, InputValue> | null = null;
+    setInputsCalls = 0;
+    private ctx: NativeIndicatorContext | null = null;
+    constructor() { StrictNative.last = this; }
+    start(ctx: NativeIndicatorContext, inputs: Record<string, InputValue>): void { this.ctx = ctx; this.startInputs = { ...inputs }; }
+    onBars(): void {}
+    onViewport(): void {}
+    setInputs(): void {
+        this.setInputsCalls += 1;
+        this.ctx!.bars(); // what a real study does: recompute from its context
+    }
+    suspend(): void {}
+    resume(): void {}
+    stop(): void {}
+}
+
+const strictDescriptor: NativeIndicatorDescriptor = {
+    type: 'test-strict', title: 'Strict', paneHint: 'price', overlay: true,
+    inputsSchema: () => [{ key: 'len', title: 'Length', type: 'int', defval: 5 }],
+    defaultInputs: () => ({ len: 5 }),
+    create: () => new StrictNative(),
+};
+
+describe('native inputs before start', () => {
+    it('an input change before the bars land waits for start, which receives the merged values', async () => {
+        registerNativeIndicator(strictDescriptor);
+        try {
+            const feed = new HeldFeed();
+            const chart = new Vela({} as unknown as HTMLElement, { live: false }, { renderer: new FakeRenderer(), engines: [], dataFeed: feed });
+            const handle = chart.addNativeIndicator('test-strict');
+            await flush();
+            const native = StrictNative.last!;
+            expect(native.startInputs).toBeNull(); // not started: the history is still held
+            expect(() => handle.setInputs({ len: 7 })).not.toThrow();
+            expect(native.setInputsCalls).toBe(0);
+            feed.open();
+            await chart.ready();
+            await flush();
+            expect(native.startInputs).toEqual({ len: 7 });
+            chart.destroy();
+        } finally {
+            unregisterNativeIndicator('test-strict');
+        }
+    });
+});

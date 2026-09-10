@@ -1298,7 +1298,11 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
         if (!record.hidden && !record.native) this.setLoading(record, true);
         record.pendingCause = 'inputs';
         if (record.session) record.session.update(record.inputValues);
-        else if (record.native && !record.hidden) record.native.instance.setInputs(record.inputValues);
+        // A native that has not started has no context to recompute from — `start(ctx, inputs)`
+        // delivers the merged values when its bars land. Pushing setInputs before that made a
+        // restore that converged stored inputs ahead of the history read the instance's missing
+        // context and take the whole workspace down.
+        else if (record.native && !record.hidden && record.native.started) record.native.instance.setInputs(record.inputValues);
         this.events.emit('indicator:inputs', { id });
     }
 
