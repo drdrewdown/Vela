@@ -250,6 +250,18 @@ export interface ChartConfig {
          *  turns this off; the hit regions and the readout stay. */
         drawings: boolean;
     };
+    /** Motion on/off switches (the settings dialog's Animation group). On/off only — each
+     *  motion's duration stays what the host configured (`animations` option / renderer
+     *  features); switching one back on restores that duration. `pan` covers both the
+     *  drag-release inertia and the programmatic scroll glide. The live-bar glide's switch
+     *  is `priceScale.animateLastPrice` (it predates this block). */
+    animations: {
+        zoom: boolean;
+        pan: boolean;
+        autoscale: boolean;
+        /** The first-paint candle reveal — takes effect on the next load. */
+        intro: boolean;
+    };
     /** Stacked-pane chrome — the draggable line between an indicator's pane and the one above it. */
     panes: {
         separatorColor: string;
@@ -276,6 +288,12 @@ export interface ChartConfig {
         /** What a wheel zoom keeps pinned: the latest bar (`right`, the common idiom) or the bar
          *  under the pointer (`cursor`). Ctrl/⌘ + wheel zooms at the pointer in either mode. */
         zoomAnchor: 'right' | 'cursor';
+    };
+    /** Timeline marks (the `marks` feature): the lane's master toggle + per-group visibility
+     *  (the Events tab's checkboxes). `groups` merges additively, like `stacking.series`. */
+    marks: {
+        visible: boolean;
+        groups: Record<string, boolean>;
     };
     /** Per-chart-type settings (plugin SDK sections), keyed by type id then row key. */
     chartTypes: Record<string, Record<string, unknown>>;
@@ -592,9 +610,12 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
     const ps = asObject(p.priceScale);
     const legend = asObject(p.legend);
     const tooltips = asObject(p.tooltips);
+    const anim = asObject(p.animations);
     const panes = asObject(p.panes);
     const trades = asObject(p.trades);
     const ts = asObject(p.timeScale);
+    const marks = asObject(p.marks);
+    const markGroups = asObject(marks.groups);
     const candles = asObject(p.candles);
     const bars = asObject(p.bars);
     const line = asObject(p.line);
@@ -648,6 +669,12 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
         },
         legend: { folded: isBool(legend.folded) ? legend.folded : base.legend.folded },
         tooltips: { drawings: isBool(tooltips.drawings) ? tooltips.drawings : base.tooltips.drawings },
+        animations: {
+            zoom: isBool(anim.zoom) ? anim.zoom : base.animations.zoom,
+            pan: isBool(anim.pan) ? anim.pan : base.animations.pan,
+            autoscale: isBool(anim.autoscale) ? anim.autoscale : base.animations.autoscale,
+            intro: isBool(anim.intro) ? anim.intro : base.animations.intro,
+        },
         panes: {
             separatorColor: isColor(panes.separatorColor) ? panes.separatorColor : base.panes.separatorColor,
             weights: panes.weights === undefined ? base.panes.weights : paneWeights(panes.weights),
@@ -664,6 +691,15 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
             timezone: typeof ts.timezone === 'string' && ts.timezone ? ts.timezone : base.timeScale.timezone,
             hour12: isBool(ts.hour12) ? ts.hour12 : base.timeScale.hour12,
             zoomAnchor: ts.zoomAnchor === 'cursor' || ts.zoomAnchor === 'right' ? ts.zoomAnchor : base.timeScale.zoomAnchor,
+        },
+        marks: {
+            visible: isBool(marks.visible) ? marks.visible : base.marks.visible,
+            // Additive like `stacking.series`: a patch names only the groups it carries, so a
+            // choice stored for a group the host has not registered yet survives verbatim.
+            groups: {
+                ...base.marks.groups,
+                ...Object.fromEntries(Object.entries(markGroups).filter(([, v]) => isBool(v)) as Array<[string, boolean]>),
+            },
         },
         candles: {
             upColor: isColor(candles.upColor) ? candles.upColor : base.candles.upColor,

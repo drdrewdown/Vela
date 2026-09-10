@@ -29,6 +29,7 @@ import { IndicatorHandleImpl, type IndicatorController } from './IndicatorHandle
 import { inspectModels, type SceneInspection } from './inspect';
 import { presetToRange, type VisibleRangePreset } from '../visible-range';
 import { DrawingController } from '../drawings/DrawingController';
+import { MarksController } from '../marks/MarksController';
 import { DrawingSeriesService } from './DrawingSeriesService';
 import type { DrawingsOption } from '../drawings/toolbar';
 import type { DataControl } from '../DataControl';
@@ -254,6 +255,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
             marketKey: () => `${this.config.market.symbol ?? ''}|${this.config.market.session ?? ''}`,
         });
         this.drawings = new DrawingController(this.renderer, this.events, config.drawings, drawingSeries);
+        this.marks = new MarksController(this.renderer, this.events);
         // A symbol nothing can serve leaves the load PARKED; publish it so a host can say so
         // instead of showing a blank chart forever (it still resumes if a provider registers).
         // A parked load also ends the loading state — nothing is coming, and an endless
@@ -275,6 +277,8 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
 
     /** The user-drawings manager (backs `chart.drawings`). */
     readonly drawings: DrawingController;
+    /** The timeline-marks manager (backs `chart.marks`). */
+    readonly marks: MarksController;
 
     /**
      * The visible range to feed a run. Prefer the latest viewport-change event, but
@@ -771,6 +775,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
             if (!record.native) continue;
             record.native.instance.stop();
             record.native.instance = record.native.descriptor.create();
+            record.native.started = false;
             record.pendingStructural = true; // the next emitted model remounts over the old visuals
             if (record.hidden) {
                 record.native.stale = true;
@@ -1372,13 +1377,22 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
             record.session = undefined;
             record.native?.instance.suspend();
             if (record.renderHandle) this.renderer.setIndicatorVisible?.(record.renderHandle, false);
+            // Hidden before anything mounted (a restored ledger entry hides the record
+            // right after add, before start): the row must exist anyway, or the
+            // indicator is unreachable — there is no eye to unhide it with. Natives
+            // mount here; a Pine record mounts via mountLoadingPlaceholder once its
+            // prepare completes (prepare runs regardless of visibility).
+            else if (record.native) this.mountHiddenNativeRow(id, record);
         } else {
             if (record.renderHandle) this.renderer.setIndicatorVisible?.(record.renderHandle, true);
             record.pendingStructural = true; // visuals dropped on hide → next model re-mounts
             if (record.native) {
-                if (record.native.stale) {
-                    // The instance was re-created for a NEW market while hidden — resume()
-                    // would revive the old market's compute; start the fresh instance instead.
+                if (record.native.stale || !record.native.started) {
+                    // The instance was re-created for a NEW market while hidden (`stale`),
+                    // or was ADDED hidden and never started (a restored hidden ledger entry —
+                    // startNativeIndicator bails on hidden records): resume() would either
+                    // revive the old market's compute or poke a context-less instance.
+                    // Start the instance instead.
                     record.native.stale = false;
                     const handle = this.handles.get(id);
                     if (handle) void this.startNativeIndicator(id, handle);
@@ -1476,6 +1490,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
         this.unresolvedUnsub = null;
         this.feed.destroy?.(); // parked waits would otherwise outlive the chart
         this.drawings.destroy();
+        this.marks.destroy();
         this.renderer.destroy();
         this.events.clear();
     }
@@ -1612,6 +1627,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
                 },
             };
             record.native.instance.start(ctx, record.inputValues);
+            record.native.started = true;
         } catch (err) {
             this.fail(id, handle, err);
         }
@@ -1627,6 +1643,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
             overlay: d.overlay,
             paneHint: d.paneHint,
             native: { type: record.native!.type },
+            ...(d.legend === false ? { legend: false } : {}),
             ...(out.paneAxis != null ? { paneAxis: out.paneAxis } : {}),
             series: out.series ?? [],
             fills: out.fills ?? [],
@@ -1650,6 +1667,14 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
      * over it in place (`pendingStructural`), clears the spinner, and only THEN fires
      * `indicator:added`/`ready` — so event semantics and `inspect()` (which skips
      * loading records) still mean "the indicator produced output".
+     *
+     * A HIDDEN record mounts too — dimmed, no spinner (its session never starts while
+     * hidden, so nothing is computing and no model will ever arrive to mount the row
+     * later). Without this an indicator ADDED hidden (a restored ledger/ext entry) had
+     * no legend row at all: invisible AND unreachable — the eye that unhides it never
+     * existed. The hidden mount announces immediately for the same reason: the "first
+     * computed model" that normally announces cannot come until the indicator is shown,
+     * and host UIs (object tree, landing watchers) must know it exists NOW.
      */
     private mountLoadingPlaceholder(id: string, record: IndicatorRecord): void {
         if (record.renderHandle || !record.prepared) return;
@@ -1687,8 +1712,35 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
         record.model = model;
         this.ensurePaneFor(paneId);
         record.renderHandle = this.renderer.mountIndicator(model);
-        record.pendingStructural = true;
-        if (record.hidden) this.renderer.setIndicatorVisible?.(record.renderHandle, false);
+        record.pendingStructural = true; // the first computed model remounts over the placeholder
+        if (record.hidden) {
+            this.renderer.setIndicatorVisible?.(record.renderHandle, false);
+            this.announce(record, this.handles.get(id));
+            return;
+        }
+        this.setLoading(record, true);
+    }
+
+    /**
+     * Mount the legend row for a NATIVE indicator that is being hidden BEFORE it ever
+     * started (a restored-hidden ledger entry: `startNativeIndicator` bails on hidden
+     * records, so no model — and therefore no row — would ever mount). The native
+     * counterpart of {@link mountLoadingPlaceholder}'s hidden branch: an empty model
+     * carries the title + inputs schema, the renderer marks the row hidden, and the
+     * announce makes the indicator visible to host UIs. Showing later STARTS the
+     * instance (the `started` flag path) and its first emit remounts over this row.
+     */
+    private mountHiddenNativeRow(id: string, record: IndicatorRecord): void {
+        if (record.renderHandle || !record.native) return;
+        const model = this.buildNativeModel(record, {});
+        const paneId = this.routePane(id, model, record.options ?? {});
+        this.placeModel(model, id, paneId);
+        record.model = model;
+        this.ensurePaneFor(paneId);
+        record.renderHandle = this.renderer.mountIndicator(model);
+        record.pendingStructural = true; // the first emit after show remounts over this row
+        this.renderer.setIndicatorVisible?.(record.renderHandle, false);
+        this.announce(record, this.handles.get(id));
     }
 
     /** Flip the record's loading state and reflect it in the legend row (spinner on/off). */
@@ -1731,6 +1783,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
         for (const r of this.registry.all()) {
             const model = r.model;
             if (!model) continue;
+            if (model.legend === false) continue; // host-owned chrome: no row anywhere, the handle is the control
             const paneId = model.paneId ?? 'price';
             if (!byPane.has(paneId)) byPane.set(paneId, []);
             byPane.get(paneId)!.push({

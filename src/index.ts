@@ -4,6 +4,9 @@ export { priceStyleIds, priceStyleLabel, BUILTIN_PRICE_STYLES, BUILTIN_PRICE_STY
 export { setIndicatorCategoryOrder, orderCategories, rowBadge } from './widget/indicator-picker';
 export type { VelaDeps, RunIndicatorResult } from './Vela';
 export { RendererControl } from './core/RendererControl';
+// The second pulse behind time displays — share one between a host clock and
+// `chart.renderer.setWallClock` so the countdown chip never reads a different second.
+export { SecondClock, type WallClock } from './core/util/wall-clock';
 export { NativeRenderer } from './renderers/native/NativeRenderer';
 // The drawing-toolbar VIEW as a standalone component — a workspace shell mounts ONE
 // shared bar (dock:'static') and routes it to the active chart's `chart.drawings`.
@@ -15,6 +18,7 @@ export { BarStore, sharedBarStore } from './data/BarStore';
 export { timeframeToMs } from './data/timeframe';
 export { DataControl } from './core/DataControl';
 export { DrawingsControl } from './core/DrawingsControl';
+export { MarksControl } from './core/MarksControl';
 
 // Native indicators (core-computed, no scripting engine) — register a type, then chart.addNativeIndicator(type)
 export { registerNativeIndicator, unregisterNativeIndicator, getNativeIndicator, nativeIndicatorTypes, nativeIndicatorDescriptors } from './core/native-indicators';
@@ -55,6 +59,9 @@ export type {
     DrawingSeriesGateway,
 } from './core/drawings';
 
+// Timeline marks (`chart.marks`): host events on a lane above the time axis.
+export type { TimelineMark, MarkGlyph, MarkShape, MarkContent, MarkContentSource, MarkPanelItem, MarkGroup, MarkClickEvent } from './core/marks';
+
 // Public types
 export type * from './core/model';
 export type {
@@ -68,6 +75,9 @@ export type {
     RendererConstructor,
     RendererDisplayOptions,
     AnimationConfig,
+    IntroStyle,
+    IntroConfig,
+    IntroAnimation,
     AddIndicatorOptions,
     SettingsVisibilityPolicy,
     ChromeTokens,

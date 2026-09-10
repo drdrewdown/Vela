@@ -2,6 +2,8 @@
 // Range presets switch the timeframe AND frame the matching visible window; the widget
 // owns the rebuild, so the bar only reports the chosen preset upward.
 import type { VisibleRangePreset } from '../core/visible-range';
+import type { Unsubscribe } from '../core/util/types';
+import { SecondClock, type WallClock } from '../core/util/wall-clock';
 import { Menu } from '../ui/components/menu';
 import { Tooltip } from '../ui/components/tooltip';
 import { iconEl } from '../ui/icons';
@@ -115,6 +117,10 @@ const CSS = `
 
 export interface BottombarOptions {
     timezone: string;
+    /** The second pulse the clock ticks on. Share one with the charts' countdown chips
+     *  (`renderer.setWallClock`) so every time display reads the same second; omitted,
+     *  the bar runs its own second-aligned clock. */
+    clock?: WallClock;
     onRange: (preset: RangePreset) => void;
     onTimezone: (zone: string) => void;
     /** RTH/ETH toggled by the user. Fires only while the toggle is ENABLED (see {@link Bottombar.setSession}). */
@@ -134,7 +140,7 @@ export class Bottombar {
     private sessionEl: HTMLElement | null = null;
     private timezone: string;
     private hour12 = false;
-    private timer: ReturnType<typeof setInterval> | null = null;
+    private readonly unsubClock: Unsubscribe;
 
     constructor(host: HTMLElement, opts: BottombarOptions) {
         this.timezone = opts.timezone;
@@ -208,7 +214,7 @@ export class Bottombar {
         });
 
         this.tick();
-        this.timer = setInterval(() => this.tick(), 1000);
+        this.unsubClock = (opts.clock ?? new SecondClock()).onTick(() => this.tick());
     }
 
     /** 12-hour clock (the active chart's `timeScale.hour12`). */
@@ -248,7 +254,7 @@ export class Bottombar {
     }
 
     destroy(): void {
-        if (this.timer !== null) clearInterval(this.timer);
+        this.unsubClock();
         this.tzMenu.destroy();
         this.settingsTip?.destroy();
         this.el.remove();

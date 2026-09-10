@@ -82,9 +82,10 @@ export interface CellState {
     rendererConfig?: unknown;
     /** The user-drawings document (`drawings.toJSON()`). */
     drawings?: unknown;
-    /** The indicator ledger: manifest entries + present native instances. An entry is
-     *  the bare NAME / TYPE when every value sits on its declaration default, else the
-     *  name plus the input/prop DELTAS (defaults are never frozen into documents). */
+    /** The indicator ledger: manifest entries + native entries. Either side persists
+     *  the bare NAME/TYPE when every value sits on its declaration default and the
+     *  indicator is visible, else the name/type plus the input(/prop) DELTAS and a
+     *  `hidden` flag (defaults are never frozen into documents). */
     indicators?: { manifest: PersistedManifestEntry[]; natives: PersistedNativeEntry[] };
     /** Third-party per-chart state, by namespaced key (`'vendor.feature'`) — written and
      *  read by registered state-persistence handlers (`registerStatePersistence`, scope
@@ -95,11 +96,12 @@ export interface CellState {
 }
 
 /** One persisted manifest-instance entry (see `CellState.indicators`). */
-export type PersistedManifestEntry = string | { name: string; inputs?: Record<string, unknown>; props?: Record<string, unknown>; hidden?: true };
+export type PersistedManifestEntry = string | { name: string; inputs?: Record<string, unknown>; props?: Record<string, unknown>; hidden?: boolean };
 
-/** One persisted native-instance entry: the bare TYPE when every input sits on its
- *  descriptor default, else the type plus the input DELTAS. */
-export type PersistedNativeEntry = string | { type: string; inputs?: Record<string, unknown>; hidden?: true };
+/** One persisted native-indicator entry (see `CellState.indicators`). The bare TYPE is
+ *  the historical shape and still the common case; the object form carries the input
+ *  DELTAS and/or the hidden flag so native settings and visibility survive a reload. */
+export type PersistedNativeEntry = string | { type: string; inputs?: Record<string, unknown>; hidden?: boolean };
 
 /** One entry of the document's `charts` array: a chart's state plus its cell IDENTITY. */
 export interface ChartState extends CellState {
@@ -236,30 +238,30 @@ function sanitizeCell(raw: unknown): CellState | null {
     if (ind != null && typeof ind === 'object') {
         // Bare names pass as-is; object entries keep only a string name and plain-object
         // value bags (the add path validates individual values against the schema).
+        const bag = (v: unknown): Record<string, unknown> | undefined => (v != null && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined);
         const manifest: PersistedManifestEntry[] = Array.isArray(ind.manifest)
             ? ind.manifest.flatMap((n): PersistedManifestEntry[] => {
                   if (typeof n === 'string') return [n];
                   if (n != null && typeof n === 'object' && typeof (n as { name?: unknown }).name === 'string') {
                       const e = n as { name: string; inputs?: unknown; props?: unknown; hidden?: unknown };
-                      const bag = (v: unknown): Record<string, unknown> | undefined => (v != null && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined);
                       const inputs = bag(e.inputs);
                       const props = bag(e.props);
                       const hidden = e.hidden === true;
-                      return [inputs || props || hidden ? { name: e.name, ...(inputs ? { inputs } : {}), ...(props ? { props } : {}), ...(hidden ? { hidden: true as const } : {}) } : e.name];
+                      return [inputs || props || hidden ? { name: e.name, ...(inputs ? { inputs } : {}), ...(props ? { props } : {}), ...(hidden ? { hidden } : {}) } : e.name];
                   }
                   return [];
               })
             : [];
-        // Natives: bare types pass as-is; object entries keep a string type and a plain-object
-        // input bag (the add path merges it over the descriptor defaults).
+        // Native entries mirror the manifest shape: bare types pass as-is; object entries
+        // keep only a string type, a plain-object input bag, and a true hidden flag.
         const natives: PersistedNativeEntry[] = Array.isArray(ind.natives)
             ? ind.natives.flatMap((n): PersistedNativeEntry[] => {
                   if (typeof n === 'string') return [n];
                   if (n != null && typeof n === 'object' && typeof (n as { type?: unknown }).type === 'string') {
                       const e = n as { type: string; inputs?: unknown; hidden?: unknown };
-                      const inputs = e.inputs != null && typeof e.inputs === 'object' && !Array.isArray(e.inputs) ? (e.inputs as Record<string, unknown>) : undefined;
+                      const inputs = bag(e.inputs);
                       const hidden = e.hidden === true;
-                      return [inputs || hidden ? { type: e.type, ...(inputs ? { inputs } : {}), ...(hidden ? { hidden: true as const } : {}) } : e.type];
+                      return [inputs || hidden ? { type: e.type, ...(inputs ? { inputs } : {}), ...(hidden ? { hidden } : {}) } : e.type];
                   }
                   return [];
               })
