@@ -17,7 +17,7 @@ import { AXIS_MERGED_W, PANE_SEPARATOR_PX, scaleColumnX } from './axisLayout';
 import { parseColor, readableText } from '../backend/gl/color';
 import { countdownText } from './countdown';
 import { DARK_THEME } from '../../../core/theme';
-import { tzOffsetMs } from './tz';
+import { seriesNow, tzOffsetMs } from './tz';
 import { markGroupVisible } from '../../shared/marks-state';
 import { clusterTooltip, layoutMarkLane, markGlyphAt, markStackAt, type MarkLaneLayout, type PlacedGlyph } from './marks/layout';
 import { MarkIconRaster, paintMarkLane } from './marks/paint';
@@ -573,8 +573,9 @@ export class ChromeRenderer {
 
         const interval = coords.barInterval;
         // The countdown text is null once the bar has closed (the chip leaves with the bar) and
-        // rounds the remaining time up, in step with the shared second pulse.
-        const cdText = scene.showCountdown ? countdownText(last.time, interval, Date.now()) : null;
+        // rounds the remaining time up, in step with the shared second pulse. "Now" is read on
+        // the series' clock (bar times are wall-clock instants in the series' zone — see tz.ts).
+        const cdText = scene.showCountdown ? countdownText(last.time, interval, seriesNow(Date.now())) : null;
         const showCountdown = cdText !== null;
         const showLabel = scene.showPriceLabel;
         if (!showLabel && !showCountdown) return;
