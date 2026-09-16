@@ -284,7 +284,9 @@ export class Vela {
      * subscriptions all survive. Resolves once the new market's history is painted (a
      * deep backfill continues behind it — await {@link historyComplete}); a call
      * superseded by a newer `setMarket` resolves silently. Emits `market:changed`
-     * (with the previous identity) when the market identity changed.
+     * (with the previous identity) when the market identity changed. `reload: true`
+     * re-fetches the same market's history (a feed whose series moved under one
+     * identity) with the view carried over and no event.
      */
     setMarket(next: MarketSwitch): Promise<void> {
         return this.orchestrator.setMarket(next);

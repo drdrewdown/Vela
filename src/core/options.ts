@@ -58,6 +58,13 @@ export interface MarketSwitch {
     session?: MarketSession;
     data?: OHLCV[];
     visibleRange?: VisibleRangePreset | VisibleRange;
+    /**
+     * Re-fetch the current market's history even though nothing else changed — for a feed
+     * whose series moved under the same identity (a continuous futures contract rolled, a
+     * corrected tape). Reloads like a session flip: the user's view carries over and
+     * `market:changed` is not emitted, since the identity is the same.
+     */
+    reload?: boolean;
 }
 
 /**

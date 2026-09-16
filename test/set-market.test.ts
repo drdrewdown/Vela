@@ -612,6 +612,28 @@ describe('setMarket — in-place market switch', () => {
         expect(events).toEqual([]);
     });
 
+    it('reload: true re-fetches the SAME market — a feed whose series changed under one identity', async () => {
+        const feed = new SwitchFeed();
+        const renderer = new FakeRenderer();
+        const chart = make({ symbol: 'AAA', timeframe: '60', volume: false }, { renderer, engines: [], dataFeed: feed });
+        await chart.ready();
+        const events: unknown[] = [];
+        chart.on('market:changed', (e) => events.push(e));
+        const loadsBefore = feed.loads.length;
+        const window = { from: 1_700_010_000_000, to: 1_700_020_000_000 };
+        renderer.visibleRange = window; // where the user is looking
+        PRICE.AAA = 105; // the series moved under the same symbol (a continuous contract rolled)
+
+        await chart.setMarket({ reload: true });
+
+        expect(feed.loads.length).toBe(loadsBefore + 1);
+        expect(feed.loads[feed.loads.length - 1]).toMatchObject({ symbol: 'AAA', timeframe: '60' });
+        expect(renderer.bars[0]?.close).toBe(105); // the re-fetched series is on screen
+        expect(events).toEqual([]); // the identity did not change
+        expect(renderer.visibleRangeCalls).toContainEqual(window); // the view carries over
+        PRICE.AAA = 100;
+    });
+
     it('a depth-only reload fetches but does NOT emit market:changed', async () => {
         const feed = new SwitchFeed();
         feed.depth.AAA = 900;

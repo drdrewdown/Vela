@@ -611,10 +611,13 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
      * Resolves once the new market's history is painted — a deep backfill continues
      * BEHIND it (await {@link historyComplete} for full depth). A call superseded by a
      * newer setMarket (or destroy) resolves silently. Emits `market:changed` (with
-     * `prev`) when the market IDENTITY changed; a depth-only reload (`bars`) is silent.
+     * `prev`) when the market IDENTITY changed; a depth-only reload (`bars`) is silent,
+     * and so is a forced one (`reload: true` — the same identity, re-fetched because the
+     * feed's series moved under it; the view carries over like a session flip).
      */
     async setMarket(next: MarketSwitch): Promise<void> {
         const m = this.config.market;
+        const forced = next.reload === true;
         const identityChanged =
             (next.symbol !== undefined && next.symbol !== m.symbol) ||
             (next.timeframe !== undefined && next.timeframe !== m.timeframe) ||
@@ -631,10 +634,11 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
         const depthOnly =
             depthChanged &&
             !identityChanged &&
+            !forced &&
             this.rawBars.length > 0 &&
             !m.data?.length &&
             ((next.bars ?? 0) <= this.rawBars.length || typeof this.feed.loadRange === 'function');
-        if (!identityChanged && !depthChanged) {
+        if (!identityChanged && !depthChanged && !forced) {
             // Nothing to reload — honor at most a framing request.
             if (typeof next.visibleRange === 'string') this.setVisibleRangePreset(next.visibleRange);
             else if (next.visibleRange) this.renderer.setVisibleRange(next.visibleRange);
@@ -657,7 +661,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
             next.data === undefined &&
             (next.symbol === undefined || next.symbol === m.symbol) &&
             (next.timeframe === undefined || next.timeframe === m.timeframe);
-        const carried = sessionOnly && next.visibleRange === undefined ? this.currentVisibleRange() : undefined;
+        const carried = (sessionOnly || (forced && !identityChanged)) && next.visibleRange === undefined ? this.currentVisibleRange() : undefined;
         // How many bars the user is LOOKING at — the pixel zoom, in series-neutral form.
         const carriedCount = carried ? this.rawBars.filter((b) => b.time >= carried.left && b.time <= carried.right).length : 0;
 
@@ -700,7 +704,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
             // the gap. `load:start` goes out first (with the NEW identity, hence after the
             // config mutation) so plugins hide their own visuals before the blank. A
             // depth-only reload keeps the bars (same market, more history).
-            if (identityChanged) {
+            if (identityChanged || forced) {
                 this.beginLoad(false);
                 this.setBarSeries([], { clearing: true });
                 // The active style's DATA ENGINE still rides the old market — its rebuild only

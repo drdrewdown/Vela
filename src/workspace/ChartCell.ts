@@ -894,6 +894,13 @@ export class ChartCell {
         this.deps.onMarketChanged(this.id);
     }
 
+    /** Re-fetch this cell's history on the same market — the feed's series moved under the
+     *  symbol (a continuous contract rolled). The view carries over; no market change. */
+    reload(): void {
+        if (!this.inner) return;
+        void this.inner.setMarket({ reload: true });
+    }
+
     setTimeframe(timeframe: string): void {
         if (!this.inner || timeframe === this.timeframe) return;
         // Leaving range mode: drop the chip AND its fetch budget (back to the cell's own bars).
