@@ -79,6 +79,48 @@ describe('generic native-data channels', () => {
     });
 });
 
+describe('hidden candles: the chart type\'s layer goes with them, indicator layers stay', () => {
+    // "Hide chart" hides the price series — for an SDK chart type that is its layer (the
+    // base entry named by the active price style), blanked by the data frame and skipped
+    // by the cursor repaint. An indicator painting through a layer (the same type mounted
+    // as an overlay native, or any other layer) is independent content and keeps painting.
+    type Probe = { extLayers: unknown[]; scene: SceneGraph; layerHiddenWithCandles(l: unknown): boolean; priceLayersAnchoredToBars(models: unknown[]): boolean };
+    const layer = (id: string, owner: string | null = null) => ({ def: { id, create: () => ({ mount() {}, render() {} }) }, instance: { mount() {}, render() {} }, canvas: {}, channel: owner ? `${id}#${owner}` : id, owner });
+    const model = (id: string, native: string | undefined, series: unknown[] = []) => ({ id, title: id, paneId: 'price', series, ...(native ? { native: { type: native } } : {}) });
+
+    it('hides only the active chart type\'s base layer, and only while the candles are hidden', () => {
+        const r = new NativeRenderer() as unknown as Probe;
+        const chartType = layer('demo');
+        const overlayInstance = layer('demo', 'native-2'); // the same layer class mounted for an overlay indicator
+        const other = layer('other');
+        r.scene.priceStyle = 'demo';
+        r.scene.candlesHidden = false;
+        expect(r.layerHiddenWithCandles(chartType)).toBe(false);
+        r.scene.candlesHidden = true;
+        expect(r.layerHiddenWithCandles(chartType)).toBe(true);
+        expect(r.layerHiddenWithCandles(overlayInstance)).toBe(false);
+        expect(r.layerHiddenWithCandles(other)).toBe(false);
+        r.scene.priceStyle = 'candles'; // the type's layer is not the chart anymore — it is an indicator's now
+        expect(r.layerHiddenWithCandles(chartType)).toBe(false);
+    });
+
+    // The autoscale asks this before dropping the candles from the price pane's scale: an
+    // overlay layer native paints at bar prices with no series of its own, so without the
+    // bars the scale would collapse to {0,1} and it would paint off-screen.
+    it('keeps the bars in the price scale for an overlay layer native only', () => {
+        const r = new NativeRenderer() as unknown as Probe;
+        expect(r.priceLayersAnchoredToBars([])).toBe(false);
+        r.extLayers = [layer('demo'), layer('demo', 'native-2')];
+        r.scene.priceStyle = 'candles';
+        expect(r.priceLayersAnchoredToBars([model('pine', undefined, [{ kind: 'line' }])])).toBe(false);
+        expect(r.priceLayersAnchoredToBars([model('vol', 'volume')])).toBe(false); // bespoke layer, not an SDK layer
+        expect(r.priceLayersAnchoredToBars([model('native-2', 'demo')])).toBe(true);
+        expect(r.priceLayersAnchoredToBars([model('native-9', 'other')])).toBe(false); // no layer registered for that type
+        r.scene.priceStyle = 'demo'; // the active chart type's own layer is blanked with the candles — no reason to keep the bars
+        expect(r.priceLayersAnchoredToBars([])).toBe(false);
+    });
+});
+
 describe('chart-type SDK settings (config bag + channel + notification)', () => {
     it('applyConfig persists chartTypes values, pushes the -settings channel, and notifies', () => {
         const r = new NativeRenderer();

@@ -248,8 +248,8 @@ describe('classic descriptor adapter', () => {
         const instance = desc.create();
         let captured: NativeIndicatorOutput | undefined;
         const ctx: NativeIndicatorContext = {
-            id: 'native-1',
-            chartId: 'chart-1', // Aether: NativeIndicatorContext carries the instance + chart tokens
+            id: 'native-test',
+            chartId: 'chart-1', // Aether: NativeIndicatorContext carries the chart token
             symbol: 'TEST',
             timeframe: '1m',
             live: false,
