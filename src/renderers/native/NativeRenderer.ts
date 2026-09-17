@@ -70,7 +70,7 @@ import { formatPriceLabel } from './chrome/ticks';
 import { zonedDate } from './chrome/tz';
 import { computePaneScale, expandScaleByPixels, overlaySeriesRange } from './core/autoscale';
 import { mergeTradeMarkersState, tradesPriceHints, type TradeMarkerHints } from '../shared/trade-markers';
-import { markGroupVisible, mergeMarksState } from '../shared/marks-state';
+import { markGroupOwnVisible, markGroupVisible, mergeMarksState } from '../shared/marks-state';
 import { effectiveMarkGroups } from './chrome/marks/layout';
 import { MarkPopover } from './chrome/marks/MarkPopover';
 import { MARK_PULSE_MS } from './chrome/marks/paint';
@@ -1143,7 +1143,11 @@ export class NativeRenderer implements IChartRenderer {
         }
         this.settingsDialog.setTheme(this.theme);
         this.settingsDialog.setHostSections(this.hostSettingsSections);
-        this.settingsDialog.setMarkGroups(this.markGroupsInUse(), (id) => markGroupVisible(this.scene.marks, id, this.scene.markGroups));
+        this.settingsDialog.setMarkGroups(
+            this.markGroupsForEventsTab(),
+            (id) => markGroupVisible(this.scene.marks, id, this.scene.markGroups),
+            (id) => markGroupOwnVisible(this.scene.marks.groups, id, this.scene.markGroups),
+        );
         this.settingsDialog.setHiddenSettings(this.hiddenSettings);
         this.syncThemeControl();
         this.settingsDialog.toggle(
@@ -1151,13 +1155,26 @@ export class NativeRenderer implements IChartRenderer {
             (patch) => this.applyConfig(patch),
             (json) => this.applyConfig(json),
             () => {
-                if (this.factoryConfig) this.applyConfig(factoryResetConfig(this.factoryConfig));
-                // Re-open so every control re-reads the restored values.
-                this.settingsDialog?.close();
-                this.openSettingsDialog();
+                if (this.factoryConfig) this.applyConfig(this.factoryResetDocument(this.factoryConfig));
+                // Re-seed the open dialog in place so every control shows the restored
+                // values — the shell stays put, no close/open transition.
+                this.settingsDialog?.refresh(this.getConfig());
             },
             section,
         );
+    }
+
+    /**
+     * The document "Reset defaults" applies: every setting back to its first-run value,
+     * with two things that are NOT settings held or resolved here — the price style
+     * stays the one the user is looking at, and the timeline-mark groups (an additive
+     * merge, like the type bags) are named back to their host-declared visibility.
+     */
+    private factoryResetDocument(factory: ChartConfig): ChartConfig {
+        const doc = factoryResetConfig(factory, this.scene.priceStyle);
+        const groups = { ...doc.marks.groups };
+        for (const g of this.markGroupsInUse()) groups[g.id] = g.visible !== false;
+        return { ...doc, marks: { ...doc.marks, groups } };
     }
 
     /** Close the in-chart dialogs (indicator settings + chart-settings gear). No-op when none are open. */
@@ -2450,6 +2467,16 @@ export class NativeRenderer implements IChartRenderer {
         return effectiveMarkGroups(this.scene.timelineMarks, this.scene.markGroups);
     }
 
+    /**
+     * The groups as the Events tab lists them: nested only under a DEFINED parent. The
+     * painter's visibility chain resolves parents against the defined groups alone, so a
+     * parent that marks merely name must not nest (and dim) a child the painter still shows.
+     */
+    private markGroupsForEventsTab(): MarkGroup[] {
+        const defined = new Set(this.scene.markGroups.map((g) => g.id));
+        return this.markGroupsInUse().map((g) => (g.parent !== undefined && !defined.has(g.parent) ? { ...g, parent: undefined } : g));
+    }
+
     onViewportChange(cb: (range: VisibleRange) => void): Unsubscribe {
         this.viewportCbs.add(cb);
         return () => this.viewportCbs.delete(cb);
@@ -3629,8 +3656,11 @@ export class NativeRenderer implements IChartRenderer {
                 if (or) dr = dr ? { min: Math.min(dr.min, or.min), max: Math.max(dr.max, or.max) } : or;
             }
             // Hidden candles drop out of the price pane's autoscale, so overlay indicators fill
-            // the pane — unless layer content still paints at bar prices there (see below).
-            const includeCandles = pane.kind === 'price' && (!this.scene.candlesHidden || this.priceLayersAnchoredToBars(masterModels));
+            // the pane — unless layer content still paints at bar prices there (see below), or
+            // nothing else on the pane can be measured: the bars then keep the scale, so the
+            // axis stays on the price range while hidden instead of the {0,1} placeholder.
+            const includeCandles = pane.kind === 'price'
+                && (!this.scene.candlesHidden || this.priceLayersAnchoredToBars(masterModels) || !this.paneHasMeasurableContent(masterModels, dr));
             // Each pane logs (or not) on its OWN flag — the price pane from the scene setting,
             // study panes from their own — so a study going log never touches the price pane.
             pane.scaleTarget = computePaneScale(masterModels, this.bars, includeCandles, i0, i1, dr, paneLogScale(this.scene, pane), (id) => this.scene.offsetOf(id));
@@ -3929,6 +3959,14 @@ export class NativeRenderer implements IChartRenderer {
      */
     private priceLayersAnchoredToBars(masterModels: IndicatorModel[]): boolean {
         return masterModels.some((m) => m.series.length === 0 && !!m.native && this.extLayers.some((l) => l.def.id === m.native!.type));
+    }
+
+    /** True when the pane's master content contributes SOMETHING to its autoscale besides
+     *  the candles: a series painted on the pane (force_overlay ones scale elsewhere), a
+     *  price line, or a measured drawings range. Mirrors what `computePaneScale` considers. */
+    private paneHasMeasurableContent(masterModels: IndicatorModel[], drawings: { min: number; max: number } | null | undefined): boolean {
+        if (drawings) return true;
+        return masterModels.some((m) => m.priceLines.length > 0 || m.series.some((s) => s.overlay !== true));
     }
 
     /** Per-pane scale state for a host UI (e.g. a price-axis context menu): the pane's pixel

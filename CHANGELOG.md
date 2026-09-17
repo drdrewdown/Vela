@@ -2,8 +2,62 @@
 
 All notable changes to Vela, newest first.
 
+## [v0.7.6]
+
+### Added
+
+- **Bring your own indicator ids.** `addIndicator`, `runIndicator` and `runScript` accept an
+  `id` option — an opaque string of your choosing (a document key, an editor tab, a UUID).
+  The indicator then runs under that id everywhere the chart reports one: the handle,
+  `chart.indicators()`, the `indicator:*` events, `script:run`, the legend and the pane
+  attributes — so a host that keys its own state on indicators no longer needs a side map
+  from its ids to the chart's. Leave it out and the chart mints an id as before; nothing
+  existing changes. An id already live on the chart is rejected rather than renamed:
+  `addIndicator` throws, `runIndicator`/`runScript` resolve `{ ok: false, error }`.
+  Removing the indicator frees its id. In the widget, `ctx.addIndicator({ id, … })` and
+  a persistence handler's `CellStateContext.addIndicator({ id, … })` take the same id,
+  so a plugin can store it in its document slot and restore the indicator under it —
+  and undo/redo re-add an indicator under the id it first ran with, supplied or minted.
+
+## [v0.7.5]
+
+### Added
+
+- **Timeline-mark groups can nest.** A group may name a `parent`: its checkbox lists indented
+  under the parent's on the Events tab and dims while the parent is off, and its marks paint
+  only while both are on. A host can now offer one master switch with sub-choices — News →
+  most recent / historical, Economic releases → high / medium / low — and a child keeps its
+  own choice for when the parent comes back.
+
+### Fixed
+
+- **Two-letter mark tokens stay inside their outline.** A timeline mark carrying two
+  characters (`US`, `EU`) drew them at the single-letter size, so on a 16 px pin the pair
+  ran over the head. Pairs now share the token's width at a smaller size, and are measured
+  as drawn so a wider pair or a wider host font never overflows either; a single letter is
+  unchanged.
+
+- **"Reset defaults" keeps the chart type you are on.** Resetting the chart settings
+  used to switch the chart back to the style it had when the page loaded — a line,
+  Heikin Ashi, or plugin chart type went back to candles, while the style button in the
+  toolbar still showed the old pick and the chart type's own settings tab vanished with
+  it. The reset now leaves the current chart type in place and returns everything else
+  to its defaults — every tab, the chart type's own settings, the candle look you gave
+  a plugin chart type from the Symbol tab, and the event groups you had hidden. The
+  dialog stays put and simply shows the restored values, instead of closing and
+  opening again. The toolbar's style button also follows a chart type that arrives
+  through an imported settings template.
+
 ## [v0.7.4]
 
+### Changed
+
+- **The price scale stays on the price range while the chart is hidden.** Hiding the
+  chart from the symbol legend with nothing else on the price pane used to leave the
+  price axis on a 0–1 placeholder. The axis now keeps following the hidden bars as you
+  pan and zoom, so showing the chart again lands exactly where you left it. As before,
+  when overlay indicators remain on the pane they take the scale over and fill it.
+  
 ### Fixed
 
 - **Dense timeline marks fold into clusters as you zoom out.** Marks of one group used to
