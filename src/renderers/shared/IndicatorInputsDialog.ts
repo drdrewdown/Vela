@@ -38,6 +38,11 @@ export const PROPS_TAB = 'Properties';
  *  reads/writes route to `row.propValues` and its commits carry `kind: 'prop'`. */
 type DialogDecl = InputSchema & { prop?: boolean };
 
+/** A dropdown's `[value, label]` pairs: `optionLabels` names a value, else the value names itself. */
+export function optionPairs(options: readonly string[], labels: Readonly<Record<string, string>> | undefined): SelectOption[] {
+    return options.map((value) => ({ value, label: labels?.[value] ?? value }));
+}
+
 /** The value bag a decl reads from / writes to (inputs vs declaration props). */
 function bagOf(row: IndicatorDialogRow, decl: DialogDecl): Record<string, InputValue> {
     return decl.prop ? row.propValues : row.values;
@@ -415,7 +420,7 @@ export class IndicatorInputsDialog {
         if (inp.type === 'bool') {
             return buildFieldControl({ kind: 'switch', id, checked: Boolean(current), onChange: (v) => emit(v) }).el;
         }
-        if (inp.options && inp.options.length > 0) return this.select(id, inp.options.map(String), String(current), emit);
+        if (inp.options && inp.options.length > 0) return this.selectPairs(id, optionPairs(inp.options.map(String), inp.optionLabels), String(current), emit);
         if (inp.type === 'source') return this.select(id, SOURCES, String(current), emit);
         if (inp.type === 'color') {
             return buildFieldControl({

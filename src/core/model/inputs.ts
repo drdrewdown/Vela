@@ -62,6 +62,12 @@ export interface InputSchema {
     step?: number;
     /** Choices for a dropdown (`input.string(..., options=[...])`). */
     options?: readonly string[];
+    /**
+     * Display text per option value, for a dropdown whose stored values are identifiers (a
+     * host's saved objects, bound by id so a rename never orphans the instance). An option
+     * without an entry shows its value.
+     */
+    optionLabels?: Readonly<Record<string, string>>;
     /** Grouping label for the dialog layout. */
     group?: string;
     /** Inline grouping label (controls placed on one row). */
