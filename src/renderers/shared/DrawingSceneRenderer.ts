@@ -689,12 +689,15 @@ export class DrawingSceneRenderer {
         if (!doMerge || rawList.length <= 1) {
             renderList = rawList;
         } else {
-            // Separate into pinned right margin price chips vs on-chart anchored labels
+            // Separate into pinned right margin price chips vs on-chart anchored labels;
+            // a label that opted out (`merge: false`) paints as it is and joins neither group
             const pinnedChips: any[] = [];
             const restLabels: any[] = [];
 
             for (const item of rawList) {
-                if (item.lb.style === "label_left" && item.lb.yloc === "price") {
+                if (item.lb.merge === false) {
+                    renderList.push(item);
+                } else if (item.lb.style === "label_left" && item.lb.yloc === "price") {
                     pinnedChips.push(item);
                 } else {
                     restLabels.push(item);

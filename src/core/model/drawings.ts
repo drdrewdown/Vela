@@ -143,6 +143,13 @@ export interface DrawingLabel {
      * with the whole segment off-screen it is culled like any other label.
      */
     track?: { x1: number; x2: number };
+    /**
+     * `false` → this label never joins a merged cluster: it paints where it is, and the
+     * labels around it merge with each other. For a label that IS the point of the chart (a
+     * signal bubble) and must keep its own tag at every zoom. Default: the renderer's merge
+     * setting applies.
+     */
+    merge?: boolean;
 }
 
 /** One vertex of a polyline (Pine `chart.point`). `x` follows `xloc`; `price` is y. */
