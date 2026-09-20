@@ -1088,6 +1088,23 @@ export class EngineOrchestrator implements IndicatorController, PaneController {
      * (identity when no transform), and hand the view to the renderer. Everything downstream
      * (engines via `getBars`, natives, visible-range presets) reads `this.bars` — the view.
      */
+    /** The RAW loaded series, exactly as the feed served it (the `'bar'` event's plane). */
+    barSeries(): readonly OHLCV[] {
+        return this.rawBars;
+    }
+
+    /**
+     * Replace the loaded series through the same path a load takes: the view re-derives
+     * under the active price style, the renderer repaints (framing kept with
+     * `preserveView`), and every indicator session and native sees the new bars. A host's
+     * bar replay, a truncated or spliced tape, a corrected print — anything that changes
+     * the series without a market switch.
+     */
+    setBars(raw: OHLCV[], opts?: { preserveView?: boolean }): void {
+        this.setBarSeries(raw, { preserveView: opts?.preserveView });
+        this.notifySessionsBars('complete');
+    }
+
     private setBarSeries(raw: OHLCV[], opts?: { preserveView?: boolean; clearing?: boolean }): void {
         this.rawBars = raw;
         this.bars = this.barTransform ? this.barTransform.full(raw) : raw;

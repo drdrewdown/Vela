@@ -5,6 +5,7 @@ import type { VisibleRangePreset } from './core/visible-range';
 import type { VelaOptions, VelaTheme, ThemeName, MarketSwitch, MarketSnapshot, AddIndicatorOptions } from './core/options';
 import { resolveAnimations } from './core/options';
 import type { InputValue } from './core/model/inputs';
+import type { OHLCV } from './core/model/ohlcv';
 import type { IndicatorHandle } from './core/IndicatorHandle';
 import type { EngineContextSnapshot } from './core/ports/ScriptingEngine';
 import type { NativeIndicatorInfo } from './core/native-indicators';
@@ -403,6 +404,22 @@ export class Vela {
 
     on<K extends keyof VelaEventMap>(event: K, handler: (payload: VelaEventMap[K]) => void): () => void {
         return this.orchestrator.events.on(event, handler);
+    }
+
+    /** The loaded bar series, exactly as the feed served it (raw prices, whatever the price style). */
+    bars(): readonly OHLCV[] {
+        return this.orchestrator.barSeries();
+    }
+
+    /**
+     * Replace the loaded bar series in place — the renderer repaints (the framing is kept
+     * with `preserveView`) and every indicator re-reads the bars. For a host that replays
+     * history bar by bar, truncates or splices a tape, or corrects a print without switching
+     * the market: `chart.setBars(chart.bars().slice(0, n), { preserveView: true })`.
+     */
+    setBars(bars: OHLCV[], options?: { preserveView?: boolean }): this {
+        this.orchestrator.setBars(bars, options);
+        return this;
     }
 
     /** The current visible time range (`from`/`to` in epoch-ms), or null before data loads. */
