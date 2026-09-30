@@ -21,6 +21,7 @@ import { PanesControl } from './core/PanesControl';
 import { DataControl } from './core/DataControl';
 import { DrawingsControl } from './core/DrawingsControl';
 import { MarksControl } from './core/MarksControl';
+import { ReplayControl } from './core/ReplayControl';
 import { NativeRenderer } from './renderers/native/NativeRenderer';
 import { MultiProviderFeed } from './data/MultiProviderFeed';
 import { registerBuiltinChartTypes } from './chart-types/builtins';
@@ -66,6 +67,7 @@ export class Vela {
     private readonly dataControl: DataControl;
     private readonly drawingsControl: DrawingsControl;
     private readonly marksControl: MarksControl;
+    private readonly replayControl: ReplayControl;
 
     constructor(container: HTMLElement | string, options: VelaOptions = {}, deps: VelaDeps = {}) {
         registerBuiltinChartTypes(); // built-in chart types through the public SDK registry (idempotent)
@@ -127,6 +129,7 @@ export class Vela {
         this.panesControl = new PanesControl(this.orchestrator);
         this.drawingsControl = new DrawingsControl(this.orchestrator.drawings);
         this.marksControl = new MarksControl(this.orchestrator.marks);
+        this.replayControl = new ReplayControl(this.orchestrator);
     }
 
     /**
@@ -400,6 +403,17 @@ export class Vela {
      */
     get marks(): MarksControl {
         return this.marksControl;
+    }
+
+    /**
+     * The chart's bar-replay control surface: rewind to a past bar and reveal the
+     * following ones by hand or on a timer, from the history already loaded —
+     * `await chart.replay.start({ from })`, `chart.replay.play(2000)`, `chart.replay.step()`,
+     * `chart.replay.stop()`. Revealed bars behave like live bars for indicators; live
+     * updates pause meanwhile. Follow it with the `replay:*` events.
+     */
+    get replay(): ReplayControl {
+        return this.replayControl;
     }
 
     on<K extends keyof VelaEventMap>(event: K, handler: (payload: VelaEventMap[K]) => void): () => void {

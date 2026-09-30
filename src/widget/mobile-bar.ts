@@ -8,7 +8,7 @@ import { iconEl } from '../ui/icons';
 import { injectStyles } from '../ui/styles';
 import { parseSymbol } from '../data/ProviderRegistry';
 import { timeframeLabel } from './timeframe';
-import { actionLabel, widgetActions, type WidgetContext } from './contributions';
+import { actionLabel, mobilePlacement, widgetActions, type WidgetContext } from './contributions';
 import { TOPBAR_BUILTIN_IDS } from './topbar-composition';
 
 const STYLE_ID = 'vela-widget-mobilebar';
@@ -131,9 +131,9 @@ export class MobileBar {
         this.renderActions();
     }
 
-    /** Re-project the left-aligned contributed actions as icon-only stops in the
-     *  indicators slot (call after registrations change). Right-aligned actions stay
-     *  in the three-dots drawer — a primary stop is what `align: 'left'` opts into. */
+    /** Re-project the contributed actions placed on the bar (left-aligned by default —
+     *  see `mobilePlacement`) as icon-only stops in the indicators slot (call after
+     *  registrations change). The rest are three-dots drawer rows. */
     renderActions(): void {
         const ctx = this.opts.getContext?.();
         if (!ctx) return;
@@ -142,7 +142,7 @@ export class MobileBar {
         // Built-in-id actions are slot OVERRIDES — they reach mobile through the slot's
         // own stop (the shell routes it), never as an extra flow stop here.
         const builtin = new Set<string>(TOPBAR_BUILTIN_IDS);
-        for (const action of widgetActions('topbar', ctx).filter((a) => a.align === 'left' && !builtin.has(a.id))) {
+        for (const action of widgetActions('topbar', ctx).filter((a) => mobilePlacement(a) === 'bar' && !builtin.has(a.id))) {
             const b = doc.createElement('button');
             b.className = 'vela-mb-item';
             b.setAttribute('aria-label', actionLabel(action, ctx));

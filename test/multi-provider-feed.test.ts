@@ -435,6 +435,60 @@ describe('MultiProviderFeed — unregister, secondary series, symbolInfo, resili
         expect(feed.symbolInfo({ symbol: 'NASDAQ:AAPL', timeframe: '60' })).toBeUndefined();
     });
 
+    it('fetches a symbol’s metadata ONCE for every concurrent asker, and serves later ones from the cache', async () => {
+        // A market switch probes this from five places at once (bar-load prefetch, tick size,
+        // market-status badge, session shading, session toggle) — one round trip must serve all.
+        const feed = new MultiProviderFeed(new BarStore());
+        let calls = 0;
+        let release: (() => void) | null = null;
+        const gate = new Promise<void>((r) => (release = r));
+        const provider: DataProvider = {
+            getBars: () => Promise.resolve(makeBars(5)),
+            listSymbols: () => Promise.resolve([{ ticker: 'BTCUSDT' }]),
+            getSymbolInfo: async (ticker) => {
+                calls += 1;
+                await gate;
+                return { ticker, mintick: 0.5 };
+            },
+        };
+        feed.registerProvider('binance', provider);
+        await feed.ready();
+
+        const data = new DataControl(feed);
+        const inflight = Promise.all([data.symbolInfo('BTCUSDT'), data.symbolInfo('BINANCE:BTCUSDT'), data.symbolInfo('btcusdt')]);
+        await flush();
+        expect(calls).toBe(1); // …and the three askers are still sharing that one request
+        release!();
+        expect(await inflight).toEqual([{ ticker: 'BTCUSDT', mintick: 0.5 }, { ticker: 'BTCUSDT', mintick: 0.5 }, { ticker: 'BTCUSDT', mintick: 0.5 }]);
+
+        // Cached: a later asker (and the bar load's own prefetch) opens no new request.
+        expect(await data.symbolInfo('BTCUSDT')).toMatchObject({ mintick: 0.5 });
+        await feed.load({ symbol: 'BTCUSDT', timeframe: '60', bars: 5 });
+        await flush();
+        expect(calls).toBe(1);
+        expect(feed.symbolInfo({ symbol: 'BTCUSDT', timeframe: '60' })).toMatchObject({ mintick: 0.5 });
+    });
+
+    it('does not remember a failed probe — the next asker retries', async () => {
+        const feed = new MultiProviderFeed(new BarStore());
+        let calls = 0;
+        const provider: DataProvider = {
+            getBars: () => Promise.resolve(makeBars(5)),
+            listSymbols: () => Promise.resolve([{ ticker: 'BTCUSDT' }]),
+            getSymbolInfo: (ticker) => {
+                calls += 1;
+                return calls === 1 ? Promise.reject(new Error('boom')) : Promise.resolve({ ticker, mintick: 0.5 });
+            },
+        };
+        feed.registerProvider('binance', provider);
+        await feed.ready();
+        const data = new DataControl(feed);
+
+        await expect(data.symbolInfo('BTCUSDT')).rejects.toThrow('boom');
+        expect(await data.symbolInfo('BTCUSDT')).toMatchObject({ mintick: 0.5 });
+        expect(calls).toBe(2);
+    });
+
     it('a throwing provider yields an empty result + warning, not a rejected load', async () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const feed = new MultiProviderFeed(new BarStore());

@@ -6,6 +6,8 @@ export type { VelaWorkspaceOptions, WorkspaceEventMap, WorkspaceScriptRun } from
 export { ChartCell } from './ChartCell';
 export type { CellSeed, CellBoot, CellChartDefaults, PooledCellState, CellNativeInfo } from './ChartCell';
 export type { WorkspaceWidgetContext } from './context';
+export { WorkspaceReplay, barClose, lastOpenClosedBy } from './WorkspaceReplay';
+export type { WorkspaceReplayEventMap, WorkspaceReplayStartOptions, WorkspaceReplayHost } from './WorkspaceReplay';
 export {
     registerLayout,
     unregisterLayout,

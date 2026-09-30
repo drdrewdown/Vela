@@ -1,4 +1,4 @@
-import type { AxisLongPressEvent, CrosshairEvent, DataWindowReadout, IChartRenderer, LegendActionView, LegendCalloutView, RendererCapabilities, PointerReadout } from './ports/IChartRenderer';
+import type { AxisLongPressEvent, ClickEvent, CrosshairEvent, DataWindowReadout, IChartRenderer, LegendActionView, LegendCalloutView, RendererCapabilities, PointerReadout } from './ports/IChartRenderer';
 import type { Unsubscribe } from './util/types';
 import type { WallClock } from './util/wall-clock';
 import type { SymbolPickerFn } from './model/inputs';
@@ -156,6 +156,13 @@ export class RendererControl {
      */
     onCrosshairMove(cb: (e: CrosshairEvent) => void): Unsubscribe {
         return this.renderer.onCrosshairMove(cb);
+    }
+
+    /** A click — or a touch tap — on the plot, never the end of a pan: the open time of
+     *  the bar under it (`null` off the bars). On touch, where a tap moves no crosshair,
+     *  this is how an interaction learns which bar was chosen. */
+    onClick(cb: (e: ClickEvent) => void): Unsubscribe {
+        return this.renderer.onClick(cb);
     }
 
     /** Touch long-press on a price or time axis strip — silent no-op without the seam. */

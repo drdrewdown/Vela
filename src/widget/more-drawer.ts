@@ -108,8 +108,10 @@ export interface MoreDrawerOptions {
     onTogglePanel: (id: string) => void;
     /** Omitted ⇒ no Alerts row (composition removed `'alerts'`). */
     alerts?: () => Array<{ title: string; message: string; time: number }>;
-    /** Contributed topbar actions, projected as plain rows. */
+    /** Contributed topbar actions, projected as plain rows at the end of the list. */
     actions: () => MoreDrawerAction[];
+    /** Contributed PRIMARY actions (left cluster, menu-placed) — rows right after Layout. */
+    primaryActions?: () => MoreDrawerAction[];
     /** Multi-chart layout switching (workspace shells) — the row is hidden when omitted.
      *  The sub-view carries the SAME surface as the desktop layout dropdown: the 4×4
      *  tap-to-apply grid canvas, the presets the canvas cannot express as rows, and the
@@ -225,6 +227,7 @@ export class MoreDrawer {
             const value = shape ? `${shape.cols} × ${shape.rows}` : this.opts.layout.presets().find((p) => p.checked)?.label;
             list.appendChild(this.row(doc, 'Layout', { icon: 'layout', value, chevron: true, onClick: () => this.show('layout') }));
         }
+        for (const act of this.opts.primaryActions?.() ?? []) list.appendChild(this.actionRow(doc, act));
         for (const panel of this.opts.panels()) {
             list.appendChild(
                 this.row(doc, panel.title, {
@@ -240,18 +243,19 @@ export class MoreDrawer {
             const alertCount = this.opts.alerts().length;
             list.appendChild(this.row(doc, 'Alerts', { icon: 'bell', value: alertCount > 0 ? String(alertCount) : undefined, chevron: true, onClick: () => this.show('alerts') }));
         }
-        for (const act of this.opts.actions()) {
-            list.appendChild(
-                this.row(doc, act.label, {
-                    icon: act.icon,
-                    onClick: () => {
-                        act.run();
-                        this.drawer.hide();
-                    },
-                }),
-            );
-        }
+        for (const act of this.opts.actions()) list.appendChild(this.actionRow(doc, act));
         this.drawer.body.appendChild(list);
+    }
+
+    /** A contributed action's row: runs it and closes the drawer. */
+    private actionRow(doc: Document, act: MoreDrawerAction): HTMLElement {
+        return this.row(doc, act.label, {
+            icon: act.icon,
+            onClick: () => {
+                act.run();
+                this.drawer.hide();
+            },
+        });
     }
 
     private renderStyle(doc: Document): void {

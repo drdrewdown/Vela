@@ -65,7 +65,7 @@ type ConfigPatch = Record<string, unknown>;
 export type HostSettingsRow =
     | { kind: 'heading'; label: string; id?: string }
     | { kind: 'toggle'; label: string; get: () => boolean; set: (v: boolean) => void; id?: string }
-    | { kind: 'select'; label: string; options: readonly string[]; get: () => string; set: (v: string) => void; id?: string }
+    | { kind: 'select'; label: string; options: readonly SettingsSelectOption[]; get: () => string; set: (v: string) => void; id?: string }
     | { kind: 'color'; label: string; get: () => string; set: (v: string) => void; id?: string };
 
 /** A host-contributed settings tab (see `RendererControl.setSettingsSections`). */
@@ -185,8 +185,8 @@ ${overlayScrollbarCss('.vela-sd-pane')}
 
 /** A select row's options, with the current value kept selectable when a host seeded one
  *  outside the presets (a 24,000-bar history on a list that stops at 20,000). */
-const selectOptionsWith = (options: readonly string[], current: string): readonly string[] =>
-    options.includes(current) ? options : [...options, current];
+const selectOptionsWith = (options: readonly (readonly [string, string])[], current: string): readonly (readonly [string, string])[] =>
+    options.some(([value]) => value === current) ? options : [...options, [current, current] as const];
 
 export class SettingsDialog {
     private root: HTMLElement | null = null;
@@ -583,7 +583,7 @@ export class SettingsDialog {
                     if (hr.kind === 'heading') body.append(this.sectionTitle(hr.label));
                     else if (hr.kind === 'toggle') body.append(this.boolRow(hr.label, hr.get(), (v) => hr.set(v)));
                     else if (hr.kind === 'color') body.append(this.colorRow(hr.label, hr.get(), (v) => hr.set(v)));
-                    else body.append(this.selectRowLabeled(hr.label, hr.get(), selectOptionsWith(hr.options, hr.get()).map((o) => [o, o] as const), (v) => hr.set(v)));
+                    else body.append(this.selectRowLabeled(hr.label, hr.get(), selectOptionsWith(normalizeSelectOptions(hr.options), hr.get()), (v) => hr.set(v)));
                 }
             }
         };

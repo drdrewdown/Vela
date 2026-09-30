@@ -21,6 +21,9 @@ import type { IndicatorModel, Pane, ScenePatch } from '../src/core/model';
 import type { PriceStyle } from '../src/core/options';
 import type { Unsubscribe } from '../src/core/util/types';
 import { DARK_THEME } from '../src/core/theme';
+import { MultiProviderFeed } from '../src/data/MultiProviderFeed';
+import { BarStore } from '../src/data/BarStore';
+import type { DataProvider } from '../src/core/ports/DataProvider';
 
 /**
  * The ChartCell persistence round-trip — the layer the unit suite never covered
@@ -378,6 +381,65 @@ describe('ChartCell external indicators keep their id (ctx.addIndicator({ id }) 
         expect(cell.instances).toHaveLength(0);
         warn.mockRestore();
         quiet.mockRestore();
+        cell.destroy();
+    });
+});
+
+describe('ChartCell symbol metadata — the session verdict does not wait for the bars', () => {
+    /** A feed whose bars are held open, so a switch stays mid-load for the whole test. */
+    function gatedFeed(): { feed: MultiProviderFeed; releaseBars: () => void; infoCalls: () => number } {
+        let release!: () => void;
+        const gate = new Promise<void>((r) => (release = r));
+        let infoCalls = 0;
+        const provider: DataProvider = {
+            getBars: async (ticker) => {
+                if (ticker === 'ES1!') await gate; // the new market's history never lands
+                return makeBars(60);
+            },
+            listSymbols: () => Promise.resolve([{ ticker: 'BTCUSDT' }, { ticker: 'ES1!' }]),
+            getSymbolInfo: (ticker) => {
+                infoCalls += 1;
+                return Promise.resolve(ticker === 'ES1!' ? { ticker, session: '0930-1600', timezone: 'America/New_York' } : { ticker, session: '24x7' });
+            },
+        };
+        const feed = new MultiProviderFeed(new BarStore());
+        feed.registerProvider('lux', provider);
+        return { feed, releaseBars: release, infoCalls: () => infoCalls };
+    }
+
+    it('flips the session toggle while the new market is still loading, and re-probes nothing', async () => {
+        const { feed, releaseBars, infoCalls } = gatedFeed();
+        const cell = makeCell({ symbol: 'LUX:BTCUSDT' }, { feed });
+        await settle();
+        expect(cell.sessionAvailable).toBe(false); // a 24x7 market has no RTH/ETH to offer
+        const beforeSwitch = infoCalls();
+
+        cell.setSymbol('LUX:ES1!');
+        await settle();
+        // The bars are STILL held — yet the chrome already knows this market has sessions.
+        expect(cell.sessionAvailable).toBe(true);
+        // …and the five probes a switch fans out shared one round trip.
+        expect(infoCalls() - beforeSwitch).toBe(1);
+
+        releaseBars();
+        await settle();
+        expect(cell.sessionAvailable).toBe(true); // the committed pass is idempotent
+        expect(infoCalls() - beforeSwitch).toBe(1);
+        cell.destroy();
+    });
+
+    it('drops a verdict that lands after the cell moved on', async () => {
+        const { feed, releaseBars } = gatedFeed();
+        const cell = makeCell({ symbol: 'LUX:BTCUSDT' }, { feed });
+        await settle();
+
+        cell.setSymbol('LUX:ES1!');
+        cell.setSymbol('LUX:BTCUSDT'); // re-picked before the first verdict could land
+        await settle();
+        expect(cell.sessionAvailable).toBe(false);
+        releaseBars();
+        await settle();
+        expect(cell.sessionAvailable).toBe(false);
         cell.destroy();
     });
 });

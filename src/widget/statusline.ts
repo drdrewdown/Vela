@@ -97,9 +97,15 @@ const CSS = `
 }
 .vela-statusline .vela-sl-symbol { font-weight: 600; font-size: var(--vela-font-size-lg); }
 .vela-statusline .vela-sl-meta { color: var(--vela-fg-muted); font-size: var(--vela-font-size-md); font-weight: 600; }
+/* The meta opens with "· " — sit its dot one space-width after the ticker, as far as the
+ * venue sits after it, not a full row gap away. */
+.vela-statusline .vela-sl-symbol + .vela-sl-meta { margin-left: calc(var(--vela-space-1) - var(--vela-space-2)); }
 /* Market status badge — a kit callout bubble (icon-only 16px circle, label on hover
- * via the kit tooltip); the session tint is applied per status in setMarketStatus. */
-.vela-statusline .vela-sl-market { align-self: center; }
+ * via the kit tooltip); the session tint is applied per status in setMarketStatus. While
+ * the chart replays past bars it wears the replay badge instead (the inverse chip). */
+.vela-statusline .vela-sl-market { align-self: center; display: inline-flex; }
+.vela-statusline .vela-sl-market > [hidden] { display: none !important; }
+.vela-statusline .vela-sl-replay-badge, .vela-statusline .vela-sl-replay-badge svg { display: block; width: 16px; height: 16px; }
 .vela-statusline .vela-sl-ohlc { display: flex; gap: var(--vela-space-1); color: var(--vela-fg-muted); }
 .vela-statusline .vela-sl-ohlc b { color: var(--vela-fg); font-weight: 500; }
 .vela-statusline .vela-sl-volume { display: flex; gap: var(--vela-space-1); color: var(--vela-fg-muted); }
@@ -180,6 +186,18 @@ const MARKET_LABELS: Record<MarketStatus, string> = {
     closed: 'Market Closed',
     holiday: 'Market Holiday',
 };
+const REPLAY_LABEL = 'Replay Mode';
+/**
+ * The replay badge: the circle and its glyph (two left-pointing triangles) in ONE drawing —
+ * a circle behind an icon element rounds to device pixels separately from it, so the glyph
+ * would sit a different fraction off-centre in every chart of a grid. The glyph sits 0.8px
+ * left of the geometric centre: triangles weigh at their flat edges.
+ */
+const REPLAY_BADGE_SVG =
+    '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">' +
+    '<circle cx="8" cy="8" r="8" style="fill: var(--vela-selected-bg)"/>' +
+    '<path d="M11.7 4.75v6.5L7.2 8zM7.2 4.75v6.5L2.7 8z" style="fill: var(--vela-selected-fg); stroke: var(--vela-selected-fg); stroke-width: 0.8; stroke-linejoin: round"/>' +
+    '</svg>';
 
 /** Session ink: open wears the theme's up color; the other sessions are meaning
  *  constants from the palette (amber pre, sky post and extended, gray closed/holiday).
@@ -258,9 +276,12 @@ export class Statusline {
     private readonly volumeEl: HTMLElement;
     private readonly changeEl: HTMLElement;
     private readonly symbolEl: HTMLElement;
+    /** The badge slot — the market bubble, or the replay badge while replaying. */
     private readonly marketEl: HTMLElement;
-    /** The badge itself — a kit callout bubble (the same element as {@link marketEl}). */
+    /** The market status face — a kit callout bubble. */
     private readonly marketBubble: CalloutBubble;
+    /** The replay face — see {@link REPLAY_BADGE_SVG}. */
+    private readonly replayBadge: HTMLElement;
     private marketTip!: Tooltip;
     /** The show-chart eye — visible only while the chart is hidden. */
     private readonly eyeEl: HTMLButtonElement;
@@ -268,6 +289,9 @@ export class Statusline {
     private avatarEl: HTMLElement;
     private metaEl!: HTMLElement;
     private readonly parts: Record<StatuslinePart, boolean> = { logo: true, name: true, market: true, ohlc: true, volume: true, change: true };
+    private marketStatus: MarketStatus = 'open';
+    /** The chart replays past bars — the badge shows the replay mode (see {@link setReplaying}). */
+    private replaying = false;
     /** The right-click action menu — present once a host wires it via {@link attachMenu}. */
     private menu: Menu | null = null;
     private menuHooks: StatuslineMenuHooks | null = null;
@@ -327,8 +351,14 @@ export class Statusline {
             label: MARKET_LABELS.open,
             host,
         });
-        this.marketEl = this.marketBubble.el;
-        this.marketEl.classList.add('vela-sl-market');
+        this.replayBadge = doc.createElement('span');
+        this.replayBadge.className = 'vela-sl-replay-badge';
+        this.replayBadge.innerHTML = REPLAY_BADGE_SVG;
+        this.replayBadge.hidden = true;
+        // One slot, two faces: the market bubble, or the replay badge while replaying.
+        this.marketEl = doc.createElement('span');
+        this.marketEl.className = 'vela-sl-market';
+        this.marketEl.append(this.marketBubble.el, this.replayBadge);
         this.ohlcEl = doc.createElement('span');
         this.ohlcEl.className = 'vela-sl-ohlc';
         this.volumeEl = doc.createElement('span');
@@ -470,6 +500,27 @@ export class Statusline {
     /** Dress the market badge for a session state: its icon, tinted circle, and the
      *  hover label. Callers with no session model leave the constructor's 'open'. */
     setMarketStatus(status: MarketStatus): void {
+        this.marketStatus = status;
+        this.dressBadge();
+    }
+
+    /** The chart entered or left a bar replay: the badge shows the replay mode meanwhile
+     *  (the session state of a past bar says nothing about the market now). */
+    setReplaying(replaying: boolean): void {
+        if (replaying === this.replaying) return;
+        this.replaying = replaying;
+        this.dressBadge();
+    }
+
+    private dressBadge(): void {
+        this.marketBubble.el.hidden = this.replaying;
+        this.replayBadge.hidden = !this.replaying;
+        if (this.replaying) {
+            this.marketEl.dataset.status = 'replay';
+            this.marketTip.setContent(REPLAY_LABEL);
+            return;
+        }
+        const status = this.marketStatus;
         this.marketEl.dataset.status = status;
         const ink = MARKET_INKS[status];
         this.marketBubble.set({
@@ -559,11 +610,23 @@ export class Statusline {
                 this.lastBar = b;
                 if (!this.hoverBar) this.render();
             }),
+            // A replay cut or restore replaces the newest bar without a `bar` event.
+            chart.on('replay:start', () => {
+                this.lastBar = null;
+                this.setReplaying(true);
+                this.render();
+            }),
+            chart.on('replay:end', () => {
+                this.lastBar = null;
+                this.setReplaying(false);
+                this.render();
+            }),
             chart.renderer.onCrosshairMove((e) => {
                 this.hoverBar = e.ohlc;
                 this.render();
             }),
         );
+        this.setReplaying(chart.replay.state.active);
         this.render();
     }
 

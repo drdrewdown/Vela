@@ -248,13 +248,17 @@ new VelaWorkspace('#chart', {
       'status-line.indicator-values',        //     Values
       'advanced',                            // the whole Advanced tab
       'advanced.bars',                       //   Bars to fetch
+      'time-zone',                           // the workspace Time zone group in the Symbol tab
+      'time-zone.zone',                      //   (same row — UTC, Exchange, then the catalog;
+                                             //    it replaces the renderer's `symbol.timezone`)
       'trading-session',                     // the RTH/ETH group in the Symbol tab
       'trading-session.session',             //   Session select
       'trading-session.premarket-color',     //   Pre-market shading color (day-split markets)
       'trading-session.postmarket-color',    //   Post-market shading color (day-split markets)
       'trading-session.extended-color',      //   Extended-hours shading color (overnight markets)
-      'watermark',                           // the Symbol watermark toggle
-      'watermark.visible',                   //   (same row — the group has one row)
+      'watermark',                           // the Watermark group (the two rows below)
+      'watermark.visible',                   //   Symbol watermark
+      'watermark.replay',                    //   Replay watermark (the line under it while replaying)
 
       // ══ Plugin chart types (registerChartType) ════════════════════
       'type:<chartTypeId>',                  // the type's settings tab (+ its subsections)

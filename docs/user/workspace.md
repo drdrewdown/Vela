@@ -217,6 +217,44 @@ The payload is the chart-level [`ScriptRun`](./api-reference.md#capturing-what-a
 plus `cell`; everything there — `cause`, `forming`, `plots`, `vars`, `strategy`, `trades()` —
 applies unchanged.
 
+## Bar replay across the grid
+
+`ws.replay` rewinds **every cell at once** and replays them on one clock. It takes the same
+verbs as a chart's [`chart.replay`](./api-reference.md#chartreplay--the-bar-replay-control-surface):
+`start`, `step`, `stepUpdate`, `play`, `pause`, `stop`, `state`, `bounds`, plus `on` for the
+`replay:*` events.
+
+```ts
+await ws.replay.start({ from: Date.UTC(2024, 5, 3, 14), cell: 'btc' }); // read on the 'btc' cell (default: the active one)
+ws.replay.play(1000);
+ws.replay.on('replay:step', ({ cursorTime, remaining }) => updateUi(cursorTime, remaining));
+```
+
+- **One replay time, no look-ahead.** `from` is read on one cell the way `chart.replay.start`
+  reads it, and the close of that cell's last kept bar becomes the shared replay time. Every
+  other chart keeps exactly the bars that had **closed** by then: next to a 1h chart rewound to
+  10:00, a 15m chart shows its 10:45 bar and a daily chart ends on the day before. A market
+  closed over the weekend never shows Monday while the clock is still on Sunday.
+- **The finest timeframe sets the pace.** A step moves the clock to the next bar close on any
+  chart, and each chart reveals what closed by then, so a coarser chart shows its bar the
+  moment it completes. In a multi-chart layout, bars are revealed whole. A single-chart
+  layout hands every call to that chart's own replay, including
+  [tick replay](./api-reference.md#tick-replay).
+- **The grid can change underneath.** A cell added by a layout change joins at the shared
+  time; a cell switching symbol rejoins once its new bars load; a timeframe switch keeps the
+  cell's place.
+- **It ends everywhere together**, with `stop()` or when any chart reaches its last bar.
+- **The state follows the active cell.** `state.active`, `playing` and `intervalMs` describe
+  the whole workspace; `cursorTime`, `remaining` and `nextTime` (and `bounds`) read the
+  active cell's chart, and the `replay:step` / `replay:tick` events report it.
+
+A contribution drives it as `ctx.replay`. Driving one cell's `chart.replay` directly still
+replays that chart alone. The cut rule is exported for interfaces that preview it:
+`barClose(open, timeframe)` is when a bar closes (calendar months for month-based
+timeframes), and `lastOpenClosedBy(time, timeframe)` is the last bar open a chart keeps at a
+given replay time — for example, the spot for a ghost crosshair
+(`renderer.setExternalCrosshair`) marking where each chart would be cut.
+
 ## State & persistence
 
 The state SURFACE is the product; persistence is an adapter on top of it.
@@ -354,7 +392,8 @@ silently reorder them).
 
 Contributed actions/attachments (`@luxalgo/vela/plugin`) work unchanged — `ctx.chart` resolves
 to the ACTIVE cell's chart; grid-aware plugins additionally get `ctx.cells`,
-`ctx.activeCellId`, and `ctx.setActiveCell(id)`.
+`ctx.activeCellId`, `ctx.setActiveCell(id)`, and `ctx.replay` (the
+[grid-wide replay](#bar-replay-across-the-grid)).
 
 ## The indicator manifest
 
@@ -430,7 +469,9 @@ they work from the very first keystroke, before any click.
   venue/timeframe beside it) plus hide/show for the chart's price series. In
   multi-cell grids it stays on one row — segments that don't fit the cell hide instead
   of wrapping (bar change first, then venue/timeframe, then the market badge; the logo
-  + ticker always stay).
+  + ticker always stay). While the chart replays past bars, the market badge gives way to
+  a replay badge (the replay icon on the inverse chip), and the market status returns when
+  the replay ends.
 - **Object tree** — a docked panel grouping every item under the pane it belongs to. Each pane is
   one column read top to bottom as front to back: its drawings, its indicators and, in the main
   pane, the price series, all in draw order — new indicators and new drawings both start under
@@ -465,8 +506,9 @@ they work from the very first keystroke, before any click.
   to the chart's own `bars` setting). The picker's **Exchange** row (right under UTC) follows each
   chart's own market: a CME future renders in Chicago time, a US equity in New York, crypto
   in UTC — and in a multi-chart grid every cell reads its own market's clock. The bar's
-  clock and offset show the active cell's zone; picking a fixed zone anywhere (including
-  the settings dialog's Time zone row) switches the whole workspace back to that zone.
+  clock and offset show the active cell's zone. The chart settings' Time zone row (Symbol
+  tab) is the same picker, Exchange included; picking a fixed zone anywhere switches the
+  whole workspace back to that zone.
 - **Context menus** — right-click the chart body for reset view, removing all drawings or all
   indicators, and the settings dialog; the price axis for that pane's own scale (autoscale,
   invert, regular/percent/indexed/logarithmic, and the label and level toggles); the time axis

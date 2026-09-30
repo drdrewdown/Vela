@@ -33,7 +33,7 @@ import { ShortcutsHelp } from '../widget/shortcuts-help';
 import { Toast } from '../widget/toast';
 import { Glider, ZOOM_IN, ZOOM_OUT, PAN_FAST } from '../widget/glide';
 import { toolShortcutHints } from '../widget/tool-shortcuts';
-import { actionLabel, legendActionsProviderFor, legendCalloutsProviderFor, statePersistenceHandlers, topbarActionOverride, widgetActions, widgetAttachments, type WidgetActionDescriptor } from '../widget/contributions';
+import { actionLabel, legendActionsProviderFor, legendCalloutsProviderFor, mobilePlacement, statePersistenceHandlers, topbarActionOverride, widgetActions, widgetAttachments, type WidgetActionDescriptor } from '../widget/contributions';
 import { resolveTopbarComposition, topbarHas, TOPBAR_BUILTIN_IDS, type ResolvedTopbarComposition } from '../widget/topbar-composition';
 import { LayoutModeController, type LayoutMode } from '../widget/layout-mode';
 import { MobileBar } from '../widget/mobile-bar';
@@ -58,6 +58,7 @@ import { encodeState, decodeState, sanitizeState, type WorkspaceState, type Work
 import { localStorageAdapter } from '../widget/persist';
 import { ChartCell, seedDefaults, cellChartDefaults, type CellSeed, type CellBoot, type PooledCellState } from './ChartCell';
 import { buildContext, type WorkspaceWidgetContext } from './context';
+import { WorkspaceReplay } from './WorkspaceReplay';
 import {
     registerBuiltinLayouts,
     layouts,
@@ -165,6 +166,8 @@ const CSS = `
 .vela-workspace { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; background: var(--vela-bg); }
 .vela-ws-main { position: relative; display: flex; flex-direction: row; flex: 1 1 auto; min-height: 0; }
 .vela-ws-toolbar { position: relative; flex: none; }
+.vela-ws-strips { position: relative; flex: none; display: flex; flex-direction: column; min-width: 0; }
+.vela-ws-strips:empty { display: none; }
 .vela-ws-grid { position: relative; flex: 1 1 auto; min-width: 0; display: grid; gap: ${GAP_PX}px; background: var(--vela-border-soft); }
 .vela-cell { background: var(--vela-bg); position: relative; }
 /* Active-cell highlight: an overlay ring ABOVE the chart's own canvas stack (a plain
@@ -277,8 +280,11 @@ export class VelaWorkspace {
     readonly root: HTMLElement;
     /** The shortcut system — one manager for the whole workspace, routed to the active cell. */
     readonly keymap: KeymapManager;
+    /** Bar replay across every cell on one clock (see {@link WorkspaceReplay}). */
+    readonly replay: WorkspaceReplay;
 
     private readonly gridEl: HTMLElement;
+    private readonly stripsEl: HTMLElement;
     private readonly events = new TypedEventBus<WorkspaceEventMap>();
     private readonly feed = new MultiProviderFeed();
     private readonly cellsById = new Map<string, ChartCell>();
@@ -419,6 +425,21 @@ export class VelaWorkspace {
         const hostEl = typeof container === 'string' ? document.querySelector<HTMLElement>(container) : container;
         if (!hostEl) throw new Error(`VelaWorkspace: container not found: ${String(container)}`);
         this.opts = opts;
+        // Before any cell exists: the replay watches every cell from its creation on.
+        this.replay = new WorkspaceReplay({
+            cells: () => this.cells(),
+            activeId: () => this.activeId,
+            onCells: (handler) => {
+                const offs = [
+                    this.events.on('cell:created', ({ id }) => handler({ kind: 'created', id })),
+                    this.events.on('cell:destroyed', ({ id }) => handler({ kind: 'destroyed', id })),
+                    this.events.on('cell:active', ({ id }) => handler({ kind: 'active', id })),
+                ];
+                return () => {
+                    for (const off of offs) off();
+                };
+            },
+        });
         // ── persistence boot: a SYNC storage restores before the first build (no flash
         // of defaults); an async adapter resolves later and late-applies via applyState.
         this.persistKey = opts.persist === undefined || opts.persist === false ? null : opts.persist === true ? 'vela-workspace' : opts.persist;
@@ -597,6 +618,10 @@ export class VelaWorkspace {
         // Panels that are not registered yet keep their entry until they dock.
         if (boot?.panels) this.dock.applyState(boot.panels);
         this.root.appendChild(main);
+        // Docked strips (`ctx.dockStrip`) — before the bottom bar, which appends itself next.
+        this.stripsEl = doc.createElement('div');
+        this.stripsEl.className = 'vela-ws-strips';
+        this.root.appendChild(this.stripsEl);
         this.toastHost = new Toast(this.gridEl);
 
         // ONE attribution mark for the whole grid (bottom-left, floating above the
@@ -904,9 +929,16 @@ export class VelaWorkspace {
             setActiveCell: (id) => this.setActiveCell(id),
             openSymbolSearch: (query) => this.symbolPicker.open(query ?? ''),
             togglePanel: (id, open) => this.dock.toggle(id, open),
+            dockStrip: (el) => {
+                this.stripsEl.appendChild(el);
+                return () => {
+                    if (el.parentElement === this.stripsEl) el.remove();
+                };
+            },
             root: this.root,
             toast: (message, kind) => this.toastHost.show(message, kind),
             stateDirty: () => this.markStateDirty(),
+            replay: this.replay,
         });
     }
 
@@ -1293,6 +1325,7 @@ export class VelaWorkspace {
         if (this.destroyed) return;
         this.flushPendingState(); // the user's last edit, before anything is torn down
         this.destroyed = true;
+        this.replay.destroy();
         if (this.persistKey !== null && typeof window !== 'undefined') window.removeEventListener('beforeunload', this.onUnload);
         this.resizeObserver?.disconnect();
         this.splitters.destroy();
@@ -2203,17 +2236,13 @@ export class VelaWorkspace {
             panels: () => (has('panels') ? [...this.dock.list()] : []),
             onTogglePanel: (id) => this.dock.toggle(id),
             ...(has('alerts') ? { alerts: () => this.alerts.map((a) => ({ title: `${a.source} · ${a.title}`, message: a.message, time: a.time })) } : {}),
-            // Left-aligned actions have their own bottom-bar stop — only the rest
-            // lands in the drawer, or every left action would appear twice. Built-in-id
-            // actions are slot OVERRIDES: they reach the drawer through the slot's own
-            // routed button (screenshot) or stop (indicators), never as an extra row.
-            actions: () => {
-                const builtin = new Set<string>(TOPBAR_BUILTIN_IDS);
-                const ctx = this.context();
-                return widgetActions('topbar', ctx)
-                    .filter((a) => a.align !== 'left' && !builtin.has(a.id))
-                    .map((a) => ({ label: actionLabel(a, ctx), icon: a.icon, run: () => a.run(this.context()) }));
-            },
+            // Actions placed on the bottom bar (left-aligned by default) have their stop
+            // there — only the menu-placed ones land in the drawer, or they would appear
+            // twice: left (primary) ones with the primary rows, right ones at the end.
+            // Built-in-id actions are slot OVERRIDES: they reach the drawer through the
+            // slot's own routed button (screenshot) or stop (indicators), never as a row.
+            primaryActions: () => this.drawerActions('left'),
+            actions: () => this.drawerActions('right'),
             // The desktop layout dropdown's whole surface — the grid canvas, the
             // non-canvas presets and the sync switches — relocated into the kebab
             // drawer (the topbar is hidden on mobile). Same reads as the topbar block;
@@ -2240,6 +2269,14 @@ export class VelaWorkspace {
             onOpenChange: (open) => this.trackDialog(open),
         });
         this.moreDrawer.open();
+    }
+
+    /** The contributed topbar actions the mobile menu lists, from one cluster. */
+    private drawerActions(cluster: 'left' | 'right'): Array<{ label: string; icon?: string; run: () => void }> {
+        const builtin = new Set<string>(TOPBAR_BUILTIN_IDS);
+        return widgetActions('topbar', this.context())
+            .filter((a) => mobilePlacement(a) === 'menu' && (a.align === 'left') === (cluster === 'left') && !builtin.has(a.id))
+            .map((a) => ({ label: actionLabel(a, this.context()), icon: a.icon, run: () => a.run(this.context()) }));
     }
 
     private openTimezoneDrawer(): void {

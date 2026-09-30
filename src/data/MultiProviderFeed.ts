@@ -42,7 +42,9 @@ export class MultiProviderFeed implements MarketDataFeed {
     /** A copy of offline history, used to synthesize ticks for the `data` path. */
     private liveBars: OHLCV[] = [];
     /** Sync-accessible symbol metadata, warmed by load()/symbolInfoFor (the engine reads it synchronously). */
-    private readonly symInfoCache = new Map<string, SymbolInfo>();
+    private readonly symInfoCache = new Map<string, { info: SymbolInfo; at: number }>();
+    /** Requests in flight, keyed like the cache — every concurrent asker shares one round trip. */
+    private readonly symInfoInflight = new Map<string, Promise<SymbolInfo | undefined>>();
 
     constructor(store: BarStore = sharedBarStore) {
         this.cache = new CachingDataFeed(new RegistryFetchFeed(this.registry), store);
@@ -120,9 +122,39 @@ export class MultiProviderFeed implements MarketDataFeed {
     async symbolInfoFor(raw: string): Promise<SymbolInfo | undefined> {
         const resolved = this.registry.resolve(raw, { default: this.primaryProvider });
         if (!resolved) return undefined;
-        const info = await this.registry.get(resolved.provider)?.getSymbolInfo?.(resolved.ticker);
-        if (info) this.symInfoCache.set(symKey(resolved), info);
-        return info;
+        return this.fetchSymbolInfo(resolved);
+    }
+
+    /**
+     * One round trip per symbol, shared. A market switch probes this metadata from five
+     * places at once (the bar load's prefetch, the renderer's tick size, the market-status
+     * badge, the session shading, the session toggle) — without the in-flight map each
+     * would open its own request for the same answer, and the last one to land decided how
+     * late the chrome settled.
+     *
+     * Cached for {@link SYMBOL_INFO_TTL_MS}: this metadata is stable within a session
+     * (tick size, session vocabulary, listing prefix), but not immutable — a continuous
+     * futures row rolls its current contract — so the entry expires rather than pinning the
+     * session's first answer forever. A failed probe is NOT remembered: the next asker retries.
+     */
+    private fetchSymbolInfo(resolved: Resolved): Promise<SymbolInfo | undefined> {
+        const key = symKey(resolved);
+        const hit = this.symInfoCache.get(key);
+        if (hit && Date.now() - hit.at < SYMBOL_INFO_TTL_MS) return Promise.resolve(hit.info);
+        const inflight = this.symInfoInflight.get(key);
+        if (inflight) return inflight;
+        const getSymbolInfo = this.registry.get(resolved.provider)?.getSymbolInfo;
+        if (!getSymbolInfo) return Promise.resolve(undefined);
+        const p = Promise.resolve(getSymbolInfo.call(this.registry.get(resolved.provider), resolved.ticker))
+            .then((info) => {
+                if (info) this.symInfoCache.set(key, { info, at: Date.now() });
+                return info;
+            })
+            .finally(() => {
+                this.symInfoInflight.delete(key);
+            });
+        this.symInfoInflight.set(key, p);
+        return p;
     }
 
     /**
@@ -176,18 +208,13 @@ export class MultiProviderFeed implements MarketDataFeed {
     symbolInfo(cfg: MarketConfig): SymbolInfo | undefined {
         if (cfg.data && cfg.data.length > 0) return undefined;
         const resolved = this.registry.resolve(rawSymbol(cfg), { default: this.primaryProvider });
-        return resolved ? this.symInfoCache.get(symKey(resolved)) : undefined;
+        // Whatever its age: this is the SYNC door (Pine `syminfo.*`, the price scale's tick
+        // size), and the last known answer always beats none while a refresh is in flight.
+        return resolved ? this.symInfoCache.get(symKey(resolved))?.info : undefined;
     }
 
     private prefetchSymbolInfo(resolved: Resolved): void {
-        const key = symKey(resolved);
-        if (this.symInfoCache.has(key)) return;
-        const provider = this.registry.get(resolved.provider);
-        if (!provider?.getSymbolInfo) return;
-        void provider
-            .getSymbolInfo(resolved.ticker)
-            .then((info) => { if (info) this.symInfoCache.set(key, info); })
-            .catch(() => {});
+        void this.fetchSymbolInfo(resolved).catch(() => {});
     }
 
     async loadRange(cfg: MarketConfig, range: BarRange): Promise<OHLCV[]> {
@@ -252,9 +279,15 @@ function canonical(cfg: MarketConfig, resolved: Resolved): MarketConfig {
 }
 
 /** Cache key for resolved symbol metadata. */
+/** Cache key of a resolved symbol. The TICKER is case-folded because `resolve` keeps the
+ *  CALLER's spelling (`btcusdt` and `BTCUSDT` both resolve, unchanged) while the registry
+ *  indexes them as one symbol — without the fold each spelling would fetch its own copy. */
 function symKey(resolved: Resolved): string {
-    return `${resolved.provider}|${resolved.ticker}`;
+    return `${resolved.provider}|${resolved.ticker.trim().toUpperCase()}`;
 }
+
+/** How long a symbol-metadata answer stays fresh (see {@link MultiProviderFeed.fetchSymbolInfo}). */
+const SYMBOL_INFO_TTL_MS = 10 * 60_000;
 
 /**
  * Call a provider's getBars defensively: a throwing provider yields an empty result + a

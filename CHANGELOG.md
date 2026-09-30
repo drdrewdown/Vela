@@ -2,6 +2,130 @@
 
 All notable changes to Vela, newest first.
 
+## [0.8.0]
+
+### Added
+
+- **Bar replay.** `chart.replay` rewinds the chart to any past bar and plays the following
+  bars back one at a time — by hand with `step()`, or on a timer with `play(intervalMs)` at
+  the pace you choose. Indicators update as each bar appears, exactly as they would live,
+  while their alerts stay quiet — a replayed bar is history, not a signal to act on —
+  and live updates wait until you `stop()` or the replay reaches the present; the chart then
+  shows the full history again and catches up on what it missed. Starting further back than
+  the loaded history loads the older bars first (the chart returns to its usual depth
+  afterwards), and calling `start()` again while replaying jumps backward or forward. A
+  start inside the bars already on screen is immediate, even while the source is still
+  streaming older history in; that history joins the replay as it lands. Switching the
+  timeframe keeps the replay going at the same point in time — without showing a coarser
+  bar that had not closed yet — and keeps playing if it was.
+  `chart.replay.bounds` tells how far back and forward a replay can go, and the `replay:*`
+  events let an interface follow along. In the widget and the workspace, a replaying chart
+  shows a "Replay" line under its symbol watermark (the new Replay watermark switch in
+  chart settings, next to Symbol watermark, turns it off), and its status line wears a
+  replay badge in place of the market status.
+- **Bar replay across a multi-chart layout.** `workspace.replay` rewinds every chart of a
+  workspace at once and plays them back on one clock: each chart shows exactly the bars that
+  had closed by the shared replay time, so charts on different timeframes or markets never
+  reveal the future to one another, and the finest timeframe sets the pace. Charts added to
+  the layout join the replay, a chart switching symbol rejoins it, and it ends on every
+  chart together. Contributions drive it as `ctx.replay`.
+- **Tick replay.** `chart.replay.setTicks(source)` plays each revealed bar the way a live
+  one forms: your source hands over the bar's intrabar updates, and the candle opens, moves
+  and stretches through them before settling exactly on the stored bar, with indicators
+  following every update. The play pace then counts updates, not bars. Updates can come
+  from anywhere; `lowerTimeframeTicks(chart, '1')` builds them from the chart's own
+  provider, one per finer bar. `stepUpdate()` reveals one update at a time, and the new
+  `replay:tick` event reports progress within a bar.
+- **Building blocks for pick-a-point interactions.** The UI kit gains `DatePicker`, the
+  month calendar with month and year jumps in its header that indicator date inputs
+  already use, now available to your own interfaces. The new `crosshairOverride` renderer
+  feature restyles the crosshair while the user picks something on the chart — a solid
+  line in your color, the horizontal level hidden, and optionally the area after it veiled
+  (`shadeRight`) — without touching the saved chart settings. A synced crosshair from
+  another chart takes the same look, so a pick can span several charts.
+- **Plugins can dock a strip under the charts.** `ctx.dockStrip(el)` on the widget context
+  places your element as a full-width strip between the charts and the bottom bar; the
+  charts shrink to make room, and the returned function takes it away again.
+- **Plugins choose where an action sits on mobile, and hear taps.** A topbar action's new
+  `mobile` option puts it on the bottom bar or in the three-dots menu (a primary action
+  lands right after Layout there). `chart.renderer.onClick` reports a click or a touch tap
+  on the plot with the bar under it — on touch, where a tap moves no crosshair, the way
+  to learn which bar was chosen.
+
+### Changed
+
+- **Reading history no longer gets interrupted by new bars.** When the newest bar is
+  scrolled off the right edge, a new bar (live or replayed) leaves the view on the bars
+  you were looking at; at the right edge, the chart keeps following the newest bar.
+
+### Fixed
+
+- **The status line's ticker no longer stands apart from its venue.** The dot after the
+  ticker now sits one space away from it, as far as the venue sits after the dot, instead
+  of a wide gap.
+
+## [0.7.8]
+
+### Fixed
+
+- **The RTH/ETH switch and the exchange time zone appear as the chart loads, not after it.**
+  Picking a market with trading sessions used to leave the bottom bar's session switch
+  hidden until the new candles had finished loading, plus a further round trip — the
+  metadata that decides it was fetched again, from scratch, once everything else was done.
+  The symbol's metadata is now read while the candles load, and the five things that need
+  it (the price scale's tick size, the market-status badge, the session shading, the
+  session switch, the time zone) share a single request whose answer is reused for ten
+  minutes. A switch that used to open five identical requests now opens one.
+
+### Added
+
+- **Exchange in the chart settings' Time zone row.** In the widget and workspace, the Symbol
+  tab's Time zone dropdown is now the same picker as the bottom bar — UTC, **Exchange**, then
+  the catalog — so following the market is one pick away from the settings dialog too. The
+  row writes the workspace choice (it never demotes the rule to a fixed zone); its
+  visibility id is `time-zone` (`settings.hidden`). Host settings sections
+  (`setSettingsSections`) may now give a `select` row `[value, label]` options.
+- **Every built-in indicator is now fully styleable.** Each study splits its settings into
+  a **Settings** and a **Style** section, and every element it draws gets its own color:
+  Bollinger Bands ink the basis, the bands and the fill separately, MACD's histogram has
+  four colors for rising and falling on each side of zero, and the moving averages,
+  channels and cumulative volume lines can be colored by their own slope or by which side
+  of the line price is trading. Every setting carries a tooltip explaining what it does.
+- **Overbought and oversold levels are inputs, not fixed lines.** RSI, Stochastic,
+  Stochastic RSI, Williams %R, Money Flow Index, Connors RSI, the Chande Momentum
+  Oscillator, the Ultimate Oscillator and the Relative Volatility Index all let you move
+  their thresholds, and the shaded zones, dashed level lines and line coloring follow. The
+  bounded oscillators blend their line from the oversold color through neutral to the
+  overbought color, and shade the region beyond each threshold; the centered ones wash the
+  area between the reading and the zero line, fading out where the two meet.
+- **More moving averages and more display modes.** The Moving Average study offers
+  thirteen smoothings — adding Hull, Arnaud Legoux, double and triple exponential,
+  Kaufman adaptive, least-squares, McGinley and Hamming — plus an optional second average
+  with its own type, length, source and color. Linear Regression can plot its curve or its
+  slope; Rate of Change can plot a percentage or a raw momentum difference; SMI Ergodic can
+  plot its lines or its histogram; Intraday Intensity can plot the normalized oscillator or
+  the cumulative line; Pivot Points offers Traditional, Fibonacci, Camarilla and Woodie
+  ladders on an automatic or explicit anchor; and the Average True Range, Volume Flow
+  Indicator, Relative Volatility Index and Price Volume Trend let you pick their smoothing.
+- **New options on the classics.** Chandelier Exit can ratchet its stops, Balance of Power
+  and On Balance Volume can be smoothed, Bollinger Bands Width marks its squeeze and bulge
+  references, the Ulcer Index can show the raw drawdown behind it, 52 Week High/Low can add
+  the all-time high and low, and VWAP offers percentage bands beside its deviation bands.
+
+### Changed
+
+- **The built-in indicators now match their reference builds.** Defaults, formulas and
+  looks were aligned study by study, so several read differently than before: Stochastic
+  smooths %K over 3 bars instead of 1, Zero-Lag EMA defaults to 21, Connors RSI flags
+  90/10 rather than 80/20, Historical Volatility annualizes over 252 periods on a sample
+  deviation, and SuperTrend, the Klinger Oscillator, the Ulcer Index, the Hull average and
+  Williams Fractal were corrected to their published definitions. Bollinger Bands Width and
+  TRIX are no longer rescaled, so their values are smaller than before.
+  _(Breaking: VWAP's per-band color and fill settings collapse into one bullish, one
+  bearish and one band color, its Day anchor is now called Session, and it hides itself on
+  daily and higher timeframes unless you turn that guard off. The Moving Average type
+  `RMA` is now listed as `RMA (SMMA)`, though charts saved with the old name still load.)_
+
 ## [v0.7.7]
 
 ### Added
@@ -109,7 +233,7 @@ All notable changes to Vela, newest first.
   price axis on a 0–1 placeholder. The axis now keeps following the hidden bars as you
   pan and zoom, so showing the chart again lands exactly where you left it. As before,
   when overlay indicators remain on the pane they take the scale over and fill it.
-  
+
 ### Fixed
 
 - **Dense timeline marks fold into clusters as you zoom out.** Marks of one group used to
@@ -251,9 +375,9 @@ All notable changes to Vela, newest first.
   load. Each accepts `true` (the built-in feel), `false` (instant), or a duration in
   milliseconds; the reveal also takes a style (`'settle'` or `'grow'`) and a sweep
   duration. Every one is also a live renderer feature (`chart.renderer.set('animZoom',
-  150)`), and the settings dialog's *Symbol → Animation* group gains on/off switches
+150)`), and the settings dialog's _Symbol → Animation_ group gains on/off switches
   for zoom, pan momentum, the price scale, and the reveal alongside the existing
-  *Animate price changes* — switching a motion back on restores the duration you
+  _Animate price changes_ — switching a motion back on restores the duration you
   configured, and the switches ride `getConfig()`/`applyConfig()` like every other
   setting. Turning zoom animation off applies to the keyboard zoom keys too.
 
@@ -409,8 +533,8 @@ All notable changes to Vela, newest first.
   show the real latest values. Set `liveBar: true` to bring the slide back, or give it
   a duration in milliseconds to make it as quick or as gentle as your feed calls for
   (a slow feed reads well with a longer glide; a busy one with a short one). The chart
-  settings dialog gets a matching **Animate price changes** switch in a new *Animation*
-  group of the *Symbol* tab (with a hint explaining it), saved with the rest of the chart's settings and templates; switching it back
+  settings dialog gets a matching **Animate price changes** switch in a new _Animation_
+  group of the _Symbol_ tab (with a hint explaining it), saved with the rest of the chart's settings and templates; switching it back
   on reuses the duration you configured. A new bar always opens without a glide, and
   the crosshair, legend and data window show the real values at all times.
   `animations: false` keeps disabling every animation at once.
