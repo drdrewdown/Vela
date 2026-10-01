@@ -163,10 +163,13 @@ const vwap: ClassicIndicatorSpec = {
             { key: 'vwap', title: 'VWAP', values, color: bull, colors: values.map((x, i) => (Number.isFinite(x) ? (bars[i]!.close >= x ? bull : bear) : null)) },
         ];
         const fills: ClassicBand[] = [];
+        // A band's title names its offset (`VWAP +1σ`, `VWAP −2%`): the price-scale chip keeps
+        // eight characters with the spaces dropped, so `Upper Band #1` read as `UpperBan` there.
+        const unit = percentMode ? '%' : 'σ';
         bands.forEach((band, i) => {
             plots.push(
-                { key: `up${i}`, title: `Upper Band #${i + 1}`, values: band.up, color: transp(bear, 40) },
-                { key: `down${i}`, title: `Lower Band #${i + 1}`, values: band.down, color: transp(bull, 40) },
+                { key: `up${i}`, title: `VWAP +${band.mult}${unit}`, values: band.up, color: transp(bear, 40) },
+                { key: `down${i}`, title: `VWAP −${band.mult}${unit}`, values: band.down, color: transp(bull, 40) },
             );
             if (bool(inputs, 'fill', true)) fills.push({ key: `band${i}`, from: `up${i}`, to: `down${i}`, color: fillColor });
         });

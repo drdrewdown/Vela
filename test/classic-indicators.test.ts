@@ -386,7 +386,9 @@ describe('classic descriptor adapter', () => {
             { time: 60000, open: 106, high: 106, low: 106, close: 106, volume: 2 },
         ];
         const out = runOnce(spec, bars, { band1: true, band1Mult: 1, band2: false, band3: true, band3Mult: 2.5 });
-        expect(out.series!.map((s) => s.title)).toEqual(['VWAP', 'Upper Band #1', 'Lower Band #1', 'Upper Band #2', 'Lower Band #2']);
+        // A band's title names its offset so the price-scale chip (eight characters, spaces
+        // dropped) and the legend both read it: 'Upper Band #1' became 'UpperBan' on the scale.
+        expect(out.series!.map((s) => s.title)).toEqual(['VWAP', 'VWAP +1σ', 'VWAP −1σ', 'VWAP +2.5σ', 'VWAP −2.5σ']);
         const sd = Math.sqrt(8);
         expect(pointsOf(out.series![1])[1]!.value).toBeCloseTo(104 + sd, 10);
         expect(pointsOf(out.series![4])[1]!.value).toBeCloseTo(104 - 2.5 * sd, 10);
@@ -394,6 +396,7 @@ describe('classic descriptor adapter', () => {
         // Percentage mode offsets by a share of the VWAP value instead of its deviation.
         const percent = runOnce(spec, bars, { bandsMode: 'Percentage', band1Mult: 2 });
         expect(pointsOf(percent.series![1])[1]!.value).toBeCloseTo(104 * 1.02, 10);
+        expect(percent.series![1]!.title).toBe('VWAP +2%');
 
         // Upper bands lean bearish, lower bands bullish, both at 40% transparency.
         const inkOf = (s: SeriesSpec): string | undefined => (isLineLikeSeries(s) ? s.style.color : undefined);
