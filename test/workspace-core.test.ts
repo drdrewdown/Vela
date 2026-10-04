@@ -407,10 +407,12 @@ describe('cell identity ↔ slot position (declaredOrder / nextAutoCellId)', () 
 describe('resolveTyping — bare keystrokes on the workspace root', () => {
     const idle = { dialogs: 0, symbolSearch: false, timeframeEntry: false };
 
-    it('with nothing open: a letter seeds symbol search, a digit the timeframe entry', () => {
+    it('with nothing open: a letter or 0 seeds symbol search, a digit 1–9 the timeframe entry', () => {
         expect(resolveTyping('n', idle)).toEqual({ target: 'symbol', text: 'N' });
         expect(resolveTyping('Q', idle)).toEqual({ target: 'symbol', text: 'Q' });
+        expect(resolveTyping('0', idle)).toEqual({ target: 'symbol', text: '0' });
         expect(resolveTyping('1', idle)).toEqual({ target: 'timeframe', text: '1' });
+        expect(resolveTyping('9', idle)).toEqual({ target: 'timeframe', text: '9' });
         expect(resolveTyping('Escape', idle)).toBeNull();
         expect(resolveTyping(' ', idle)).toBeNull();
     });
@@ -429,7 +431,8 @@ describe('resolveTyping — bare keystrokes on the workspace root', () => {
         expect(resolveTyping('q', { dialogs: 1, symbolSearch: true, timeframeEntry: false })).toEqual({ target: 'symbol', text: 'Q' });
         expect(resolveTyping('2', { dialogs: 1, symbolSearch: true, timeframeEntry: false })).toEqual({ target: 'symbol', text: '2' });
         expect(resolveTyping('5', { dialogs: 1, symbolSearch: false, timeframeEntry: true })).toEqual({ target: 'timeframe', text: '5' });
-        expect(resolveTyping('m', { dialogs: 1, symbolSearch: false, timeframeEntry: true })).toEqual({ target: 'timeframe', text: 'm' });
+        expect(resolveTyping('0', { dialogs: 1, symbolSearch: false, timeframeEntry: true })).toEqual({ target: 'timeframe', text: '0' });
+        expect(resolveTyping('m', { dialogs: 1, symbolSearch: false, timeframeEntry: true })).toEqual({ target: 'timeframe', text: 'M' });
         expect(resolveTyping('Enter', { dialogs: 1, symbolSearch: true, timeframeEntry: false })).toBeNull();
     });
 

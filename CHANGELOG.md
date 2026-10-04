@@ -2,6 +2,41 @@
 
 All notable changes to Vela, newest first.
 
+## [0.8.1]
+
+### Changed
+
+- **Vela's home is velacharts.dev.** The attribution mark, the package homepage and the
+  project links now point to Vela's own site instead of a page on luxalgo.com. Nothing
+  changes in the API.
+- **The attribution mark is Vela's own.** The corner mark is now Vela's Morning Star V
+  instead of the LuxAlgo symbol, and hovering it reveals the rest of the Vela wordmark.
+  The size drops slightly (24 px instead of 28 px, 20 px on mobile) because the V is
+  wider than the old symbol. Hosts that pass their own mark through
+  `renderer.set('attribution', html)` are unaffected.
+- **The indicator picker lists the built-in indicators under "Built-in".** They were
+  grouped under "Vela", which reads as a product name now that charting apps carry it.
+- **Typing `0` opens the symbol search, and the timeframe entry shows capitals.** No
+  timeframe starts with 0, so typing `0` on a chart now opens the symbol search seeded
+  with it, the same as a letter; digits 1 to 9 still open the timeframe entry. Letters
+  in the timeframe entry now always display in capitals (`4H`, `3M`). What each entry
+  means is unchanged.
+
+### Fixed
+
+- **Double-clicking while drawing no longer collapses the sub panes.** Clicking twice in
+  quick succession with a drawing tool, the ruler, or the eraser active (or right after
+  finishing a placement) used to toggle the sub panes as if you had double-clicked in
+  cursor mode. That toggle now happens only from a plain double-click.
+- **The color picker's opacity percentage is editable.** The percentage next to the opacity
+  slider was a static label. You can now click it and type a value from 0 to 100 (with or
+  without the `%` sign), then press Enter or click away to apply it. Values outside the
+  range are clamped, and text that isn't a number restores the current opacity.
+- **Time-axis year and month labels sit on the calendar.** When zoomed out to month,
+  quarter or year spacing, axis labels and grid lines now land on the first of the month
+  and on January 1, so a year label marks the start of the year it names instead of a date
+  a couple of weeks before it.
+
 ## [0.8.0]
 
 ### Added

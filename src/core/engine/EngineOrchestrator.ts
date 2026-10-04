@@ -1838,7 +1838,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             nativeIndicatorDescriptors().map(async (d) => ({
                 type: d.type,
                 title: d.title,
-                category: d.category || "Vela",
+                category: d.category || "Built-in",
                 ...(d.badge ? { badge: d.badge } : {}),
                 supported: await this.isNativeSupported(d, symbol),
                 present: present.has(d.type),

@@ -257,22 +257,23 @@ export interface TypingState {
 }
 
 /**
- * What a bare keystroke on the workspace root does. Nothing open: a letter seeds symbol
- * search, a digit the timeframe entry. An ENTRY dialog open: its field takes focus a
- * tick after the dialog reports open, so the next key of a fast typist (`NQ`, `15`)
- * still lands on the root — it is handed to that dialog as more typed text instead of
- * dropped. Any other open dialog swallows bare typing. Pure — unit-tested.
+ * What a bare keystroke on the workspace root does. Nothing open: a letter or `0` seeds
+ * symbol search (no timeframe starts with 0), a digit 1–9 the timeframe entry. An ENTRY
+ * dialog open: its field takes focus a tick after the dialog reports open, so the next
+ * key of a fast typist (`NQ`, `15`) still lands on the root — it is handed to that
+ * dialog as more typed text instead of dropped. Any other open dialog swallows bare
+ * typing. Pure — unit-tested.
  */
 export function resolveTyping(key: string, open: TypingState): { target: 'symbol' | 'timeframe'; text: string } | null {
     if (open.claimed) return null;
     if (open.dialogs > 0) {
         if (key.length !== 1) return null; // a printable character, not a control key
         if (open.symbolSearch) return { target: 'symbol', text: key.toUpperCase() };
-        if (open.timeframeEntry) return { target: 'timeframe', text: key };
+        if (open.timeframeEntry) return { target: 'timeframe', text: key.toUpperCase() };
         return null;
     }
-    if (/^[a-zA-Z]$/.test(key)) return { target: 'symbol', text: key.toUpperCase() };
-    if (/^[0-9]$/.test(key)) return { target: 'timeframe', text: key };
+    if (/^[a-zA-Z0]$/.test(key)) return { target: 'symbol', text: key.toUpperCase() };
+    if (/^[1-9]$/.test(key)) return { target: 'timeframe', text: key };
     return null;
 }
 
@@ -2420,7 +2421,7 @@ export class VelaWorkspace {
         this.shortcutsHelp.open();
     }
 
-    /** Bare-typing router: letters → symbol search (seeded), digits → timeframe entry. */
+    /** Bare-typing router: letters and `0` → symbol search (seeded), digits 1–9 → timeframe entry. */
     private routeTyping(ev: KeyboardEvent): void {
         if (this.destroyed) return;
         if (ev.ctrlKey || ev.metaKey || ev.altKey) return;

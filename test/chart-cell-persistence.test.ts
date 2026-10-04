@@ -443,3 +443,19 @@ describe('ChartCell symbol metadata — the session verdict does not wait for th
         cell.destroy();
     });
 });
+
+describe('ChartCell indicator picker library', () => {
+    // Vela is now the name of whole charting products built on this library, so the
+    // library's own indicators can't be filed under "Vela" in their picker.
+    it('files the built-in indicators under "Built-in", never under the product name', async () => {
+        const cell = makeCell();
+        await settle();
+        const natives = cell.libraryRows().filter((r) => r.native);
+        expect(natives.length).toBeGreaterThan(0);
+        // The fork files the classics by family (`classicCategory`); anything without a family
+        // sits under upstream's "Built-in". Never under the product name.
+        const families = new Set(['Built-in', 'Moving Averages', 'Bands & Channels', 'Oscillators', 'Trend', 'Volatility', 'Volume', 'Overlays']);
+        for (const r of natives) expect(families.has(r.category ?? ''), `${r.name} filed under ${r.category}`).toBe(true);
+        cell.destroy();
+    });
+});

@@ -1231,7 +1231,7 @@ export class ChartCell {
      *  then the manifest in the host's own order. */
     libraryRows(): Array<{ name: string; language?: string; category?: string; badge?: string; native?: boolean; nativeType?: string; beta?: boolean }> {
         return [
-            ...this.supportedNatives().map((n) => ({ name: n.title, category: n.category || 'Vela', badge: n.badge, native: true, nativeType: n.type, beta: n.beta })),
+            ...this.supportedNatives().map((n) => ({ name: n.title, category: n.category || 'Built-in', badge: n.badge, native: true, nativeType: n.type, beta: n.beta })),
             ...this.manifest.map((e) => ({ name: e.name, language: e.language, category: e.category })),
         ];
     }

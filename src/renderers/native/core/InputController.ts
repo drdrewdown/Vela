@@ -238,6 +238,12 @@ export class InputController {
     private lastTapT = 0;
     private lastTapX = 0;
     private lastTapY = 0;
+    // Whether the last two primary presses were claimed by the drawings layer. A double-click
+    // is the last press plus the one before it; a tool-driven click pair must never fall through
+    // to the pane maximize toggle, even when the tool disarmed itself between the two clicks
+    // (a finished placement leaves plain cursor mode for the second click).
+    private lastPressDrawing = false;
+    private prevPressDrawing = false;
 
     constructor(private readonly deps: InputControllerDeps) {}
 
@@ -401,10 +407,13 @@ export class InputController {
         this.moved = false;
         this.startX = x;
         this.startY = y;
+        this.prevPressDrawing = this.lastPressDrawing;
+        this.lastPressDrawing = false;
         // The drawings layer gets first refusal: when a tool is armed or the press is
         // over a drawing/handle it claims the WHOLE gesture (no pan/fling), atomically.
         if (this.deps.drawingsClaim?.(x, y)) {
             this.region = 'drawing';
+            this.lastPressDrawing = true;
             this.deps.drawingsPointerDown?.(x, y, this.snapMode(e), e.shiftKey, e.ctrlKey || e.metaKey);
             this.capture(e.pointerId);
             return;
@@ -413,12 +422,14 @@ export class InputController {
         // over a drawing keeps the additive-select meaning of shift, via the claim above).
         if (e.shiftKey && this.regionAt(x, y) === 'data' && this.deps.drawingsMeasureStart?.(x, y, this.snapMode(e))) {
             this.region = 'drawing';
+            this.lastPressDrawing = true;
             this.capture(e.pointerId);
             return;
         }
         // Ctrl/Cmd+press on the empty plot sweeps a selection box over the drawings.
         if ((e.ctrlKey || e.metaKey) && this.regionAt(x, y) === 'data' && this.deps.drawingsMarqueeStart?.(x, y)) {
             this.region = 'drawing';
+            this.lastPressDrawing = true;
             this.capture(e.pointerId);
             return;
         }
@@ -708,6 +719,7 @@ export class InputController {
         if (region === 'price') this.deps.resetPriceScale(x, y);
         else if (region === 'separator') this.deps.resetPaneSize(y);
         else if (region === 'time') this.deps.resetView(); // fit-to-content on the time axis
+        else if (this.lastPressDrawing || this.prevPressDrawing) return; // drawing interaction, not a pane gesture
         else this.deps.dataDblClick(x, y);
     }
 
