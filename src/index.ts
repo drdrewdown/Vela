@@ -91,6 +91,10 @@ export type {
     AddIndicatorOptions,
     SettingsVisibilityPolicy,
     ChromeTokens,
+    PriceAxisOptions,
+    PriceAxisTick,
+    PriceAxisTickContext,
+    PriceAxisTicksFn,
 } from './core/options';
 export type { CodeUpdateResult, IndicatorHandle, IndicatorEventMap } from './core/IndicatorHandle';
 export type { VelaEventMap } from './core/events/types';

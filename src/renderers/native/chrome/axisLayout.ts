@@ -55,3 +55,13 @@ export function scaleColumnX(scaleSide: 'left' | 'right', axisW: number, plotW: 
     if (scaleSide === 'left') return axisW - AXIS_MASTER_W - column * AXIS_MERGED_W;
     return axisColumnX(plotW - axisW, column);
 }
+
+/**
+ * The canvas width in CSS pixels, from the context when it carries a canvas, else from the
+ * coordinate system: the data span plus a left-docked gutter. A test's mock context has no
+ * canvas; without one there is no right gutter to measure.
+ */
+export function canvasWidthPx(ctx: { canvas?: { width: number } | null }, coords: { width: number; leftOffsetPx: number; dpr: number }): number {
+    const canvas = ctx.canvas;
+    return canvas ? canvas.width / coords.dpr : coords.width + coords.leftOffsetPx;
+}

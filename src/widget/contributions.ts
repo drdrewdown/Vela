@@ -11,18 +11,6 @@ import type { IndicatorHandle } from '../core/IndicatorHandle';
 import { TOPBAR_BUILTIN_IDS } from './topbar-composition';
 
 /** The pointer position a context-menu action was invoked at. */
-export interface WidgetPointer {
-    clientX: number;
-    clientY: number;
-    /** Price under the pointer on its pane; null off the plot. */
-    price: number | null;
-    /** Bar time under the pointer; null between bars / off the plot. */
-    time: number | null;
-    /** Which kind of pane `price` came from — a real price only on the price pane; a
-     *  study pane gives the indicator's value. Null off the plot. */
-    pane: 'price' | 'study' | null;
-}
-
 /** The runtime surface an action's `when`/`run` receives. */
 export interface WidgetContext {
     /** The CURRENT inner chart. Read it through this getter rather than capturing it:
@@ -53,10 +41,6 @@ export interface WidgetContext {
      *  (Dialog/Menu/Tooltip) from an action; without an explicit host they portal to
      *  the body, OUTSIDE the theme variables. A multi-chart shell hands its own root. */
     host: HTMLElement;
-    /** Where the pointer was when a CONTEXT MENU opened — set only on the context handed
-     *  to `context:*` actions (undefined elsewhere): the client position, and the price
-     *  and bar time under it. */
-    pointer?: WidgetPointer;
     /** The widget's feedback pill (bottom-center, auto-hides). */
     toast(message: string, kind?: 'info' | 'success' | 'error'): void;
     /** Add a SCRIPT indicator to the active chart THROUGH THE SHELL — unlike the raw
@@ -73,6 +57,27 @@ export interface WidgetContext {
      *  `state:changed` + storage write follows). Only needed for state with no shell
      *  event of its own — indicator adds/removals already trigger the save cycle. */
     stateChanged(): void;
+    /** Where the right-click that opened a context menu landed. Set on the context handed
+     *  to `context:*` actions (`when` and `run`); absent everywhere else. */
+    pointer?: ContextMenuPointer;
+}
+
+/**
+ * What the chart's crosshair reported when a context menu opened ({@link WidgetContext.pointer}),
+ * on the chart that received the right-click — in a workspace, the cell under the pointer.
+ * Captured once at open: moving through the menu before picking a row does not change it.
+ * The axis menus get what the crosshair reports over the axis: off the plot, `price` and
+ * `paneKind` are null, while `time` still names the bar column under the pointer (on the
+ * time axis, the bar above the click; null past the last bar).
+ */
+export interface ContextMenuPointer {
+    /** The value under the pointer on the pane it landed on: a price on the price pane, an
+     *  indicator value on a study pane (see `paneKind`). Null off the plot. */
+    price: number | null;
+    /** Open time of the bar under the pointer; null off the bars. */
+    time: number | null;
+    /** The kind of pane the pointer is on; null off the plot. */
+    paneKind: 'price' | 'study' | null;
 }
 
 /** What {@link WidgetContext.addIndicator} takes: a named script, ready to run. */
@@ -119,7 +124,12 @@ export interface WidgetActionDescriptor {
      *  one the flag is ignored (with a console warning) and the label renders. The piece
      *  that makes a `'screenshot'` slot override pixel-faithful to the native button. */
     iconOnly?: boolean;
-    /** Sort key within the contributed group (ascending; default 0). */
+    /** Sort key (ascending; default 0; ties keep registration order). On the topbar it orders
+     *  the contributed group. In a context menu (`context:*`) contributed rows sort TOGETHER
+     *  with the menu's built-in rows, which sit at the ranks of `CONTEXT_MENU_BUILTIN_ORDER`:
+     *  the built-in actions below 0 and the settings row at 1000. So an action without
+     *  `order` lands after the built-in actions and before the settings row, `order: -100`
+     *  leads the menu, and on a tie the built-in row comes first. */
     order?: number;
     /** Topbar only: which cluster the button joins. `'right'` (default) is the
      *  right-hand tools cluster; `'left'` puts it with the PRIMARY chrome buttons —
@@ -136,9 +146,6 @@ export interface WidgetActionDescriptor {
     /** Shown but inert (context menus; a topbar button ignores it): a caption row, or an
      *  action that needs something the pointer is not over. */
     disabled?: boolean | ((ctx: WidgetContext) => boolean);
-    /** Context menus only: `'start'` puts the action ABOVE the built-in items — for what the
-     *  host treats as primary at the pointer (trading at that price); `'end'` (default) below. */
-    placement?: 'start' | 'end';
     run: (ctx: WidgetContext) => void;
 }
 
@@ -151,12 +158,6 @@ export function actionLabel(desc: Pick<WidgetActionDescriptor, 'label'>, ctx?: W
 /** A descriptor's disabled state for one render. */
 export function actionDisabled(desc: Pick<WidgetActionDescriptor, 'disabled'>, ctx: WidgetContext): boolean {
     return typeof desc.disabled === 'function' ? desc.disabled(ctx) : desc.disabled === true;
-}
-
-/** A view of `ctx` carrying `pointer`, with every live getter of the base intact (a
- *  spread would freeze `chart`/`symbol`/… at the moment of the click). */
-export function withPointer<T extends WidgetContext>(ctx: T, pointer: WidgetPointer): T {
-    return Object.create(ctx, { pointer: { value: pointer, enumerable: true } }) as T;
 }
 
 /** Where a topbar action lands on the mobile layout (see {@link WidgetActionDescriptor.mobile}). */

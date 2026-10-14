@@ -5,9 +5,8 @@ import {
     widgetActions,
     actionLabel,
     actionDisabled,
-    withPointer,
+    type ContextMenuPointer,
     type WidgetContext,
-    type WidgetPointer,
 } from '../src/widget/contributions';
 
 // A context-menu action may name the price under the pointer: labels and disabled state
@@ -24,7 +23,12 @@ function liveContext(state: { symbol: string }): WidgetContext {
     } as unknown as WidgetContext;
 }
 
-const pointer: WidgetPointer = { clientX: 10, clientY: 20, price: 5001.25, time: 1_700_000_000_000, pane: 'price' };
+const pointer: ContextMenuPointer = { price: 5001.25, time: 1_700_000_000_000, paneKind: 'price' };
+
+/** The pointer attached the way the context menu does it: a fresh view by property descriptor, so the base's live getters stay live. */
+function withPointer(ctx: WidgetContext, p: ContextMenuPointer): WidgetContext {
+    return Object.create(Object.getPrototypeOf(ctx) as object | null, { ...Object.getOwnPropertyDescriptors(ctx), pointer: { value: p, enumerable: true } }) as WidgetContext;
+}
 
 afterEach(() => {
     unregisterWidgetAction('t.price');
@@ -53,7 +57,7 @@ describe('dynamic action labels', () => {
     });
 });
 
-describe('withPointer', () => {
+describe('the context carrying the pointer', () => {
     it('exposes the pointer and leaves the base untouched', () => {
         const base = liveContext({ symbol: 'ES' });
         const view = withPointer(base, pointer);

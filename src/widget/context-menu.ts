@@ -3,17 +3,18 @@
 // itself is the kit Menu anchored at the pointer.
 import type { Vela } from '../Vela';
 import { Menu, type MenuItemDescriptor } from '../ui/components/menu';
-import { actionDisabled, actionLabel, widgetActions, withPointer, type WidgetContext } from './contributions';
+import { actionDisabled, actionLabel, widgetActions, type ContextMenuPointer, type WidgetContext } from './contributions';
 import {
     bodyItems,
+    composeMenu,
     invertWrite,
     paneScaleAt,
     priceAxisItems,
     scaleChoiceOf,
     scaleWrites,
     settingsSectionOf,
-    arrangeMenu,
     timeAxisItems,
+    type ContributedRow,
     type PaneScaleInfo,
     type ScaleChoice,
     type Zone,
@@ -24,6 +25,8 @@ import { resolveTimezone } from './timezones';
 const PRICE_AXIS_W = 60;
 const TIME_AXIS_H = 26;
 
+const OFF_PLOT: ContextMenuPointer = { price: null, time: null, paneKind: null };
+
 export interface ContextMenuCallbacks {
     /** Reset the view (all history, autoscale back on). */
     resetView: () => void;
@@ -33,26 +36,28 @@ export interface ContextMenuCallbacks {
     setTimezone?: (zone: string) => void;
     /** Live widget context for contributed `context:*` actions. */
     getContext?: () => WidgetContext;
-    /** The price and bar time under a client position — what `context:*` actions read as
-     *  `ctx.pointer`. Omitted ⇒ actions get the position only. */
-    pointerAt?: (point: { clientX: number; clientY: number }) => { price: number | null; time: number | null; pane: 'price' | 'study' | null };
 }
 
 export class ChartContextMenu {
     private readonly menu: Menu;
     private readonly host: HTMLElement;
     private chart: Vela | null = null;
-    /** Aether: pointer position of the last right-click, for price-at-cursor trading items. */
-    private lastPoint: { clientX: number; clientY: number } | null = null;
+    private offCrosshair: (() => void) | null = null;
+    /** The bound chart's latest crosshair report — a right-click always follows a pointer
+     *  move to its spot, so this is where it landed. */
+    private crosshair: ContextMenuPointer = OFF_PLOT;
+    /** {@link crosshair} as it stood when the menu opened: the pointer moves on through the
+     *  menu before a row is picked, and `run` must see the right-clicked spot. */
+    private pointer: ContextMenuPointer = OFF_PLOT;
     private lastZone: Zone = 'body';
     /** The pane whose scale the open price-axis menu targets (null ⇒ the main scale). */
     private lastPane: PaneScaleInfo | null = null;
     private readonly onContextMenu = (e: MouseEvent): void => {
         e.preventDefault();
         if (!this.chart) return;
+        this.pointer = this.crosshair;
         this.lastZone = this.zoneOf(e);
         this.lastPane = this.lastZone === 'price-axis' ? this.paneAt(e) : null;
-        this.lastPoint = { clientX: e.clientX, clientY: e.clientY };
         this.menu.setItems(this.itemsFor(this.lastZone));
         this.menu.openAt(e.clientX, e.clientY);
     };
@@ -66,6 +71,7 @@ export class ChartContextMenu {
             // Pointer-anchored action menu: checked state reads as a leading ✓, not a
             // washed row (which would read as hover in a menu with no trigger button).
             checkmarks: true,
+            iconBadges: true,
             onSelect: (id) => this.run(id),
         });
         host.addEventListener('contextmenu', this.onContextMenu);
@@ -73,10 +79,17 @@ export class ChartContextMenu {
 
     /** (Re)bind to a chart instance — called after every widget rebuild. */
     onChart(chart: Vela): void {
+        this.offCrosshair?.();
         this.chart = chart;
+        this.crosshair = OFF_PLOT;
+        this.offCrosshair = chart.renderer.onCrosshairMove((e) => {
+            this.crosshair = { price: e.price, time: e.time, paneKind: e.paneKind ?? null };
+        });
     }
 
     destroy(): void {
+        this.offCrosshair?.();
+        this.offCrosshair = null;
         this.host.removeEventListener('contextmenu', this.onContextMenu);
         this.menu.destroy();
     }
@@ -105,81 +118,66 @@ export class ChartContextMenu {
         return Boolean(this.chart?.renderer.get(feature));
     }
 
-    /** The context handed to contributed `context:*` actions: the host's, plus the pointer. */
-    private actionContext(): WidgetContext | undefined {
-        const base = this.cbs.getContext?.();
-        const at = this.lastPoint;
-        if (!base || !at) return base;
-        const under = this.cbs.pointerAt?.(at) ?? { price: null, time: null, pane: null };
-        return withPointer(base, { clientX: at.clientX, clientY: at.clientY, price: under.price, time: under.time, pane: under.pane });
+    /** A fresh widget context carrying the pointer captured at open. Copied by property
+     *  descriptor: the context's getters must stay LIVE, and a spread would freeze them. */
+    private context(): WidgetContext | undefined {
+        const ctx = this.cbs.getContext?.();
+        if (!ctx) return undefined;
+        return Object.create(Object.getPrototypeOf(ctx) as object | null, {
+            ...Object.getOwnPropertyDescriptors(ctx),
+            pointer: { value: this.pointer, enumerable: true },
+        }) as WidgetContext;
     }
 
-    /** Host actions for a zone, split by placement (see `WidgetActionDescriptor.placement`). */
-    private contributed(zone: Zone): { leading: MenuItemDescriptor[]; trailing: MenuItemDescriptor[] } {
-        const ctx = this.actionContext();
-        const leading: MenuItemDescriptor[] = [];
-        const trailing: MenuItemDescriptor[] = [];
-        for (const a of widgetActions(`context:${zone}`, ctx)) {
-            (a.placement === 'start' ? leading : trailing).push({
-                id: `action:${a.id}`,
-                label: actionLabel(a, ctx),
-                icon: a.icon,
-                disabled: ctx ? actionDisabled(a, ctx) : a.disabled === true,
-            });
-        }
-        return { leading, trailing };
-    }
-
-    private arranged(zone: Zone, base: MenuItemDescriptor[]): MenuItemDescriptor[] {
-        const { leading, trailing } = this.contributed(zone);
-        return arrangeMenu(leading, base, trailing);
+    private contributed(zone: Zone): ContributedRow[] {
+        const ctx = this.context();
+        return widgetActions(`context:${zone}`, ctx).map((a) => ({
+            item: { id: `action:${a.id}`, label: actionLabel(a, ctx), icon: a.icon, disabled: ctx ? actionDisabled(a, ctx) : a.disabled === true },
+            order: a.order,
+        }));
     }
 
     private itemsFor(zone: Zone): MenuItemDescriptor[] {
-        if (zone === "price-axis") {
+        return composeMenu(zone, this.builtinItems(zone), this.contributed(zone));
+    }
+
+    private builtinItems(zone: Zone): MenuItemDescriptor[] {
+        if (zone === 'price-axis') {
             const pane = this.lastPane;
-            const isLeft = this.chart?.renderer?.get("scaleSide") === "left";
-            const isHighLow = this.chart?.renderer?.get("rangeChips") !== false;
+            const isLeft = this.chart?.renderer?.get('scaleSide') === 'left';
+            const isHighLow = this.chart?.renderer?.get('rangeChips') !== false;
             const baseItems = priceAxisItems({
-                auto: this.chart?.renderer.get("autoScale") !== false,
-                invert: pane ? pane.invert : this.flag("invertScale"),
-                choice: scaleChoiceOf(pane ?? { mode: String(this.chart?.renderer.get("scaleMode") ?? "price"), log: this.flag("logScale") }),
-                axisLabels: this.flag("axisLabels"),
-                priceLabel: this.flag("priceLabel"),
-                countdown: this.flag("countdown"),
-                priceLine: this.flag("currentPriceLine")
+                auto: this.chart?.renderer.get('autoScale') !== false,
+                invert: pane ? pane.invert : this.flag('invertScale'),
+                choice: scaleChoiceOf(pane ?? { mode: String(this.chart?.renderer.get('scaleMode') ?? 'price'), log: this.flag('logScale') }),
+                axisLabels: this.flag('axisLabels'),
+                priceLabel: this.flag('priceLabel'),
+                countdown: this.flag('countdown'),
+                priceLine: this.flag('currentPriceLine'),
             });
-            const highLowItem = {
-                id: "toggle:rangeChips",
-                label: "High and low price labels",
-                checked: isHighLow
-            };
+            const highLowItem = { id: 'toggle:rangeChips', label: 'High and low price labels', checked: isHighLow };
             const placementItem = {
-                id: "scale-placement",
-                label: "Scale placement",
+                id: 'scale-placement',
+                label: 'Scale placement',
                 separatorBefore: true,
                 submenu: [
-                    { id: "scale-side:left", label: "Left", checked: isLeft },
-                    { id: "scale-side:right", label: "Right", checked: !isLeft }
-                ]
+                    { id: 'scale-side:left', label: 'Left', checked: isLeft },
+                    { id: 'scale-side:right', label: 'Right', checked: !isLeft },
+                ],
             };
-            const settingsIdx = baseItems.findIndex((it) => it.id?.startsWith("settings:"));
-            if (settingsIdx !== -1) {
-                baseItems.splice(settingsIdx, 0, highLowItem, placementItem);
-            } else {
-                baseItems.push(highLowItem, placementItem);
-            }
-            return this.arranged(zone, baseItems);
+            const settingsIdx = baseItems.findIndex((it) => it.id?.startsWith('settings:'));
+            if (settingsIdx !== -1) baseItems.splice(settingsIdx, 0, highLowItem, placementItem);
+            else baseItems.push(highLowItem, placementItem);
+            return baseItems;
         }
-        if (zone === "time-axis") {
-            const tz = this.cbs.timezone?.() ?? String(this.chart?.renderer.get("timezone") ?? "Etc/UTC");
-            return this.arranged('time-axis', timeAxisItems(tz));
+        if (zone === 'time-axis') {
+            return timeAxisItems(this.cbs.timezone?.() ?? String(this.chart?.renderer.get('timezone') ?? 'Etc/UTC'));
         }
         const chart = this.chart;
-        return this.arranged('body', bodyItems({
+        return bodyItems({
             drawings: chart?.drawings.supported ? chart.drawings.all().length : 0,
             indicators: chart?.indicators().length ?? 0,
-        }));
+        });
     }
 
     private run(id: string): void {
@@ -189,9 +187,9 @@ export class ChartContextMenu {
             chart.renderer.set('scaleSide', id.endsWith(':left') ? 'left' : 'right');
             return;
         }
-        if (id.startsWith("action:")) {
-            const ctx = this.actionContext();
-            if (ctx) widgetActions(`context:${this.lastZone}`, ctx).find((a) => a.id === id.slice("action:".length))?.run(ctx);
+        if (id.startsWith('action:')) {
+            const ctx = this.context();
+            if (ctx) widgetActions(`context:${this.lastZone}`, ctx).find((a) => a.id === id.slice('action:'.length))?.run(ctx);
             return;
         }
         if (id.startsWith("toggle:")) {

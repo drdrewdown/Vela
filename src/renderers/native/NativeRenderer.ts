@@ -27,7 +27,7 @@ import type { Pane } from '../../core/model/scene';
 import type { IndicatorModel, PaneAxisBand } from '../../core/model/indicator';
 import type { ScenePatch } from '../../core/model/patch';
 import type { InputValue, SymbolPickerFn } from '../../core/model/inputs';
-import type { RendererDisplayOptions, NativeBackend, PriceStyle, MoveTarget, ThemeName, IntroAnimation, IntroStyle } from '../../core/options';
+import type { RendererDisplayOptions, NativeBackend, PriceStyle, MoveTarget, ThemeName, IntroAnimation, IntroStyle, PriceAxisTicksFn } from '../../core/options';
 import {
     resolveEaseMs,
     resolveLiveBarEaseMs,
@@ -57,6 +57,7 @@ import { clampBarSpacing, defaultViewport, MIN_BAR_SPACING, MAX_BAR_SPACING, typ
 import { Canvas2dBackend } from './backend/Canvas2dBackend';
 import type { IRenderBackend } from './backend/IRenderBackend';
 import { ChromeRenderer } from './chrome/ChromeRenderer';
+import { PriceAxisTickSource } from './chrome/priceAxisTicks';
 import { LabelTooltip } from './chrome/LabelTooltip';
 import { AXIS_MASTER_W, AXIS_MERGED_W, rightGutterPx } from './chrome/axisLayout';
 import { CrosshairRenderer } from './chrome/CrosshairRenderer';
@@ -66,7 +67,7 @@ import { IndicatorDrawingSlices, mergeSlices } from './drawings/IndicatorDrawing
 import { createProjector } from './drawings/Projector';
 import type { Projector, SnapMode } from '../../core/drawings';
 import type { IDrawingsRendererPort } from '../../core/drawings';
-import { formatPriceLabel } from './chrome/ticks';
+import { formatPriceLabel, tickDecimals } from './chrome/ticks';
 import { zonedDate } from './chrome/tz';
 import { computePaneScale, expandScaleByPixels, overlaySeriesRange } from './core/autoscale';
 import { mergeTradeMarkersState, tradesPriceHints, type TradeMarkerHints } from '../shared/trade-markers';
@@ -181,8 +182,16 @@ export class NativeRenderer implements IChartRenderer {
     private drawingsCanvas!: HTMLCanvasElement;
     private cursorCanvas!: HTMLCanvasElement;
     private overlayRoot!: HTMLDivElement;
+    /** The host-styleable twin of the `shadeRight` veil (`.vela-shade-right`), directly under
+     *  the cursor canvas; hidden whenever the crosshair layer paints no veil. */
+    private shadeRightEl: HTMLDivElement | null = null;
+    /** The veil geometry last written to {@link shadeRightEl} ('' = hidden) — the DOM is
+     *  touched only when it changes, never on a plain pointer move. */
+    private shadeRightSig = '';
     private userDrawings: UserDrawingController | null = null;
-    private readonly backdropRenderer = new BackdropRenderer();
+    /** One price-axis tick source for the gridlines (backdrop) and the labels (chrome). */
+    private readonly priceAxisTicks = new PriceAxisTickSource();
+    private readonly backdropRenderer = new BackdropRenderer(this.priceAxisTicks);
     private readonly volumeRenderer = new VolumeRenderer();
     /** SDK renderer layers instantiated at mount ({@link registerRendererLayer}). */
     /**
@@ -215,7 +224,7 @@ export class NativeRenderer implements IChartRenderer {
     private backend!: IRenderBackend; // chosen at mount (WebGL2 if available, else canvas2d)
     private backendMode: NativeBackend = 'auto';
     private glowAmount = 0; // WebGL2 neon-glow intensity (canvas2d ignores it)
-    private readonly chrome = new ChromeRenderer();
+    private readonly chrome = new ChromeRenderer(this.priceAxisTicks);
     /** Aether: price-scale chip hit regions from the last chrome frame (see ChromeRenderer). */
     /** Prepaints each indicator's Pine drawings into interleave slices at the model's z. */
     private readonly indicatorSlices = new IndicatorDrawingSlices();
@@ -324,6 +333,8 @@ export class NativeRenderer implements IChartRenderer {
     private resizeAbove: PaneNode | null = null; // pane just above the dragged separator
     private resizeBelow: PaneNode | null = null; // pane just below it
     private resizeSplitStart: PaneSplit | null = null; // the two panes' shared span when the drag began
+    /** The user drawings take part in pointer input (the runtime `drawingsInteractive` feature). */
+    private drawingsInteractive = true;
     private hoverSeparatorY: number | null = null; // pixel y of the separator under the cursor (drives its hover highlight)
 
     // ── pane management (merge / reorder / collapse / maximize) ──
@@ -377,6 +388,7 @@ export class NativeRenderer implements IChartRenderer {
     private readonly toggleVisibleCbs = new Set<(id: string, visible: boolean) => void>();
     private readonly moveIndicatorCbs = new Set<(id: string, target: MoveTarget) => void>();
     private readonly priceStyleCbs = new Set<(style: PriceStyle) => void>();
+    private readonly priceStyleWillChangeCbs = new Set<(from: PriceStyle, to: PriceStyle) => void>();
 
     constructor(opts?: RendererDisplayOptions) {
         if (opts) {
@@ -395,6 +407,7 @@ export class NativeRenderer implements IChartRenderer {
             this.scene.priceStyle = opts.priceStyle;
             this.scene.basePainting = basePaintingOf(opts.priceStyle);
             this.scene.candleOverride = candleOverrideFor(opts.priceStyle, this.scene.style.chartTypes);
+            if (typeof opts.priceAxisTicks === 'function') this.priceAxisTicks.setHook(opts.priceAxisTicks);
         }
         // Seed a theme so getConfig()/applyConfig() work before mount (mount overwrites
         // it with the real, Vela-resolved theme). Candle colors follow opts.
@@ -402,7 +415,7 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     readonly name = 'native';
-    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animScroll', 'animAutoscale', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'scaleSide', 'rangeChips', 'indicatorChips', 'mergeChips', 'legendFolded', 'drawingTooltips', 'invertScale', 'paneScales', 'autoScale', 'timezone', 'hour12', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'marks', 'indicatorTitles', 'indicatorValues', 'crosshairOverride'];
+    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animScroll', 'animAutoscale', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'scaleSide', 'rangeChips', 'indicatorChips', 'mergeChips', 'legendFolded', 'drawingTooltips', 'invertScale', 'paneScales', 'autoScale', 'timezone', 'hour12', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'marks', 'indicatorTitles', 'indicatorValues', 'crosshairOverride', 'drawingsInteractive', 'priceAxisTicks'];
 
     /** Apply a render feature live — mutate the field + invalidate, no engine re-run. */
     applyFeature(key: string, value: unknown): void {
@@ -568,6 +581,18 @@ export class NativeRenderer implements IChartRenderer {
                 // and a reload can never leave it stuck. `null` restores the configured crosshair.
                 this.scene.crosshairOverride = sanitizeCrosshairOverride(value);
                 break;
+            case 'drawingsInteractive':
+                // Runtime-only (never in getConfig), like `crosshairOverride`: a pick takes the
+                // plot's presses for itself, and a reload can never leave the drawings inert.
+                this.drawingsInteractive = value !== false;
+                if (this.input) this.input.drawings = this.drawingsInteractive;
+                if (!this.drawingsInteractive) this.userDrawings?.clearHover();
+                return; // affects the next gesture only — clearHover repaints what it drops
+            case 'priceAxisTicks':
+                // Runtime-only (a function never serializes into getConfig). Setting it again —
+                // even the same function — drops the memoized ticks, so a host can refresh them.
+                this.priceAxisTicks.setHook(typeof value === 'function' ? (value as PriceAxisTicksFn) : null);
+                break;
             case 'keyboard':
                 this.setKeyboardEnabled(Boolean(value));
                 return; // owns its own DOM (focus/listeners/live region)
@@ -669,6 +694,8 @@ export class NativeRenderer implements IChartRenderer {
             case 'tradeMarkers': return { ...this.scene.tradeMarkers, colors: { ...this.scene.tradeMarkers.colors } };
             case 'marks': return { visible: this.scene.marks.visible, groups: { ...this.scene.marks.groups } };
             case 'crosshairOverride': return this.scene.crosshairOverride ? { ...this.scene.crosshairOverride } : null;
+            case 'drawingsInteractive': return this.drawingsInteractive;
+            case 'priceAxisTicks': return this.priceAxisTicks.hook;
             case 'keyboard': return this.keyboardEnabled;
             case 'historyChords': return this.historyChordsEnabled;
             case 'settings': return this.settingsEnabled;
@@ -1523,6 +1550,16 @@ export class NativeRenderer implements IChartRenderer {
         this.cursorCanvas = document.createElement('canvas');
         Object.assign(this.cursorCanvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' });
 
+        // The `shadeRight` veil's styleable twin, just under the cursor canvas: host CSS on
+        // `.vela-shade-right` (a `backdrop-filter`) reaches the candles beneath it but never the
+        // crosshair line or the veil paint above it. Transparent unless the host styles it.
+        this.shadeRightEl = document.createElement('div');
+        this.shadeRightEl.className = 'vela-shade-right';
+        this.shadeRightEl.setAttribute('aria-hidden', 'true');
+        this.shadeRightEl.hidden = true;
+        Object.assign(this.shadeRightEl.style, { position: 'absolute', top: '0', left: '0', width: '0', height: '0', pointerEvents: 'none', display: 'none' });
+        this.shadeRightSig = '';
+
         this.overlayRoot = document.createElement('div');
         Object.assign(this.overlayRoot.style, { position: 'absolute', inset: '0', pointerEvents: 'none' });
 
@@ -1537,7 +1574,7 @@ export class NativeRenderer implements IChartRenderer {
         this.extLayers = rendererLayers().map((def) => ({ def, instance: def.create(), canvas: this.createLayerCanvas(), channel: def.id, owner: null }));
         const below = this.extLayers.filter((l) => l.def.placement === 'below-data').map((l) => l.canvas);
         const above = this.extLayers.filter((l) => l.def.placement !== 'below-data').map((l) => l.canvas);
-        this.plot.append(this.backdropCanvas, ...below, this.dataCanvas, this.volumeCanvas, this.vpvrCanvas, ...above, this.chromeCanvas, this.drawingsCanvas, this.cursorCanvas, this.overlayRoot);
+        this.plot.append(this.backdropCanvas, ...below, this.dataCanvas, this.volumeCanvas, this.vpvrCanvas, ...above, this.chromeCanvas, this.drawingsCanvas, this.shadeRightEl, this.cursorCanvas, this.overlayRoot);
         this.layerOrderSig = ''; // recomputed on the first data frame (owned layers follow their indicator's z)
         this.wrapper.appendChild(this.plot);
         this.factoryConfig = this.getConfig();
@@ -1597,13 +1634,14 @@ export class NativeRenderer implements IChartRenderer {
             drawingsPointerDown: (x, y, snap, shift, mod) => this.userDrawings?.pointerDown(x, y, snap, shift, mod),
             drawingsPointerMove: (x, y, snap, shift, mod) => this.userDrawings?.pointerMove(x, y, snap, shift, mod),
             drawingsPointerUp: (x, y, snap) => this.userDrawings?.pointerUp(x, y, snap),
-            drawingsCursor: (x, y) => this.userDrawings?.cursorAt(x, y) ?? (this.chrome.markGlyphAt(x, y) ? 'pointer' : null),
+            drawingsCursor: (x, y) => (this.drawingsInteractive ? this.userDrawings?.cursorAt(x, y) : null) ?? (this.chrome.markGlyphAt(x, y) ? 'pointer' : null),
             drawingsDblClick: (x, y) => this.userDrawings?.dblClick(x, y) ?? false,
             drawingsClearTransient: () => this.userDrawings?.clearTransient(),
         });
         this.input.rightEdgeZoom = this.zoomAnchorMode === 'right'; // honor a pre-mount feature set
         this.input.axisDrag = this.axisDragEnabled;
         this.input.paneResize = this.paneResizeEnabled;
+        this.input.drawings = this.drawingsInteractive;
         // Attach to the data canvas so legend/gear/dialog clicks (above it) don't pan.
         this.input.attach(this.dataCanvas);
         if (this.settingsEnabled) this.setSettingsEnabled(true); // honor a pre-mount feature set
@@ -1660,6 +1698,8 @@ export class NativeRenderer implements IChartRenderer {
                 };
             },
             chartBarMs: () => this.coords.barInterval,
+            timeZone: () => this.scene.timezone,
+            priceDecimals: () => (this.scene.priceMintick ? tickDecimals(this.scene.priceMintick) : null),
             snap: (pt, paneId, mode, cursorPx) => this.snapToCandle(pt, paneId, mode, cursorPx),
             setSnapMode: (mode) => this.setSnapMode(mode),
             setToolbarGutter: (px) => this.setToolbarGutter(px),
@@ -1953,6 +1993,8 @@ export class NativeRenderer implements IChartRenderer {
         this.backend.destroy();
         this.chrome.destroy();
         this.crosshairLayer.destroy();
+        this.shadeRightEl?.remove();
+        this.shadeRightEl = null;
         this.attributionEl?.remove();
         this.attributionEl = null;
         this.mountContainer?.style.removeProperty('--vela-toolbar-gutter');
@@ -2382,14 +2424,22 @@ export class NativeRenderer implements IChartRenderer {
         return () => this.priceStyleCbs.delete(cb);
     }
 
+    onPriceStyleWillChange(cb: (from: PriceStyle, to: PriceStyle) => void): Unsubscribe {
+        this.priceStyleWillChangeCbs.add(cb);
+        return () => this.priceStyleWillChangeCbs.delete(cb);
+    }
+
     /**
      * THE single write path for the base price style at runtime (feature set / settings dialog /
-     * config template — the constructor seeds the field directly, pre-listeners). Updates the
-     * scene, eases any reveal layer toward the new style's target, and notifies the core —
-     * which owns the DATA side of styles that need one (a chart type's SeriesDataEngine).
+     * config template — the constructor seeds the field directly, pre-listeners). Announces the
+     * switch while the scene still holds the old style (a listener may paint/capture that frame),
+     * then updates the scene, eases any reveal layer toward the new style's target, and notifies
+     * the core — which owns the DATA side of styles that need one (a chart type's SeriesDataEngine).
      */
     private setPriceStyle(style: PriceStyle): void {
         if (style === this.scene.priceStyle) return;
+        const from = this.scene.priceStyle;
+        for (const cb of this.priceStyleWillChangeCbs) cb(from, style);
         this.scene.priceStyle = style;
         this.scene.basePainting = basePaintingOf(style);
         this.scene.candleOverride = candleOverrideFor(style, this.scene.style.chartTypes);
@@ -2672,7 +2722,7 @@ export class NativeRenderer implements IChartRenderer {
         if (this.easeLiveBar(dtMs)) active = true; // glide the forming bar toward the latest tick
         this.skeletonClockMs += dtMs; // drives the loading-skeleton pulse (harmless when none show)
         this.paintData();
-        this.crosshairLayer.render(this.scene, this.coords, this.theme, this.hoverSeparatorY, this.externalCrossPx());
+        this.renderCrosshairLayer();
         this.updateLegendValues(); // the animator owns the frame — renderFrame won't run
         this.emitViewportChange();
         return active;
@@ -3367,13 +3417,36 @@ export class NativeRenderer implements IChartRenderer {
             this.chrome.render(this.scene, this.coords, this.theme, this.axisSurface());
             this.trackMarkPopover();
         }
-        this.crosshairLayer.render(this.scene, this.coords, this.theme, this.hoverSeparatorY, this.externalCrossPx()); // L2 crosshair
+        this.renderCrosshairLayer(); // L2 crosshair
         // Hover-testing SDK layers (repaintOnCursor) follow pointer moves too — each owns
         // one transparent canvas, so this stays as cheap as the crosshair tier itself.
         if (!repaintsData(level) && this.paintedData) this.repaintCursorLayers();
         // Legend values follow the same tiers (hover moves the read bar, data changes the
         // value); the push diffs per row, so an unchanged frame touches no DOM.
         this.updateLegendValues();
+    }
+
+    /** Repaint the L2 crosshair canvas and keep the `.vela-shade-right` element on the veil it painted. */
+    private renderCrosshairLayer(): void {
+        this.crosshairLayer.render(this.scene, this.coords, this.theme, this.hoverSeparatorY, this.externalCrossPx());
+        this.syncShadeRight();
+    }
+
+    /** Position (or hide) the `.vela-shade-right` element over the veil of the last crosshair frame. */
+    private syncShadeRight(): void {
+        const el = this.shadeRightEl;
+        if (!el) return;
+        const area = this.crosshairLayer.shadeRightArea;
+        const sig = area ? `${area.x},${area.width},${area.height}` : '';
+        if (sig === this.shadeRightSig) return;
+        this.shadeRightSig = sig;
+        if (!area) {
+            el.hidden = true;
+            el.style.display = 'none'; // an authored `display` on the hook class must not defeat [hidden]
+            return;
+        }
+        Object.assign(el.style, { left: `${area.x}px`, width: `${area.width}px`, height: `${area.height}px`, display: '' });
+        el.hidden = false;
     }
 
     /** Repaint the SDK layers that opted into cursor tracking (their own canvas only). */
@@ -4341,7 +4414,7 @@ export class NativeRenderer implements IChartRenderer {
         if (this.animator.active) {
             this.computeScales();
             this.paintData();
-            this.crosshairLayer.render(this.scene, this.coords, this.theme, this.hoverSeparatorY, this.externalCrossPx());
+            this.renderCrosshairLayer();
         } else {
             this.scheduler.flushNow(4 /* Full */);
         }
@@ -4383,7 +4456,10 @@ export function applyPatch(model: IndicatorModel, patch: ScenePatch): void {
             const s = model.series.find((x) => x.id === delta.seriesId);
             if (!s) continue;
             if (delta.kind === 'points' && isLineLikeSeries(s)) s.points = delta.points;
-            else if (delta.kind === 'bars' && (s.kind === 'candle' || s.kind === 'bar')) s.bars = delta.bars;
+            else if (delta.kind === 'bars' && (s.kind === 'candle' || s.kind === 'bar')) {
+                s.bars = delta.bars;
+                if (delta.barColors !== undefined) s.barColors = delta.barColors;
+            }
             else if (delta.kind === 'markers' && s.kind === 'markers') s.markers = delta.markers;
         }
         if (patch.lines) model.lines = patch.lines;

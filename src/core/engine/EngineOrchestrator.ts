@@ -156,6 +156,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     private activeEngineStyle: string | null = null;
     /** The chart's current price style (tracked from the renderer's change events + initial read). */
     private priceStyle: PriceStyle = 'candles';
+    private priceStyleWillChangeUnsub: Unsubscribe | null = null;
     private readonly readyPromise: Promise<void>;
     private unresolvedUnsub: Unsubscribe | null = null;
     /** Latest chart visible range (left/right bar times), fed to viewport-dependent scripts. */
@@ -280,6 +281,10 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         // type may carry a DATA requirement beyond drawing: a bar-stream transform
         // (heikinashi) and/or a registered data engine (SDK chart types).
         this.renderer.onPriceStyleChange?.((style) => this.syncPriceStyle(style));
+        // Announced from the same write path BEFORE the renderer repaints, so a host can
+        // capture the outgoing frame (style-switch transitions).
+        this.priceStyleWillChangeUnsub =
+            this.renderer.onPriceStyleWillChange?.((from, to) => this.events.emit('priceStyle:change', { from, to })) ?? null;
         // Seed the bar transform from the CONSTRUCTED style (a chart created with
         // `priceStyle: 'heikinashi'`) so the initial load already produces the view.
         const initialStyle = this.renderer.readFeature('priceStyle');
@@ -2214,6 +2219,8 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         if (this.viewportTimer != null) clearTimeout(this.viewportTimer);
         this.viewportUnsub?.();
         this.paneActionUnsub?.();
+        this.priceStyleWillChangeUnsub?.();
+        this.priceStyleWillChangeUnsub = null;
         // native instances free their own caches/timers in stop()
         for (const record of this.registry.all()) {
             this.settleCode(record, { ok: false, error: new Error('[vela] updateCode — the chart was destroyed.') });
@@ -3079,14 +3086,36 @@ function blankedModel(model: IndicatorModel): IndicatorModel {
  *  the points. */
 export function modelToValuePatch(model: IndicatorModel): ValuePatch {
     const series: SeriesValueDelta[] = [];
+    let from = Number.POSITIVE_INFINITY;
+    let to = 0;
+    // The dirty span from each series' ENDS: Vela series are time-ascending, so the first and
+    // last elements bound the span without a walk — O(series), never O(points). A streamed
+    // native re-emits every live tick; walking 24 series × 24k bars cost ~7 ms per tick.
+    const span = (arr: ReadonlyArray<{ time: number }>): void => {
+        if (arr.length === 0) return;
+        const a = arr[0]!.time;
+        const b = arr[arr.length - 1]!.time;
+        if (a < from) from = a;
+        if (b > to) to = b;
+    };
     for (const s of model.series) {
-        if (s.kind === 'candle' || s.kind === 'bar') series.push({ seriesId: s.id, kind: 'bars', bars: s.bars });
-        else if (isLineLikeSeries(s)) series.push({ seriesId: s.id, kind: 'points', points: s.points });
-        else if (s.kind === 'markers') series.push({ seriesId: s.id, kind: 'markers', markers: s.markers });
+        if (s.kind === 'candle' || s.kind === 'bar') {
+            // ALWAYS stated, `[]` included: the renderer keeps colors a delta omits, and they are
+            // index-aligned to the bars, so a stale set would slide onto whatever bar now holds its index.
+            series.push({ seriesId: s.id, kind: 'bars', bars: s.bars, barColors: s.barColors ?? [] });
+            span(s.bars);
+        } else if (isLineLikeSeries(s)) {
+            series.push({ seriesId: s.id, kind: 'points', points: s.points });
+            span(s.points);
+        } else if (s.kind === 'markers') {
+            series.push({ seriesId: s.id, kind: 'markers', markers: s.markers });
+            span(s.markers);
+        }
     }
     return {
         kind: 'value',
         indicatorId: model.id,
+        dirty: { from: Number.isFinite(from) ? from : 0, to },
         // ALWAYS stated, `null` included: an omitted key leaves the renderer on the previous
         // run's offset, so a re-run that widened to the whole chart could not clear it.
         anchorTime: model.anchorTime ?? null,

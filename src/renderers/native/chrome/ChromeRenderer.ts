@@ -13,14 +13,18 @@ import { DrawingSceneRenderer, modelDrawingSet, type DrawingSet, type TimeWindow
 import { renderTradeMarkers } from '../../shared/trade-markers';
 import type { TradeExecution } from '../../../core/model/trades';
 import { paneAxisTicks, formatAxisValue, timeTicks } from './ticks';
-import { AXIS_MERGED_W, PANE_SEPARATOR_PX, scaleColumnX } from './axisLayout';
+import { AXIS_MERGED_W, PANE_SEPARATOR_PX, canvasWidthPx, scaleColumnX } from './axisLayout';
 import { parseColor, readableText } from '../backend/gl/color';
+import { PriceAxisTickSource } from './priceAxisTicks';
 import { countdownText } from './countdown';
 import { DARK_THEME } from '../../../core/theme';
 import { seriesNow, tzOffsetMs } from './tz';
 import { markGroupVisible } from '../../shared/marks-state';
 import { clusterTooltip, layoutMarkLane, markGlyphAt, markStackAt, type MarkLaneLayout, type PlacedGlyph } from './marks/layout';
 import { MarkIconRaster, paintMarkLane } from './marks/paint';
+
+/** Opacity factor of a price-axis label whose tick is `major: false` (de-emphasized). */
+const MINOR_LABEL_ALPHA = 0.5;
 
 /**
  * Renderer-owned chrome layer (canvas2d) on its own canvas, stacked above the
@@ -64,6 +68,9 @@ export class ChromeRenderer {
     /** Bar open times of the current series, rebuilt only when the array or its length changes (a live tick keeps both). */
     private barTimesSrc: readonly OHLCV[] | null = null;
     private barTimesCache: number[] = [];
+
+    /** `axisTicks` is shared with the backdrop layer, so price labels and gridlines agree. */
+    constructor(private readonly axisTicks = new PriceAxisTickSource()) {}
 
     mount(canvas: HTMLCanvasElement): void {
         this.canvas = canvas;
@@ -188,7 +195,8 @@ export class ChromeRenderer {
         this.drawMarkLane(ctx, scene, coords, theme, dataW, dataH);
     }
 
-    /** The timeline-mark lane — after the axis, so the tokens read over the plot's bottom edge. */
+    /** The timeline-mark lane — after the axis, so the tokens read over the plot's bottom edge,
+     *  but clipped to the data area so a glyph on the edge bar never paints over the price scale. */
     private drawMarkLane(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, dataW: number, dataH: number): void {
         if (!scene.marks.visible || scene.timelineMarks.length === 0) {
             this.markLayout = { glyphs: [], stacks: new Map() };
@@ -206,6 +214,10 @@ export class ChromeRenderer {
             expanded: scene.marksExpandedStack,
         });
         const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, dataW, dataH);
+        ctx.clip();
         paintMarkLane(ctx, this.markLayout, {
             axisY: dataH,
             background: theme.background,
@@ -219,6 +231,7 @@ export class ChromeRenderer {
             flashKey: scene.marksFlash && scene.marksFlash.until > nowMs ? scene.marksFlash.key : null,
             nowMs,
         });
+        ctx.restore();
     }
 
     private barTimes(scene: SceneGraph): readonly number[] {
@@ -251,7 +264,7 @@ export class ChromeRenderer {
         dataW: number,
     ): void {
         const isLeft = coords.leftOffsetPx > 0; // the scale docks left
-        const fullW = ctx.canvas.width / coords.dpr;
+        const fullW = canvasWidthPx(ctx, coords);
         const axisW = fullW - dataW;
         const clipX = isLeft ? axisW : 0;
         ctx.save();
@@ -284,7 +297,7 @@ export class ChromeRenderer {
     // ── axes ──
     private drawPriceAxes(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, dataW: number, panes: PaneNode[]): void {
         const isLeft = coords.leftOffsetPx > 0; // the scale docks left
-        const fullW = ctx.canvas.width / coords.dpr;
+        const fullW = canvasWidthPx(ctx, coords);
         const axisW = fullW - dataW;
         ctx.strokeStyle = scene.style.borderColor ?? theme.borderColor;
         ctx.lineWidth = 1;
@@ -295,15 +308,21 @@ export class ChromeRenderer {
         ctx.stroke();
         if (!scene.showAxisLabels) return;
         ctx.fillStyle = this.axisTextColor;
-        ctx.textAlign = isLeft ? "right" : "left";
+        ctx.textAlign = isLeft ? 'right' : 'left';
         const textX = isLeft ? axisW - 6 : dataW + 6;
+        const font = `${scene.style.fontSize}px ${theme.fontFamily}`;
+        const majorFont = `600 ${font}`;
+        const alpha = ctx.globalAlpha;
         for (const pane of panes) {
-            if (pane.collapsed) continue;
-            const pct = percentScaleFor(scene, pane);
-            for (const t of paneAxisTicks(pane.scale, pane.bounds.height, pct, scene.priceMintick, pane.axisFormat)) {
+            if (pane.collapsed) continue; // collapsed strip: legend only, no scale numbers
+            for (const t of this.axisTicks.ticksFor(scene, pane, coords)) {
                 const y = coords.priceToY(t.price, pane.scale, pane.bounds);
                 if (y < pane.bounds.top + 6 || y > pane.bounds.top + pane.bounds.height - 4) continue;
+                if (t.major === true) ctx.font = majorFont;
+                else if (t.major === false) ctx.globalAlpha = alpha * MINOR_LABEL_ALPHA;
                 ctx.fillText(t.label, textX, y);
+                if (t.major === true) ctx.font = font;
+                else if (t.major === false) ctx.globalAlpha = alpha;
             }
             if (pane.axisBands) {
                 for (const b of pane.axisBands) {
@@ -341,7 +360,7 @@ export class ChromeRenderer {
     private drawMergedScaleColumns(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem, dataW: number): void {
         if (!scene.showAxisLabels) return;
         const isLeft = coords.leftOffsetPx > 0; // the scale docks left
-        const fullW = ctx.canvas.width / coords.dpr;
+        const fullW = canvasWidthPx(ctx, coords);
         const axisW = fullW - dataW;
         ctx.textAlign = isLeft ? 'right' : 'left';
         // A merged column reads with the same axis text color as the master scale (from the
@@ -384,7 +403,7 @@ export class ChromeRenderer {
         if (y < pricePane.bounds.top || y > pricePane.bounds.top + pricePane.bounds.height) return;
 
         const isLeft = coords.leftOffsetPx > 0; // the scale docks left
-        const fullW = ctx.canvas.width / coords.dpr;
+        const fullW = canvasWidthPx(ctx, coords);
         const axisW = fullW - dataW;
         const chipBounds: ScaleChip[] = [];
 
@@ -685,7 +704,7 @@ export class ChromeRenderer {
         const last = scene.bars[scene.bars.length - 1];
         const curY = (scene.showPriceLabel || scene.showCountdown) && last ? coords.priceToY(last.close, pricePane.scale, pricePane.bounds) : -999;
         const isLeft = coords.leftOffsetPx > 0; // the scale docks left
-        const fullW = ctx.canvas.width / coords.dpr;
+        const fullW = canvasWidthPx(ctx, coords);
         const axisW = fullW - dataW;
         const PAD = 8;
         const hiText = "H " + formatAxisValue(pricePane.scale, pricePane.bounds.height, hi, percentScaleFor(scene, pricePane), scene.priceMintick);
@@ -747,7 +766,7 @@ export class ChromeRenderer {
 
     private drawTimeAxis(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, dataW: number, dataH: number, fullH: number): void {
         const isLeft = coords.leftOffsetPx > 0; // the scale docks left
-        const fullW = ctx.canvas.width / coords.dpr;
+        const fullW = canvasWidthPx(ctx, coords);
         const axisW = fullW - dataW;
         const minX = isLeft ? axisW : 0;
         const maxX = isLeft ? fullW : dataW;
