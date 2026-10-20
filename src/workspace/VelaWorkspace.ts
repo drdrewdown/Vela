@@ -54,7 +54,19 @@ import { timeframeLabel } from '../widget/timeframe';
 import { registerBuiltinChartTypes } from '../chart-types/builtins';
 import { parseSymbol } from '../data/ProviderRegistry';
 import { syncTargets, rangesWithin, styleConfigPatch, SYNC_KINDS, type SyncKind, type SyncOptions, type SyncSetting } from './sync';
-import { encodeState, decodeState, sanitizeState, type DrawingToolsState, type WorkspaceState, type WorkspaceStorage } from './persist';
+import { encodeState, decodeState, sanitizeState, type DrawingToolsState, type IndicatorTemplate, type WorkspaceState, type WorkspaceStorage } from './persist';
+import { getNativeIndicator } from '../core/native-indicators/NativeIndicator';
+import type { IndicatorLedger } from '../widget/indicators';
+import {
+    cloneTemplate,
+    findTemplate,
+    ledgersEqual,
+    removeTemplate,
+    renameTemplate,
+    upsertTemplate,
+    type IndicatorTemplateApplyResult,
+    type IndicatorTemplateSaveResult,
+} from './indicator-templates';
 import { localStorageAdapter } from '../widget/persist';
 import { ChartCell, seedDefaults, cellChartDefaults, type CellSeed, type CellBoot, type PooledCellState } from './ChartCell';
 import { buildContext, type WorkspaceWidgetContext } from './context';
@@ -84,6 +96,10 @@ import { compositeLayoutScreenshot, tilesFromCellRects, triggerPngDownload, type
  * (the layout sizes cells), so it is omitted from the type.
  */
 export interface VelaWorkspaceOptions extends Omit<VelaOptions, 'height'>, VelaShellOptions {
+    /** Built-in indicator templates — read-only presets the host ships, listed beside the
+     *  user's saved ones (`builtInIndicatorTemplates()`); a user may save one under a new
+     *  name to make it their own. Validated like the document's; at most ten. */
+    indicatorTemplates?: readonly IndicatorTemplate[];
     /** Initial layout — a registered id (`'1'`, `'2h'`, `'2v'`, `'4'`, `'8'`, or a
      *  plugin-registered one) or an inline definition. Default `'4'`.
      *
@@ -155,6 +171,9 @@ export interface WorkspaceEventMap extends Record<string, unknown> {
     /** A cell's indicator set changed — added, removed, moved, or an input edited — from
      *  any door (picker, legend, object tree, chart API). Read the cell's chart for the set. */
     'cell:indicators': { id: string };
+    /** The saved indicator templates changed — saved, updated, renamed, removed, or restored
+     *  with a document. Re-read `indicatorTemplates()`. */
+    'indicators:templates': undefined;
     /** The shared drawing toolbar collapsed to its strip or expanded (the chevron or the API). */
     'drawingToolbar:collapsed': { collapsed: boolean };
     'cell:destroyed': { id: string };
@@ -354,6 +373,12 @@ export class VelaWorkspace {
     private toolDefs: Record<string, unknown> = {};
     /** Every drawing tool's saved looks — a SHARED pref like the remembered settings. */
     private toolTemplates: Record<string, unknown> = {};
+    /** The saved indicator templates — a SHARED preference, persisted with the document. */
+    private templates: IndicatorTemplate[] = [];
+    /** The host's read-only presets (`indicatorTemplates` option). */
+    private readonly builtInTemplates: readonly IndicatorTemplate[];
+    /** The template each cell last applied, by cell id — what a drifted chart is read against. */
+    private readonly lastAppliedTemplate = new Map<string, string>();
     /** Re-entrancy guard while one cell's remembered settings fan out to the others. */
     private toolDefsBusy = false;
     /** Favorite timeframes — the shared topbar's quick-switch chips, one set for the grid. */
@@ -469,6 +494,10 @@ export class VelaWorkspace {
                 });
             }
         }
+        this.builtInTemplates = opts.indicatorTemplates
+            ? (sanitizeState({ version: 1, layout: '1', charts: [], indicatorTemplates: opts.indicatorTemplates })?.indicatorTemplates ?? [])
+            : [];
+        if (boot?.indicatorTemplates) this.templates = boot.indicatorTemplates.map(cloneTemplate);
         this.timezone = boot?.timezone ?? opts.timezone ?? 'Etc/UTC';
         if (boot?.favorites) this.favs = [...boot.favorites];
         if (boot?.timeframeFavorites) this.tfFavs = [...boot.timeframeFavorites];
@@ -1012,6 +1041,7 @@ export class VelaWorkspace {
         if (this.tfFavs.length > 0) state.timeframeFavorites = [...this.tfFavs];
         const tools = this.drawingToolsState();
         if (tools) state.drawingTools = tools;
+        if (this.templates.length > 0) state.indicatorTemplates = this.templates.map(cloneTemplate);
         if (this.trackSizes.size > 0) state.trackSizes = Object.fromEntries([...this.trackSizes].map(([k, v]) => [k, { ...v }]));
         const panels = this.dock.getState();
         if (panels) state.panels = panels;
@@ -1051,6 +1081,11 @@ export class VelaWorkspace {
         if (!st) return;
         if (st.favorites) this.favs = [...st.favorites]; // newborn cells inherit below (buildCells)
         if (st.drawingTools) this.adoptDrawingTools(st.drawingTools); // ditto; the active cell takes the magnet/stay mirrors
+        if (st.indicatorTemplates) {
+            this.templates = st.indicatorTemplates.map(cloneTemplate);
+            this.lastAppliedTemplate.clear();
+            this.events.emit('indicators:templates', undefined);
+        }
         if (st.timeframeFavorites) {
             this.tfFavs = [...st.timeframeFavorites];
             this.topbar.setTimeframeFavorites(this.tfFavs);
@@ -1330,6 +1365,116 @@ export class VelaWorkspace {
      *  the chevron's programmatic twin; `drawingToolbar:collapsed` follows either way. */
     setDrawingToolbarCollapsed(collapsed: boolean): void {
         this.drawToolbar?.setCollapsed(collapsed);
+    }
+
+    // ── Indicator templates ──────────────────────────────────────────────────────────────
+
+    /** The saved indicator templates, in order (copies — edit through the methods below). */
+    indicatorTemplates(): IndicatorTemplate[] {
+        return this.templates.map(cloneTemplate);
+    }
+
+    /** The host's read-only presets (the `indicatorTemplates` option), in the host's order. */
+    builtInIndicatorTemplates(): IndicatorTemplate[] {
+        return this.builtInTemplates.map(cloneTemplate);
+    }
+
+    /**
+     * Save a cell's indicator set (the active cell's by default) under `name`: an existing
+     * name is updated in place, a new one joins while the list is under the cap. The
+     * interval is remembered unless told otherwise; the symbol only when asked.
+     */
+    saveIndicatorTemplate(name: string, opts: { cellId?: string; rememberTimeframe?: boolean; rememberSymbol?: boolean } = {}): IndicatorTemplateSaveResult {
+        const cell = opts.cellId ? this.cellsById.get(opts.cellId) : this.activeId ? this.cellsById.get(this.activeId) : undefined;
+        if (!cell) return { ok: false, reason: 'no-cell' };
+        const draft: Omit<IndicatorTemplate, 'createdAt' | 'updatedAt'> = { name, indicators: cell.indicatorLedger() };
+        if (opts.rememberTimeframe !== false) draft.timeframe = cell.timeframe;
+        if (opts.rememberSymbol) draft.symbol = cell.symbol;
+        const { list, result } = upsertTemplate(this.templates, draft, Date.now());
+        if (!result.ok) {
+            if (result.reason === 'full') this.toast(`${this.templates.length} templates already — update or remove one`, 'error');
+            return result;
+        }
+        this.templates = list;
+        this.lastAppliedTemplate.set(cell.id, result.template.name);
+        this.events.emit('indicators:templates', undefined);
+        this.markStateDirty();
+        return { ...result, template: cloneTemplate(result.template) };
+    }
+
+    /**
+     * Apply a saved or built-in template: the cell's indicators converge onto the template's
+     * ledger as one undo step, then the remembered interval and symbol switch. `allCells`
+     * applies the indicators and interval to every cell and leaves each cell's symbol. Native
+     * types this build does not register are skipped and named in the result (and a toast).
+     */
+    applyIndicatorTemplate(name: string, opts: { cellId?: string; allCells?: boolean } = {}): IndicatorTemplateApplyResult {
+        const template = findTemplate(this.templates, name) ?? findTemplate(this.builtInTemplates, name);
+        if (!template) return { ok: false, reason: 'unknown' };
+        const targets = opts.allCells
+            ? [...this.cellsById.values()]
+            : [opts.cellId ? this.cellsById.get(opts.cellId) : this.activeId ? this.cellsById.get(this.activeId) : undefined].filter((c): c is ChartCell => c !== undefined);
+        if (targets.length === 0) return { ok: false, reason: 'no-cell' };
+        const skipped = new Set<string>();
+        // A native type this build never registered (a template saved on another build) is left
+        // out rather than failing the whole apply; manifest names the manifest does not carry
+        // are already ignored by the converge.
+        const natives = template.indicators.natives.filter((e) => {
+            const type = typeof e === 'string' ? e : e.type;
+            if (getNativeIndicator(type)) return true;
+            skipped.add(type);
+            return false;
+        });
+        // The document's ledger carries untyped value bags (validated as plain objects); the
+        // add path validates each value against the schema — the same cast a restore makes.
+        const ledger = { manifest: [...template.indicators.manifest], natives } as IndicatorLedger;
+        for (const cell of targets) {
+            cell.applyIndicatorLedger(ledger, { record: true });
+            if (template.timeframe) cell.setTimeframe(template.timeframe);
+            if (template.symbol && !opts.allCells) cell.setSymbol(template.symbol);
+            this.lastAppliedTemplate.set(cell.id, template.name);
+        }
+        if (skipped.size > 0) this.toast(`Skipped ${skipped.size === 1 ? 'a study' : `${skipped.size} studies`} this chart does not have: ${[...skipped].join(', ')}`, 'info', 5000);
+        this.markStateDirty();
+        return { ok: true, cells: targets.map((c) => c.id), skipped: [...skipped] };
+    }
+
+    /** Drop a saved template; false when no saved template carries the name. */
+    removeIndicatorTemplate(name: string): boolean {
+        const next = removeTemplate(this.templates, name);
+        if (!next) return false;
+        this.templates = next;
+        for (const [id, applied] of this.lastAppliedTemplate) if (applied === name) this.lastAppliedTemplate.delete(id);
+        this.events.emit('indicators:templates', undefined);
+        this.markStateDirty();
+        return true;
+    }
+
+    /** Rename a saved template; false when `from` is unknown, `to` is empty, or `to` is taken. */
+    renameIndicatorTemplate(from: string, to: string): boolean {
+        const next = renameTemplate(this.templates, from, to);
+        if (!next) return false;
+        this.templates = next;
+        for (const [id, applied] of this.lastAppliedTemplate) if (applied === from) this.lastAppliedTemplate.set(id, to.trim());
+        this.events.emit('indicators:templates', undefined);
+        this.markStateDirty();
+        return true;
+    }
+
+    /**
+     * The template a cell (the active one by default) is showing: `exact` when its indicator
+     * set equals a saved or built-in template's — settings and visibility included — else the
+     * template it last applied, with `exact: false` (the chart has drifted from it); null when
+     * neither.
+     */
+    activeIndicatorTemplate(cellId?: string): { name: string; exact: boolean } | null {
+        const cell = cellId ? this.cellsById.get(cellId) : this.activeId ? this.cellsById.get(this.activeId) : undefined;
+        if (!cell) return null;
+        const ledger = cell.indicatorLedger();
+        const exact = [...this.templates, ...this.builtInTemplates].find((t) => ledgersEqual(t.indicators, ledger));
+        if (exact) return { name: exact.name, exact: true };
+        const last = this.lastAppliedTemplate.get(cell.id);
+        return last ? { name: last, exact: false } : null;
     }
 
     resize(): void {
