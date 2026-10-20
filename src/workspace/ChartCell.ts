@@ -24,7 +24,7 @@ import { CellControls } from '../widget/cell-controls';
 import { ChartContextMenu } from '../widget/context-menu';
 import { WidgetHistory } from '../widget/history';
 import type { RangePreset } from '../widget/bottombar';
-import { indicatorLedger, ledgerEntryName, ledgerNativeType, type LedgerManifestEntry, type LedgerNativeEntry, type ResolvedIndicator } from '../widget/indicators';
+import { indicatorLedger, ledgerEntryName, ledgerNativeType, type IndicatorLedger, type LedgerManifestEntry, type LedgerNativeEntry, type ResolvedIndicator } from '../widget/indicators';
 import { inputDeltas, type InputValue } from '../core/model/inputs';
 import {
     legendActionsProviderFor,
@@ -1179,7 +1179,54 @@ export class ChartCell {
      * resolves. Convergence is state application, not user edits — nothing enters the
      * undo timeline.
      */
-    private applyIndicatorLedger(led: { manifest: LedgerManifestEntry[]; natives: LedgerNativeEntry[] }): void {
+    /**
+     * This cell's indicator set as a document carries it — the manifest entries and the
+     * native entries, each the bare name/type when every value sits on its declaration
+     * default and the indicator is visible, else with the input/prop DELTAS and a `hidden`
+     * flag. The same read {@link dehydrate} persists; a saved indicator template is one.
+     */
+    indicatorLedger(): IndicatorLedger {
+        return indicatorLedger({
+            // Live handles carry what the registry read cannot: the input DELTAS and
+            // the hidden flag, so native settings/visibility survive the round-trip.
+            present: this.inner ? this.nativeHandles().map((h) => nativeLedgerEntry(h)) : [],
+            instanceEntries: this.instances
+                .filter((it) => !it.external)
+                .map((it) => {
+                    // LIVE deltas from the handle; a handle-less instance (add failed)
+                    // keeps whatever values it was restored with.
+                    const d = it.handle ? instanceDeltas(it.handle) : it.values;
+                    const hidden = it.handle ? !it.handle.visible : false;
+                    return d || hidden ? { name: it.entry.name, ...(d ?? {}), ...(hidden ? { hidden: true } : {}) } : it.entry.name;
+                }),
+            pendingManifest: this.pendingManifestNames,
+            manifestSettled: this.deps.manifestSettled(),
+            volumePending: this.volumeMayBePending && this.volumeIntent,
+        });
+    }
+
+    /**
+     * Converge this cell's indicators onto a ledger — the multiset rule of a restore:
+     * an instance whose type the ledger still owes is kept and brought to the entry's
+     * values and visibility, the surplus removed, the shortfall added with the entry's
+     * values. A restore runs it silently; `record: true` makes it ONE undo step whose
+     * undo brings back the ledger the cell had before (an applied indicator template).
+     */
+    applyIndicatorLedger(led: IndicatorLedger, opts: { record?: boolean } = {}): void {
+        if (!this.inner) return;
+        if (!opts.record) {
+            this.convergeIndicators(led);
+            return;
+        }
+        const before = this.indicatorLedger();
+        this.convergeIndicators(led);
+        this.history.push({
+            undo: () => this.convergeIndicators(before),
+            redo: () => this.convergeIndicators(led),
+        });
+    }
+
+    private convergeIndicators(led: IndicatorLedger): void {
         const chart = this.inner;
         if (!chart) return;
         this.volumeIntent = led.natives.some((e) => ledgerNativeType(e) === 'volume');
@@ -1512,7 +1559,7 @@ export class ChartCell {
         // Cosmetics + drawings round-trip (both validate untrusted input).
         if (cs.rendererConfig != null) this.inner.renderer.applyConfig(cs.rendererConfig);
         if (cs.drawings != null) this.inner.drawings.fromJSON(cs.drawings);
-        if (cs.indicators) this.applyIndicatorLedger(cs.indicators as { manifest: LedgerManifestEntry[]; natives: LedgerNativeEntry[] });
+        if (cs.indicators) this.applyIndicatorLedger(cs.indicators as IndicatorLedger);
         // Third-party state converges to the document too: the restored bag REPLACES
         // the baseline (absent in the document = the document carries none), then the
         // registered handlers re-apply. After the ledger — a handler re-adding external
@@ -1562,23 +1609,7 @@ export class ChartCell {
             // shared manifest settles. See {@link indicatorLedger}. External instances
             // (`ctx.addIndicator`) stay out: their names would never resolve against the
             // manifest — their plugin persists them via the `ext` seam instead.
-            indicators: indicatorLedger({
-                // Live handles carry what the registry read cannot: the input DELTAS and
-                // the hidden flag, so native settings/visibility survive the round-trip.
-                present: this.inner ? this.nativeHandles().map((h) => nativeLedgerEntry(h)) : [],
-                instanceEntries: this.instances
-                    .filter((it) => !it.external)
-                    .map((it) => {
-                        // LIVE deltas from the handle; a handle-less instance (add failed)
-                        // keeps whatever values it was restored with.
-                        const d = it.handle ? instanceDeltas(it.handle) : it.values;
-                        const hidden = it.handle ? !it.handle.visible : false;
-                        return d || hidden ? { name: it.entry.name, ...(d ?? {}), ...(hidden ? { hidden: true } : {}) } : it.entry.name;
-                    }),
-                pendingManifest: this.pendingManifestNames,
-                manifestSettled: this.deps.manifestSettled(),
-                volumePending: this.volumeMayBePending && this.volumeIntent,
-            }),
+            indicators: this.indicatorLedger(),
             ...(ext ? { ext } : {}),
         };
     }

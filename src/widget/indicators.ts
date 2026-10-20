@@ -110,6 +110,12 @@ export type LedgerNativeEntry = string | { type: string; inputs?: Record<string,
 /** The entry's native TYPE, whichever shape it travels as. */
 export const ledgerNativeType = (e: LedgerNativeEntry): string => (typeof e === 'string' ? e : e.type);
 
+/** A chart's indicator set as a document carries it: the manifest entries and the native entries. */
+export interface IndicatorLedger {
+    manifest: LedgerManifestEntry[];
+    natives: LedgerNativeEntry[];
+}
+
 /** Everything {@link indicatorLedger} needs to decide what a state snapshot reports. */
 export interface LedgerInputs {
     /** Native entries present on the chart RIGHT NOW (live handles: type + input
@@ -142,7 +148,7 @@ export interface LedgerInputs {
  * never be repainted as "empty because nothing loaded yet" — that resurrection was the
  * bug this helper exists to pin down.
  */
-export function indicatorLedger(i: LedgerInputs): { manifest: LedgerManifestEntry[]; natives: LedgerNativeEntry[] } {
+export function indicatorLedger(i: LedgerInputs): IndicatorLedger {
     const natives = [...i.present];
     if (i.volumePending && !natives.some((e) => ledgerNativeType(e) === 'volume')) natives.push('volume');
     return {
