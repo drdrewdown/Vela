@@ -81,6 +81,14 @@ describe('the template strip', () => {
         expect(host.querySelector<HTMLButtonElement>('.vela-bb-template-add')!.disabled).toBe(false);
     });
 
+    it('a host labels the remembered interval in its own grammar', () => {
+        const { ws, host } = mount({ timeframeLabel: (tf: string) => `${tf} bars` });
+        ws.setActiveCell('c1');
+        ws.saveIndicatorTemplate('Own');
+        expect(chips(host)[0]!.querySelector('.vela-bb-template-tf')!.textContent).toBe('15 bars');
+        expect(chips(host)[0]!.title).toContain('interval 15 bars');
+    });
+
     it('a host can leave the strip out', () => {
         const { host } = mount({ indicatorTemplateStrip: false });
         expect(host.querySelector('.vela-bb-templates')).toBeNull();

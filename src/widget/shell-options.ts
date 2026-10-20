@@ -29,6 +29,10 @@ export interface VelaShellOptions {
     indicators?: string | IndicatorManifest | IndicatorLoader;
     /** Topbar timeframe presets (chart timeframe values). */
     timeframes?: string[];
+    /** How a timeframe value reads in the chrome that names one (the template strip and its
+     *  toasts): a host whose provider speaks its own timeframe grammar labels its own values.
+     *  Default: Vela's grammar (`timeframeLabel`). */
+    timeframeLabel?: (timeframe: string) => string;
     /** Display timezone — one choice for the whole shell: an IANA zone (default
      *  'Etc/UTC'), or `'exchange'` to render every chart in its own market's zone. */
     timezone?: string;

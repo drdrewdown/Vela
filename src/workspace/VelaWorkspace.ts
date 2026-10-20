@@ -381,6 +381,8 @@ export class VelaWorkspace {
     private readonly builtInTemplates: readonly IndicatorTemplate[];
     /** The template each cell last applied, by cell id — what a drifted chart is read against. */
     private readonly lastAppliedTemplate = new Map<string, string>();
+    /** How a timeframe reads in the template chrome (the host's grammar, else Vela's). */
+    private readonly tfLabel: (timeframe: string) => string;
     /** Re-entrancy guard while one cell's remembered settings fan out to the others. */
     private toolDefsBusy = false;
     /** Favorite timeframes — the shared topbar's quick-switch chips, one set for the grid. */
@@ -496,6 +498,7 @@ export class VelaWorkspace {
                 });
             }
         }
+        this.tfLabel = opts.timeframeLabel ?? timeframeLabel;
         this.builtInTemplates = opts.indicatorTemplates
             ? (sanitizeState({ version: 1, layout: '1', charts: [], indicatorTemplates: opts.indicatorTemplates })?.indicatorTemplates ?? [])
             : [];
@@ -1539,6 +1542,7 @@ export class VelaWorkspace {
 
     private templateStripOptions(): Omit<TemplateStripOptions, 'host'> {
         return {
+            timeframeLabel: this.tfLabel,
             rows: () => this.templateRows(),
             context: () => {
                 const cell = this.activeId ? this.cellsById.get(this.activeId) : undefined;
@@ -1550,7 +1554,7 @@ export class VelaWorkspace {
                 if (!res.ok) return;
                 const t = findTemplate(this.templates, name) ?? findTemplate(this.builtInTemplates, name);
                 const n = t ? t.indicators.natives.length + t.indicators.manifest.length : 0;
-                this.toast(`${t?.name ?? name} · ${n} ${n === 1 ? 'study' : 'studies'}${t?.timeframe ? ` · ${timeframeLabel(t.timeframe)}` : ''}${allCells ? ' · every chart' : ''}`, 'success', 2500);
+                this.toast(`${t?.name ?? name} · ${n} ${n === 1 ? 'study' : 'studies'}${t?.timeframe ? ` · ${this.tfLabel(t.timeframe)}` : ''}${allCells ? ' · every chart' : ''}`, 'success', 2500);
             },
             onSave: (name, remember) => {
                 const res = this.saveIndicatorTemplate(name, { rememberTimeframe: remember.timeframe, rememberSymbol: remember.symbol });

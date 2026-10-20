@@ -78,6 +78,8 @@ export interface TemplateStripOptions {
     onRemove: (name: string) => void;
     /** Flip whether a saved template remembers its interval or its symbol. */
     onToggleMemory: (name: string, key: 'timeframe' | 'symbol') => void;
+    /** How a remembered interval reads on a chip (default: Vela's grammar). */
+    timeframeLabel?: (timeframe: string) => string;
 }
 
 /** A chip's visible label: the name cut to {@link CHIP_CHARS} with an ellipsis. */
@@ -87,10 +89,10 @@ export function chipLabel(name: string): string {
 }
 
 /** A chip's tooltip: the studies, then what the template remembers. */
-export function chipTooltip(row: TemplateChipRow): string {
+export function chipTooltip(row: TemplateChipRow, label: (timeframe: string) => string = timeframeLabel): string {
     const lines = [row.name, row.studies.length > 0 ? row.studies.join(', ') : 'No studies (clears the chart)'];
     const remembers: string[] = [];
-    if (row.timeframe) remembers.push(`interval ${timeframeLabel(row.timeframe)}`);
+    if (row.timeframe) remembers.push(`interval ${label(row.timeframe)}`);
     if (row.symbol) remembers.push(`symbol ${row.symbol}`);
     if (remembers.length > 0) lines.push(`Remembers ${remembers.join(' and ')}`);
     if (row.builtIn) lines.push('Built-in — right-click to save as your own');
@@ -169,12 +171,13 @@ export class TemplateStrip {
         if (row.builtIn) b.dataset.builtin = '1';
         if (row.state === 'exact') b.dataset.active = '1';
         if (row.state === 'drifted') b.dataset.drifted = '1';
-        b.title = chipTooltip(row);
+        const label = this.opts.timeframeLabel ?? timeframeLabel;
+        b.title = chipTooltip(row, label);
         b.textContent = chipLabel(row.name);
         if (row.timeframe) {
             const tf = doc.createElement('span');
             tf.className = 'vela-bb-template-tf';
-            tf.textContent = timeframeLabel(row.timeframe);
+            tf.textContent = label(row.timeframe);
             b.appendChild(tf);
         }
         b.addEventListener('click', (e) => this.opts.onApply(row.name, e.altKey || e.metaKey));
@@ -193,7 +196,7 @@ export class TemplateStrip {
         this.dialog.open({
             mode: 'save',
             name,
-            timeframeLabel: timeframeLabel(ctx.timeframe),
+            timeframeLabel: (this.opts.timeframeLabel ?? timeframeLabel)(ctx.timeframe),
             symbol: ctx.symbol,
             studies: ctx.studies,
             onSubmit: (n, remember) => this.opts.onSave(n, remember),
