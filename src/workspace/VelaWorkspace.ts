@@ -1500,6 +1500,12 @@ export class VelaWorkspace {
         return true;
     }
 
+    /** Open the indicator picker on the active cell (the topbar button's programmatic twin). */
+    openIndicatorPicker(): void {
+        this.indicatorPicker?.sync();
+        this.indicatorPicker?.open();
+    }
+
     private templatesChanged(): void {
         this.events.emit('indicators:templates', undefined);
         this.markStateDirty();
