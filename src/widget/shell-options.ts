@@ -36,6 +36,8 @@ export interface VelaShellOptions {
     statusline?: boolean;
     watermark?: boolean;
     bottombar?: boolean;
+    /** The indicator-template strip in the bottom bar's middle (default true; needs the bottom bar). */
+    indicatorTemplateStrip?: boolean;
     /** Declarative topbar composition: `{ left, right }` lists of the VISIBLE entries,
      *  in render order — built-in ids (`'symbol'`, `'timeframes'`, `'style'`,
      *  `'layout'`, `'indicators'`, `'actions'`, `'undo-redo'`, `'alerts'`, `'panels'`,

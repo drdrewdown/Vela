@@ -8,6 +8,7 @@ import { Menu } from '../ui/components/menu';
 import { Tooltip } from '../ui/components/tooltip';
 import { iconEl } from '../ui/icons';
 import { injectStyles } from '../ui/styles';
+import { TemplateStrip, type TemplateStripOptions } from './template-strip';
 import { timezoneMenuRows, tzButtonLabel, resolveTimezone } from './timezones';
 
 export interface RangePreset {
@@ -129,6 +130,8 @@ export interface BottombarOptions {
     /** RTH/ETH toggled by the user. Fires only while the toggle is ENABLED (see {@link Bottombar.setSession}). */
     onSession?: (session: 'regular' | 'extended') => void;
     onSettingsClick?: () => void;
+    /** The indicator-template strip in the bar's middle (absent = the middle stays empty). */
+    templates?: Omit<TemplateStripOptions, 'host'>;
 }
 
 export class Bottombar {
@@ -138,6 +141,7 @@ export class Bottombar {
     private readonly tzButton: HTMLElement;
     private readonly tzMenu: Menu;
     private readonly settingsTip: Tooltip | null = null;
+    private readonly templates: TemplateStrip | null;
     private readonly rangeButtons = new Map<string, HTMLButtonElement>();
     private readonly sessionButtons = new Map<'regular' | 'extended', HTMLButtonElement>();
     private sessionEl: HTMLElement | null = null;
@@ -203,7 +207,13 @@ export class Bottombar {
         settingsBtn.setAttribute('aria-label', 'Chart settings');
         if (opts.onSettingsClick) settingsBtn.addEventListener('click', opts.onSettingsClick);
         this.settingsTip = new Tooltip(settingsBtn, { content: 'Chart settings', triggerId: 'vela-bb-settings', host });
-        this.el.append(spacer, this.tzButton, session, settingsBtn);
+        // The template strip sits centred in the bar's middle — a spacer either side.
+        this.templates = opts.templates ? new TemplateStrip({ ...opts.templates, host }) : null;
+        if (this.templates) {
+            const spacerEnd = doc.createElement('span');
+            spacerEnd.className = 'vela-bb-spacer';
+            this.el.append(spacer, this.templates.el, spacerEnd, this.tzButton, session, settingsBtn);
+        } else this.el.append(spacer, this.tzButton, session, settingsBtn);
         host.appendChild(this.el);
 
         this.tzMenu = new Menu({
@@ -272,8 +282,14 @@ export class Bottombar {
         }
     }
 
+    /** Rebuild the template chips (the list, or which one the active chart shows, changed). */
+    refreshTemplates(): void {
+        this.templates?.refresh();
+    }
+
     destroy(): void {
         this.unsubClock();
+        this.templates?.destroy();
         this.tzMenu.destroy();
         this.settingsTip?.destroy();
         this.el.remove();

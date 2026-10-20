@@ -54,8 +54,9 @@ import { timeframeLabel } from '../widget/timeframe';
 import { registerBuiltinChartTypes } from '../chart-types/builtins';
 import { parseSymbol } from '../data/ProviderRegistry';
 import { syncTargets, rangesWithin, styleConfigPatch, SYNC_KINDS, type SyncKind, type SyncOptions, type SyncSetting } from './sync';
-import { encodeState, decodeState, sanitizeState, type DrawingToolsState, type IndicatorTemplate, type WorkspaceState, type WorkspaceStorage } from './persist';
+import { encodeState, decodeState, sanitizeState, MAX_INDICATOR_TEMPLATES, type DrawingToolsState, type IndicatorTemplate, type WorkspaceState, type WorkspaceStorage } from './persist';
 import { getNativeIndicator } from '../core/native-indicators/NativeIndicator';
+import type { TemplateChipRow, TemplateStripOptions } from '../widget/template-strip';
 import type { IndicatorLedger } from '../widget/indicators';
 import {
     cloneTemplate,
@@ -63,6 +64,7 @@ import {
     ledgersEqual,
     removeTemplate,
     renameTemplate,
+    sameTemplateName,
     upsertTemplate,
     type IndicatorTemplateApplyResult,
     type IndicatorTemplateSaveResult,
@@ -761,6 +763,7 @@ export class VelaWorkspace {
                       // are a per-chart market dimension, not a shell preference.
                       onSession: (session) => this.active.setSession(session),
                       onSettingsClick: () => this.active.chart.renderer.openSettings(),
+                      ...(opts.indicatorTemplateStrip !== false ? { templates: this.templateStripOptions() } : {}),
                   })
                 : null;
 
@@ -1085,6 +1088,7 @@ export class VelaWorkspace {
             this.templates = st.indicatorTemplates.map(cloneTemplate);
             this.lastAppliedTemplate.clear();
             this.events.emit('indicators:templates', undefined);
+            this.refreshTemplateStrip();
         }
         if (st.timeframeFavorites) {
             this.tfFavs = [...st.timeframeFavorites];
@@ -1397,8 +1401,7 @@ export class VelaWorkspace {
         }
         this.templates = list;
         this.lastAppliedTemplate.set(cell.id, result.template.name);
-        this.events.emit('indicators:templates', undefined);
-        this.markStateDirty();
+        this.templatesChanged();
         return { ...result, template: cloneTemplate(result.template) };
     }
 
@@ -1436,6 +1439,7 @@ export class VelaWorkspace {
         }
         if (skipped.size > 0) this.toast(`Skipped ${skipped.size === 1 ? 'a study' : `${skipped.size} studies`} this chart does not have: ${[...skipped].join(', ')}`, 'info', 5000);
         this.markStateDirty();
+        this.refreshTemplateStrip();
         return { ok: true, cells: targets.map((c) => c.id), skipped: [...skipped] };
     }
 
@@ -1445,8 +1449,7 @@ export class VelaWorkspace {
         if (!next) return false;
         this.templates = next;
         for (const [id, applied] of this.lastAppliedTemplate) if (applied === name) this.lastAppliedTemplate.delete(id);
-        this.events.emit('indicators:templates', undefined);
-        this.markStateDirty();
+        this.templatesChanged();
         return true;
     }
 
@@ -1456,8 +1459,7 @@ export class VelaWorkspace {
         if (!next) return false;
         this.templates = next;
         for (const [id, applied] of this.lastAppliedTemplate) if (applied === from) this.lastAppliedTemplate.set(id, to.trim());
-        this.events.emit('indicators:templates', undefined);
-        this.markStateDirty();
+        this.templatesChanged();
         return true;
     }
 
@@ -1475,6 +1477,94 @@ export class VelaWorkspace {
         if (exact) return { name: exact.name, exact: true };
         const last = this.lastAppliedTemplate.get(cell.id);
         return last ? { name: last, exact: false } : null;
+    }
+
+    /**
+     * Change what a saved template remembers: a string sets the interval or symbol, `null`
+     * forgets it, an absent key leaves it. False when no saved template carries the name.
+     */
+    setIndicatorTemplateMarket(name: string, market: { timeframe?: string | null; symbol?: string | null }): boolean {
+        const idx = this.templates.findIndex((t) => sameTemplateName(t.name, name));
+        if (idx < 0) return false;
+        const next = { ...this.templates[idx]!, updatedAt: Date.now() };
+        if (market.timeframe !== undefined) {
+            if (market.timeframe) next.timeframe = market.timeframe;
+            else delete next.timeframe;
+        }
+        if (market.symbol !== undefined) {
+            if (market.symbol) next.symbol = market.symbol;
+            else delete next.symbol;
+        }
+        this.templates = this.templates.map((t, i) => (i === idx ? next : t));
+        this.templatesChanged();
+        return true;
+    }
+
+    private templatesChanged(): void {
+        this.events.emit('indicators:templates', undefined);
+        this.markStateDirty();
+        this.refreshTemplateStrip();
+    }
+
+    private refreshTemplateStrip(): void {
+        this.bottombar?.refreshTemplates();
+    }
+
+    /** The strip's rows: the saved templates, then the presets, each with the active cell's verdict. */
+    private templateRows(): TemplateChipRow[] {
+        const active = this.activeIndicatorTemplate();
+        const titles = (t: IndicatorTemplate): string[] => [
+            ...t.indicators.natives.map((e) => {
+                const type = typeof e === 'string' ? e : e.type;
+                return getNativeIndicator(type)?.title ?? type;
+            }),
+            ...t.indicators.manifest.map((e) => (typeof e === 'string' ? e : e.name)),
+        ];
+        const row = (t: IndicatorTemplate, builtIn: boolean): TemplateChipRow => ({
+            name: t.name,
+            builtIn,
+            ...(t.timeframe ? { timeframe: t.timeframe } : {}),
+            ...(t.symbol ? { symbol: t.symbol } : {}),
+            studies: titles(t),
+            state: active && sameTemplateName(active.name, t.name) ? (active.exact ? 'exact' : 'drifted') : null,
+        });
+        return [...this.templates.map((t) => row(t, false)), ...this.builtInTemplates.map((t) => row(t, true))];
+    }
+
+    private templateStripOptions(): Omit<TemplateStripOptions, 'host'> {
+        return {
+            rows: () => this.templateRows(),
+            context: () => {
+                const cell = this.activeId ? this.cellsById.get(this.activeId) : undefined;
+                return { timeframe: cell?.timeframe ?? '', symbol: cell?.symbol ?? '', studies: cell?.indicatorCount ?? 0 };
+            },
+            canSave: () => this.templates.length < MAX_INDICATOR_TEMPLATES,
+            onApply: (name, allCells) => {
+                const res = this.applyIndicatorTemplate(name, { allCells });
+                if (!res.ok) return;
+                const t = findTemplate(this.templates, name) ?? findTemplate(this.builtInTemplates, name);
+                const n = t ? t.indicators.natives.length + t.indicators.manifest.length : 0;
+                this.toast(`${t?.name ?? name} · ${n} ${n === 1 ? 'study' : 'studies'}${t?.timeframe ? ` · ${timeframeLabel(t.timeframe)}` : ''}${allCells ? ' · every chart' : ''}`, 'success', 2500);
+            },
+            onSave: (name, remember) => {
+                const res = this.saveIndicatorTemplate(name, { rememberTimeframe: remember.timeframe, rememberSymbol: remember.symbol });
+                if (res.ok) return null;
+                return res.reason === 'full' ? 'Ten templates already — update or remove one.' : res.reason === 'empty-name' ? 'A template needs a name.' : 'No chart to save from.';
+            },
+            onUpdate: (name) => {
+                const t = findTemplate(this.templates, name);
+                if (t) this.saveIndicatorTemplate(t.name, { rememberTimeframe: Boolean(t.timeframe), rememberSymbol: Boolean(t.symbol) });
+            },
+            onRename: (from, to) => (this.renameIndicatorTemplate(from, to) ? null : 'That name is taken or empty.'),
+            onRemove: (name) => void this.removeIndicatorTemplate(name),
+            onToggleMemory: (name, key) => {
+                const t = findTemplate(this.templates, name);
+                const cell = this.activeId ? this.cellsById.get(this.activeId) : undefined;
+                if (!t || !cell) return;
+                if (key === 'timeframe') this.setIndicatorTemplateMarket(name, { timeframe: t.timeframe ? null : cell.timeframe });
+                else this.setIndicatorTemplateMarket(name, { symbol: t.symbol ? null : cell.symbol });
+            },
+        };
     }
 
     resize(): void {
@@ -1577,6 +1667,7 @@ export class VelaWorkspace {
         this.bottombar?.setSession({ session: cell.session, enabled: cell.sessionAvailable });
         this.projectTimezone(); // under the exchange rule the bar's zone is the active cell's
         this.indicatorPicker?.sync(); // the dialog may be open while the active cell changes
+        this.refreshTemplateStrip(); // the highlighted chip follows the active cell
         this.glider.stop(); // a mid-glide switch must not steer the next cell's viewport
         // Shared drawing toolbar ⇄ the active cell: re-apply the GLOBAL tool + magnet + stay
         // to the cell taking focus, and reflect its (fresh) state on the bar.
@@ -2410,6 +2501,7 @@ export class VelaWorkspace {
         if (!cell) return;
         this.topbar.setIndicatorCount(cell.indicatorCount);
         this.indicatorPicker?.sync();
+        this.refreshTemplateStrip();
     }
 
     /** Timeframe changes routed from the topbar menu / quick entry (chip state follows). */

@@ -15,6 +15,8 @@ export {
 export { Statusline, type StatuslineMenuHooks, type StatuslinePart } from './statusline';
 export { Watermark } from './watermark';
 export { Bottombar, RANGE_PRESETS, type BottombarOptions, type RangePreset } from './bottombar';
+export { TemplateStrip, chipLabel, chipTooltip, templateMenuRows, type TemplateChipRow, type TemplateStripOptions } from './template-strip';
+export { TemplateDialog, type TemplateDialogRequest } from './template-dialog';
 export { SymbolPicker, filterSymbols, type SymbolPickerOptions } from './symbol-picker';
 export { IndicatorPicker, type IndicatorPickerOptions, type IndicatorRow } from './indicator-picker';
 export { TimeframeQuick, type TimeframeQuickOptions } from './timeframe-quick';
