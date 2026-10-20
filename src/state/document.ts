@@ -73,6 +73,28 @@ export interface DrawingToolsState {
     stay?: boolean;
 }
 
+/** The most indicator templates a document keeps — the strip they are picked from shows them
+ *  all at once, and a list longer than this stops being a quick switch. */
+export const MAX_INDICATOR_TEMPLATES = 10;
+
+/**
+ * One saved indicator set: a chart's indicator ledger under a name, with what the user asked it
+ * to remember — a SHARED preference like the drawing tools' saved styles, one list per shell.
+ * Applying it replaces a chart's indicators with the ledger's (settings and visibility included)
+ * and, when remembered, switches the chart to the template's interval and symbol.
+ */
+export interface IndicatorTemplate {
+    name: string;
+    indicators: { manifest: PersistedManifestEntry[]; natives: PersistedNativeEntry[] };
+    /** The interval to switch to on apply; absent, the chart keeps its own. */
+    timeframe?: string;
+    /** The symbol to switch to on apply (canonical prefixed form); absent, the chart keeps its own. */
+    symbol?: string;
+    /** Epoch milliseconds. */
+    createdAt: number;
+    updatedAt: number;
+}
+
 /** Per-chart (per-cell) state: the market, the display prefs, the content documents,
  *  and the indicator ledger. The widget's whole chart state is ONE of these. */
 export interface CellState {
@@ -146,6 +168,8 @@ export interface WorkspaceState {
     timeframeFavorites?: string[];
     /** The drawing tools' remembered settings, magnet and stay mode — a SHARED preference. */
     drawingTools?: DrawingToolsState;
+    /** Saved indicator templates — a SHARED preference, at most {@link MAX_INDICATOR_TEMPLATES}. */
+    indicatorTemplates?: IndicatorTemplate[];
     /** The docked side panels: which one is open, and the widths the user dragged. */
     panels?: PanelsState;
     /** Per-chart state, one entry per SLOT (a single `c1` entry for the widget).
@@ -214,6 +238,8 @@ export function sanitizeState(doc: unknown): WorkspaceState | null {
     }
     const tools = sanitizeDrawingTools(d.drawingTools);
     if (tools) out.drawingTools = tools;
+    const templates = sanitizeIndicatorTemplates(d.indicatorTemplates);
+    if (templates) out.indicatorTemplates = templates;
     const sync = sanitizeSync(d.sync);
     if (sync) out.sync = sync;
     const tracks = sanitizeTrackSizes(d.trackSizes);
@@ -280,43 +306,75 @@ function sanitizeCell(raw: unknown): CellState | null {
     if (typeof c.indicatorValues === 'boolean') out.indicatorValues = c.indicatorValues;
     if (c.rendererConfig != null && typeof c.rendererConfig === 'object') out.rendererConfig = c.rendererConfig;
     if (c.drawings != null && typeof c.drawings === 'object') out.drawings = c.drawings;
-    const ind = c.indicators as Record<string, unknown> | undefined;
-    if (ind != null && typeof ind === 'object') {
-        // Bare names pass as-is; object entries keep only a string name and plain-object
-        // value bags (the add path validates individual values against the schema).
-        const bag = (v: unknown): Record<string, unknown> | undefined => (v != null && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined);
-        const manifest: PersistedManifestEntry[] = Array.isArray(ind.manifest)
-            ? ind.manifest.flatMap((n): PersistedManifestEntry[] => {
-                  if (typeof n === 'string') return [n];
-                  if (n != null && typeof n === 'object' && typeof (n as { name?: unknown }).name === 'string') {
-                      const e = n as { name: string; inputs?: unknown; props?: unknown; hidden?: unknown };
-                      const inputs = bag(e.inputs);
-                      const props = bag(e.props);
-                      const hidden = e.hidden === true;
-                      return [inputs || props || hidden ? { name: e.name, ...(inputs ? { inputs } : {}), ...(props ? { props } : {}), ...(hidden ? { hidden } : {}) } : e.name];
-                  }
-                  return [];
-              })
-            : [];
-        // Native entries mirror the manifest shape: bare types pass as-is; object entries
-        // keep only a string type, a plain-object input bag, and a true hidden flag.
-        const natives: PersistedNativeEntry[] = Array.isArray(ind.natives)
-            ? ind.natives.flatMap((n): PersistedNativeEntry[] => {
-                  if (typeof n === 'string') return [n];
-                  if (n != null && typeof n === 'object' && typeof (n as { type?: unknown }).type === 'string') {
-                      const e = n as { type: string; inputs?: unknown; hidden?: unknown };
-                      const inputs = bag(e.inputs);
-                      const hidden = e.hidden === true;
-                      return [inputs || hidden ? { type: e.type, ...(inputs ? { inputs } : {}), ...(hidden ? { hidden } : {}) } : e.type];
-                  }
-                  return [];
-              })
-            : [];
-        out.indicators = { manifest, natives };
-    }
+    const ledger = sanitizeLedger(c.indicators);
+    if (ledger) out.indicators = ledger;
     const ext = sanitizeExt(c.ext);
     if (ext) out.ext = ext;
     return out;
+}
+
+/** A persisted indicator ledger (a cell's, or a template's): bare names and types pass as-is;
+ *  object entries keep only a string name/type, plain-object value bags (the add path validates
+ *  individual values against the schema) and a true hidden flag. Null when not an object. */
+function sanitizeLedger(raw: unknown): { manifest: PersistedManifestEntry[]; natives: PersistedNativeEntry[] } | null {
+    if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const ind = raw as Record<string, unknown>;
+    const bag = (v: unknown): Record<string, unknown> | undefined => (v != null && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined);
+    const manifest: PersistedManifestEntry[] = Array.isArray(ind.manifest)
+        ? ind.manifest.flatMap((n): PersistedManifestEntry[] => {
+              if (typeof n === 'string') return [n];
+              if (n != null && typeof n === 'object' && typeof (n as { name?: unknown }).name === 'string') {
+                  const e = n as { name: string; inputs?: unknown; props?: unknown; hidden?: unknown };
+                  const inputs = bag(e.inputs);
+                  const props = bag(e.props);
+                  const hidden = e.hidden === true;
+                  return [inputs || props || hidden ? { name: e.name, ...(inputs ? { inputs } : {}), ...(props ? { props } : {}), ...(hidden ? { hidden } : {}) } : e.name];
+              }
+              return [];
+          })
+        : [];
+    const natives: PersistedNativeEntry[] = Array.isArray(ind.natives)
+        ? ind.natives.flatMap((n): PersistedNativeEntry[] => {
+              if (typeof n === 'string') return [n];
+              if (n != null && typeof n === 'object' && typeof (n as { type?: unknown }).type === 'string') {
+                  const e = n as { type: string; inputs?: unknown; hidden?: unknown };
+                  const inputs = bag(e.inputs);
+                  const hidden = e.hidden === true;
+                  return [inputs || hidden ? { type: e.type, ...(inputs ? { inputs } : {}), ...(hidden ? { hidden } : {}) } : e.type];
+              }
+              return [];
+          })
+        : [];
+    return { manifest, natives };
+}
+
+/** The saved templates, in order: an entry needs a non-empty name and a ledger; the name is
+ *  unique case-insensitively (the first wins); the timestamps default to now when missing; the
+ *  list is cut at {@link MAX_INDICATOR_TEMPLATES}. Null when nothing survives. */
+function sanitizeIndicatorTemplates(raw: unknown): IndicatorTemplate[] | null {
+    if (!Array.isArray(raw)) return null;
+    const out: IndicatorTemplate[] = [];
+    const seen = new Set<string>();
+    for (const item of raw as unknown[]) {
+        if (out.length >= MAX_INDICATOR_TEMPLATES) break;
+        if (item == null || typeof item !== 'object') continue;
+        const t = item as Record<string, unknown>;
+        const name = typeof t.name === 'string' ? t.name.trim() : '';
+        const indicators = sanitizeLedger(t.indicators);
+        if (!name || !indicators || seen.has(name.toLowerCase())) continue;
+        seen.add(name.toLowerCase());
+        const now = Date.now();
+        const entry: IndicatorTemplate = {
+            name,
+            indicators,
+            createdAt: typeof t.createdAt === 'number' && Number.isFinite(t.createdAt) ? t.createdAt : now,
+            updatedAt: typeof t.updatedAt === 'number' && Number.isFinite(t.updatedAt) ? t.updatedAt : now,
+        };
+        if (typeof t.timeframe === 'string' && t.timeframe) entry.timeframe = t.timeframe;
+        if (typeof t.symbol === 'string' && t.symbol) entry.symbol = t.symbol;
+        out.push(entry);
+    }
+    return out.length > 0 ? out : null;
 }
 
 function sanitizeSync(raw: unknown): SyncOptions | null {
