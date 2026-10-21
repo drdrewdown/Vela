@@ -54,7 +54,7 @@ import { timeframeLabel } from '../widget/timeframe';
 import { registerBuiltinChartTypes } from '../chart-types/builtins';
 import { parseSymbol } from '../data/ProviderRegistry';
 import { syncTargets, rangesWithin, styleConfigPatch, SYNC_KINDS, type SyncKind, type SyncOptions, type SyncSetting } from './sync';
-import { encodeState, decodeState, sanitizeState, MAX_INDICATOR_TEMPLATES, type DrawingToolsState, type IndicatorTemplate, type WorkspaceState, type WorkspaceStorage } from './persist';
+import { encodeState, decodeState, sanitizeState, sanitizeIndicatorTemplates, MAX_INDICATOR_TEMPLATES, type DrawingToolsState, type IndicatorTemplate, type WorkspaceState, type WorkspaceStorage } from './persist';
 import { getNativeIndicator } from '../core/native-indicators/NativeIndicator';
 import type { TemplateChipRow, TemplateStripOptions } from '../widget/template-strip';
 import type { IndicatorLedger } from '../widget/indicators';
@@ -62,6 +62,7 @@ import {
     cloneTemplate,
     findTemplate,
     ledgersEqual,
+    moveTemplate,
     removeTemplate,
     renameTemplate,
     sameTemplateName,
@@ -383,6 +384,8 @@ export class VelaWorkspace {
     private readonly lastAppliedTemplate = new Map<string, string>();
     /** How a timeframe reads in the template chrome (the host's grammar, else Vela's). */
     private readonly tfLabel: (timeframe: string) => string;
+    /** The template strip and the drawer's Templates view are on (`indicatorTemplateStrip` option). */
+    private readonly templateStripOn: boolean;
     /** Re-entrancy guard while one cell's remembered settings fan out to the others. */
     private toolDefsBusy = false;
     /** Favorite timeframes — the shared topbar's quick-switch chips, one set for the grid. */
@@ -499,6 +502,7 @@ export class VelaWorkspace {
             }
         }
         this.tfLabel = opts.timeframeLabel ?? timeframeLabel;
+        this.templateStripOn = opts.indicatorTemplateStrip !== false;
         this.builtInTemplates = opts.indicatorTemplates
             ? (sanitizeState({ version: 1, layout: '1', charts: [], indicatorTemplates: opts.indicatorTemplates })?.indicatorTemplates ?? [])
             : [];
@@ -1503,6 +1507,64 @@ export class VelaWorkspace {
         return true;
     }
 
+    /** Move a saved template to `toIndex` in the strip's order (the order the document keeps and
+     *  the shortcuts count); false when no saved template carries the name. */
+    moveIndicatorTemplate(name: string, toIndex: number): boolean {
+        const next = moveTemplate(this.templates, name, toIndex);
+        if (!next) return false;
+        this.templates = next;
+        this.templatesChanged();
+        return true;
+    }
+
+    /** The saved templates as a JSON document (`{ version, indicatorTemplates }`) — a file to keep or hand to another desk. */
+    exportIndicatorTemplates(): string {
+        return JSON.stringify({ version: 1, indicatorTemplates: this.templates.map(cloneTemplate) }, null, 2);
+    }
+
+    /**
+     * Read templates from a JSON document (the export's shape, or a bare list): validated like
+     * the document's own; `merge` (default) updates a matching name in place and adds the rest
+     * while the cap allows, `replace` swaps the whole list. Reports what happened.
+     */
+    importIndicatorTemplates(json: string, mode: 'merge' | 'replace' = 'merge'): { added: number; replaced: number; rejected: number } {
+        let raw: unknown;
+        try {
+            raw = JSON.parse(json);
+        } catch {
+            return { added: 0, replaced: 0, rejected: 0 };
+        }
+        const list = Array.isArray(raw) ? raw : raw != null && typeof raw === 'object' ? (raw as { indicatorTemplates?: unknown }).indicatorTemplates : undefined;
+        const offered = Array.isArray(list) ? list.length : 0;
+        const clean = sanitizeIndicatorTemplates(list) ?? [];
+        let added = 0;
+        let replaced = 0;
+        let next = mode === 'replace' ? [] : [...this.templates];
+        const now = Date.now();
+        for (const t of clean) {
+            const idx = next.findIndex((x) => sameTemplateName(x.name, t.name));
+            if (idx >= 0) {
+                next[idx] = { ...t, createdAt: next[idx]!.createdAt, updatedAt: now };
+                replaced++;
+            } else if (next.length < MAX_INDICATOR_TEMPLATES) {
+                next = [...next, { ...t, createdAt: now, updatedAt: now }];
+                added++;
+            }
+        }
+        this.templates = next;
+        if (mode === 'replace' || added > 0 || replaced > 0) this.templatesChanged();
+        return { added, replaced, rejected: offered - added - replaced };
+    }
+
+    /** Apply a template the way the strip and the shortcuts do: the result on a toast. */
+    private applyIndicatorTemplateAnnounced(name: string, allCells: boolean): void {
+        const res = this.applyIndicatorTemplate(name, { allCells });
+        if (!res.ok) return;
+        const t = findTemplate(this.templates, name) ?? findTemplate(this.builtInTemplates, name);
+        const n = t ? t.indicators.natives.length + t.indicators.manifest.length : 0;
+        this.toast(`${t?.name ?? name} · ${n} ${n === 1 ? 'study' : 'studies'}${t?.timeframe ? ` · ${this.tfLabel(t.timeframe)}` : ''}${allCells ? ' · every chart' : ''}`, 'success', 2500);
+    }
+
     /** Open the indicator picker on the active cell (the topbar button's programmatic twin). */
     openIndicatorPicker(): void {
         this.indicatorPicker?.sync();
@@ -1549,12 +1611,12 @@ export class VelaWorkspace {
                 return { timeframe: cell?.timeframe ?? '', symbol: cell?.symbol ?? '', studies: cell?.indicatorCount ?? 0 };
             },
             canSave: () => this.templates.length < MAX_INDICATOR_TEMPLATES,
-            onApply: (name, allCells) => {
-                const res = this.applyIndicatorTemplate(name, { allCells });
-                if (!res.ok) return;
-                const t = findTemplate(this.templates, name) ?? findTemplate(this.builtInTemplates, name);
-                const n = t ? t.indicators.natives.length + t.indicators.manifest.length : 0;
-                this.toast(`${t?.name ?? name} · ${n} ${n === 1 ? 'study' : 'studies'}${t?.timeframe ? ` · ${this.tfLabel(t.timeframe)}` : ''}${allCells ? ' · every chart' : ''}`, 'success', 2500);
+            onApply: (name, allCells) => this.applyIndicatorTemplateAnnounced(name, allCells),
+            onMove: (name, toIndex) => void this.moveIndicatorTemplate(name, toIndex),
+            onExport: () => this.exportIndicatorTemplates(),
+            onImport: (json) => {
+                const r = this.importIndicatorTemplates(json);
+                this.toast(`Templates: ${r.added} added, ${r.replaced} updated${r.rejected > 0 ? `, ${r.rejected} not taken` : ''}`, r.added + r.replaced > 0 ? 'success' : 'info', 3500);
             },
             onSave: (name, remember) => {
                 const res = this.saveIndicatorTemplate(name, { rememberTimeframe: remember.timeframe, rememberSymbol: remember.symbol });
@@ -2620,6 +2682,14 @@ export class VelaWorkspace {
             // slot's own routed button (screenshot) or stop (indicators), never as a row.
             primaryActions: () => this.drawerActions('left'),
             actions: () => this.drawerActions('right'),
+            ...(this.templateStripOn
+                ? {
+                      templates: {
+                          rows: () => this.templateRows().map((r) => ({ name: r.name, builtIn: r.builtIn, active: r.state === 'exact' })),
+                          onApply: (name: string) => this.applyIndicatorTemplateAnnounced(name, false),
+                      },
+                  }
+                : {}),
             // The desktop layout dropdown's whole surface — the grid canvas, the
             // non-canvas presets and the sync switches — relocated into the kebab
             // drawer (the topbar is hidden on mobile). Same reads as the topbar block;
@@ -2735,6 +2805,20 @@ export class VelaWorkspace {
             });
         }
         this.keymap.register({ id: 'chart.reset-view', keys: 'alt+r', label: 'Reset view (all history)', category: 'Chart', run: () => this.active.chart.setVisibleRangePreset('ALL') });
+        // Alt+1 … Alt+9, Alt+0: apply the first ten saved indicator templates, in the strip's order.
+        for (let n = 1; n <= 10; n++) {
+            const digit = n % 10;
+            this.keymap.register({
+                id: `templates.apply-${n}`,
+                keys: `alt+${digit}`,
+                label: `Apply indicator template ${n}`,
+                category: 'Indicators',
+                run: () => {
+                    const t = this.templates[n - 1];
+                    if (t) this.applyIndicatorTemplateAnnounced(t.name, false);
+                },
+            });
+        }
         this.keymap.register({ id: 'chart.toggle-log', keys: 'alt+l', label: 'Toggle logarithmic scale', category: 'Chart', run: () => this.active.chart.renderer.set('logScale', !this.active.chart.renderer.get('logScale')) });
         this.keymap.register({
             id: 'chart.toggle-percent',

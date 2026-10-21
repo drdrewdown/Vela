@@ -96,6 +96,17 @@ export function renameTemplate(list: readonly IndicatorTemplate[], from: string,
     return next;
 }
 
+/** Move a template to `toIndex` (clamped); null when the name is unknown. */
+export function moveTemplate(list: readonly IndicatorTemplate[], name: string, toIndex: number): IndicatorTemplate[] | null {
+    const from = list.findIndex((t) => sameTemplateName(t.name, name));
+    if (from < 0) return null;
+    const next = [...list];
+    const [item] = next.splice(from, 1);
+    const to = Math.max(0, Math.min(next.length, Math.trunc(toIndex)));
+    next.splice(to, 0, item!);
+    return next;
+}
+
 /** Remove by name; null when nothing carried it. */
 export function removeTemplate(list: readonly IndicatorTemplate[], name: string): IndicatorTemplate[] | null {
     const idx = list.findIndex((t) => sameTemplateName(t.name, name));

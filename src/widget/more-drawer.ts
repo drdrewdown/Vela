@@ -129,10 +129,16 @@ export interface MoreDrawerOptions {
          *  ⇒ the registered `'layout'` icon. */
         glyph?: () => string;
     };
+    /** Indicator templates (workspace shells): a row that opens the list, a tap applies one to the
+     *  active chart. Omitted ⇒ no row. Read live at open. */
+    templates?: {
+        rows: () => Array<{ name: string; builtIn: boolean; active: boolean }>;
+        onApply: (name: string) => void;
+    };
     onOpenChange?: (open: boolean) => void;
 }
 
-type MoreView = 'main' | 'style' | 'layout' | 'alerts';
+type MoreView = 'main' | 'style' | 'layout' | 'alerts' | 'templates';
 
 export class MoreDrawer {
     private readonly drawer: Drawer;
@@ -170,7 +176,7 @@ export class MoreDrawer {
             const back = doc.createElement('button');
             back.className = 'vela-md-back';
             back.appendChild(iconEl('chevron-left', doc));
-            back.appendChild(doc.createTextNode(this.view === 'style' ? 'Chart type' : this.view === 'layout' ? 'Layout' : 'Alerts'));
+            back.appendChild(doc.createTextNode(this.view === 'style' ? 'Chart type' : this.view === 'layout' ? 'Layout' : this.view === 'templates' ? 'Templates' : 'Alerts'));
             back.addEventListener('click', () => this.show('main'));
             this.drawer.body.appendChild(back);
         }
@@ -178,6 +184,7 @@ export class MoreDrawer {
         if (this.view === 'main') this.renderMain(doc);
         else if (this.view === 'style') this.renderStyle(doc);
         else if (this.view === 'layout') this.renderLayout(doc);
+        else if (this.view === 'templates') this.renderTemplates(doc);
         else this.renderAlerts(doc);
     }
 
@@ -235,6 +242,11 @@ export class MoreDrawer {
             list.appendChild(this.row(doc, 'Layout', { icon: 'layout', glyph: this.opts.layout.glyph?.(), value, chevron: true, onClick: () => this.show('layout') }));
         }
         for (const act of this.opts.primaryActions?.() ?? []) list.appendChild(this.actionRow(doc, act));
+        if (this.opts.templates) {
+            const rows = this.opts.templates.rows();
+            const active = rows.find((r) => r.active)?.name;
+            list.appendChild(this.row(doc, 'Templates', { icon: 'indicators', value: active ?? (rows.length > 0 ? String(rows.length) : undefined), chevron: true, onClick: () => this.show('templates') }));
+        }
         for (const panel of this.opts.panels()) {
             list.appendChild(
                 this.row(doc, panel.title, {
@@ -263,6 +275,40 @@ export class MoreDrawer {
                 this.drawer.hide();
             },
         });
+    }
+
+    private renderTemplates(doc: Document): void {
+        const templates = this.opts.templates;
+        if (!templates) return;
+        const list = doc.createElement('div');
+        list.className = 'vela-md-list';
+        const rows = templates.rows();
+        if (rows.length === 0) {
+            const empty = doc.createElement('div');
+            empty.className = 'vela-md-section';
+            empty.textContent = 'No templates yet — save one from the desktop bar';
+            list.appendChild(empty);
+        }
+        let dividerDue = false;
+        for (const r of rows) {
+            if (r.builtIn && !dividerDue) {
+                dividerDue = true;
+                const heading = doc.createElement('div');
+                heading.className = 'vela-md-section';
+                heading.textContent = 'Built-in';
+                list.appendChild(heading);
+            }
+            list.appendChild(
+                this.row(doc, r.name, {
+                    checked: r.active,
+                    onClick: () => {
+                        templates.onApply(r.name);
+                        this.drawer.hide();
+                    },
+                }),
+            );
+        }
+        this.drawer.body.appendChild(list);
     }
 
     private renderStyle(doc: Document): void {

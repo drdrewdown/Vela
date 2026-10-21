@@ -80,6 +80,12 @@ export interface TemplateStripOptions {
     onToggleMemory: (name: string, key: 'timeframe' | 'symbol') => void;
     /** How a remembered interval reads on a chip (default: Vela's grammar). */
     timeframeLabel?: (timeframe: string) => string;
+    /** A saved chip dropped onto another: move it to that position. */
+    onMove?: (name: string, toIndex: number) => void;
+    /** The saved templates as a JSON document, for the `+` chip's Export. */
+    onExport?: () => string;
+    /** A JSON document the user picked for the `+` chip's Import. */
+    onImport?: (json: string) => void;
 }
 
 /** A chip's visible label: the name cut to {@link CHIP_CHARS} with an ellipsis. */
@@ -97,6 +103,24 @@ export function chipTooltip(row: TemplateChipRow, label: (timeframe: string) => 
     if (remembers.length > 0) lines.push(`Remembers ${remembers.join(' and ')}`);
     if (row.builtIn) lines.push('Built-in — right-click to save as your own');
     return lines.join('\n');
+}
+
+/** The `+` chip's right-click menu: the whole list in and out as a file. */
+export function addMenuRows(hasTemplates: boolean): Array<{ id: string; label: string; disabled?: boolean }> {
+    return [
+        { id: 'export', label: 'Export templates…', disabled: !hasTemplates },
+        { id: 'import', label: 'Import templates…' },
+    ];
+}
+
+/** Hand the browser a text file to save. */
+function downloadText(doc: Document, text: string, filename: string): void {
+    const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+    const a = doc.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /** The right-click menu of a chip, by the chip's kind. */
@@ -117,7 +141,10 @@ export class TemplateStrip {
     private readonly menu: Menu;
     private readonly dialog: TemplateDialog;
     private readonly add: HTMLButtonElement;
+    private readonly addMenu: Menu;
+    private readonly fileInput: HTMLInputElement;
     private menuRow: TemplateChipRow | null = null;
+    private dragName: string | null = null;
 
     constructor(opts: TemplateStripOptions) {
         this.opts = opts;
@@ -132,6 +159,24 @@ export class TemplateStrip {
         this.add.textContent = '+';
         this.add.setAttribute('aria-label', 'Save indicator template');
         this.add.addEventListener('click', () => this.openSave());
+        this.add.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.addMenu.setItems(addMenuRows(this.opts.rows().some((r) => !r.builtIn)));
+            this.addMenu.openAt(e.clientX, e.clientY);
+        });
+        this.addMenu = new Menu({ host: opts.host, items: [], placement: 'top-start', onSelect: (id) => this.runAdd(id) });
+        this.fileInput = doc.createElement('input');
+        this.fileInput.type = 'file';
+        this.fileInput.accept = '.json,application/json';
+        this.fileInput.style.display = 'none';
+        this.fileInput.addEventListener('change', () => {
+            const file = this.fileInput.files?.[0];
+            this.fileInput.value = '';
+            if (!file) return;
+            void file.text().then((text) => this.opts.onImport?.(text));
+        });
+        opts.host.appendChild(this.fileInput);
         this.menu = new Menu({ host: opts.host, items: [], placement: 'top-start', checkmarks: true, onSelect: (id) => this.run(id) });
         this.dialog = new TemplateDialog(opts.host);
         this.refresh();
@@ -160,8 +205,15 @@ export class TemplateStrip {
 
     destroy(): void {
         this.menu.destroy();
+        this.addMenu.destroy();
         this.dialog.destroy();
+        this.fileInput.remove();
         this.el.remove();
+    }
+
+    /** Import a JSON document directly (the file picker's path, and a test's). */
+    importText(text: string): void {
+        this.opts.onImport?.(text);
     }
 
     private chip(doc: Document, row: TemplateChipRow): HTMLButtonElement {
@@ -181,6 +233,27 @@ export class TemplateStrip {
             b.appendChild(tf);
         }
         b.addEventListener('click', (e) => this.opts.onApply(row.name, e.altKey || e.metaKey));
+        if (!row.builtIn && this.opts.onMove) {
+            // Drag a saved chip onto another saved chip to move it there; the order is the document's.
+            b.draggable = true;
+            b.addEventListener('dragstart', () => {
+                this.dragName = row.name;
+            });
+            b.addEventListener('dragover', (e) => {
+                if (this.dragName && this.dragName !== row.name) e.preventDefault();
+            });
+            b.addEventListener('drop', (e) => {
+                e.preventDefault();
+                const from = this.dragName;
+                this.dragName = null;
+                if (!from || from === row.name) return;
+                const saved = this.opts.rows().filter((r) => !r.builtIn).map((r) => r.name);
+                this.opts.onMove?.(from, saved.indexOf(row.name));
+            });
+            b.addEventListener('dragend', () => {
+                this.dragName = null;
+            });
+        }
         b.addEventListener('contextmenu', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -201,6 +274,13 @@ export class TemplateStrip {
             studies: ctx.studies,
             onSubmit: (n, remember) => this.opts.onSave(n, remember),
         });
+    }
+
+    private runAdd(id: string): void {
+        if (id === 'export') {
+            const text = this.opts.onExport?.();
+            if (text) downloadText(this.el.ownerDocument, text, 'indicator-templates.json');
+        } else if (id === 'import') this.fileInput.click();
     }
 
     private run(id: string): void {

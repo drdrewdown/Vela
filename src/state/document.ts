@@ -351,7 +351,7 @@ function sanitizeLedger(raw: unknown): { manifest: PersistedManifestEntry[]; nat
 /** The saved templates, in order: an entry needs a non-empty name and a ledger; the name is
  *  unique case-insensitively (the first wins); the timestamps default to now when missing; the
  *  list is cut at {@link MAX_INDICATOR_TEMPLATES}. Null when nothing survives. */
-function sanitizeIndicatorTemplates(raw: unknown): IndicatorTemplate[] | null {
+export function sanitizeIndicatorTemplates(raw: unknown): IndicatorTemplate[] | null {
     if (!Array.isArray(raw)) return null;
     const out: IndicatorTemplate[] = [];
     const seen = new Set<string>();

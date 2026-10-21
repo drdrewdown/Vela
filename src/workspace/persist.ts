@@ -6,7 +6,7 @@ import type { VelaStorage } from '../widget/persist';
 
 export { encodeState, decodeState, sanitizeState } from '../state/document';
 export type { WorkspaceState, CellState, ChartState, PanelsState, DrawingToolsState, IndicatorTemplate } from '../state/document';
-export { MAX_INDICATOR_TEMPLATES } from '../state/document';
+export { MAX_INDICATOR_TEMPLATES, sanitizeIndicatorTemplates } from '../state/document';
 
 /** @deprecated Use {@link VelaStorage} — one storage contract for both shells
  *  (`get`/`set`, each synchronous OR promise-returning, so localStorage-like and
