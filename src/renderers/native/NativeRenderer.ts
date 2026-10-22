@@ -83,6 +83,7 @@ import { BackdropRenderer } from './backdrop/BackdropRenderer';
 import { VolumeRenderer, VOLUME_PANE_FILL_FRAC } from './volume/VolumeRenderer';
 import { rendererLayers, foldBaseModulation, type RendererLayerArgs, type RendererLayerDefinition, type RendererLayerInstance, type BasePaintingModulation } from './layers';
 import { stackLayers } from './core/layerStacking';
+import { layerAbove, layerBelow, loweredZ, priceStack, raisedZ, untie, type StackEntry } from './core/overlayStack';
 import { applyAttributionMarkTheme, attributionMarkColor, createAttributionMark, createCustomMark } from './chrome/AttributionMark';
 import { rasterizeOverlay } from '../shared/dom-raster';
 import type { HostSettingsSection } from './chrome/SettingsDialog';
@@ -333,6 +334,7 @@ export class NativeRenderer implements IChartRenderer {
     private resizeAbove: PaneNode | null = null; // pane just above the dragged separator
     private resizeBelow: PaneNode | null = null; // pane just below it
     private resizeSplitStart: PaneSplit | null = null; // the two panes' shared span when the drag began
+    private resizeStartAboveWeight = 0; // the upper pane's weight when the drag began
     /** The user drawings take part in pointer input (the runtime `drawingsInteractive` feature). */
     private drawingsInteractive = true;
     private hoverSeparatorY: number | null = null; // pixel y of the separator under the cursor (drives its hover highlight)
@@ -1041,6 +1043,7 @@ export class NativeRenderer implements IChartRenderer {
         // stack survives the (async) indicator restore that follows a config restore.
         this.scene.candleZ = next.stacking.candles;
         for (const [id, z] of Object.entries(next.stacking.series)) this.scene.setIndicatorZ(id, z);
+        this.syncLegendOrder();
         // per-price-style cosmetics (independent of the candle palette)
         s.bars = { upColor: next.bars.upColor, downColor: next.bars.downColor };
         s.line = { color: next.line.color, width: next.line.width };
@@ -1103,6 +1106,7 @@ export class NativeRenderer implements IChartRenderer {
         if (typeof v.z === 'number') this.scene.setIndicatorZ(v.id, v.z);
         else if (v.to === 'front') this.scene.bringIndicatorToFront(v.id);
         else if (v.to === 'back') this.scene.sendIndicatorToBack(v.id);
+        this.syncLegendOrder();
     }
 
     /** Toggle the in-chart settings gear + dialog (the `settings` feature). The gear
@@ -1594,7 +1598,7 @@ export class NativeRenderer implements IChartRenderer {
         this.chrome.mount(this.chromeCanvas);
         this.crosshairLayer.mount(this.cursorCanvas);
         this.coords.setViewport(defaultViewport());
-        this.scene.ensurePane(PRICE_PANE_ID, 'price', 0, 3);
+        this.scene.ensurePane(PRICE_PANE_ID, 'price', 0);
 
         this.scheduler = new Scheduler((level) => this.renderFrame(level));
         this.animator = new Animator((dt) => this.animTick(dt));
@@ -1608,7 +1612,7 @@ export class NativeRenderer implements IChartRenderer {
             onClick: (x, y) => {
                 if (this.handleMarkClick(x, y)) return; // a lane glyph takes the click whole
                 this.userDrawings?.deselect(); // a click on the empty plot ends a (multi-)selection
-                this.handleClick(x);
+                this.handleClick(x, y);
             },
             onAxisLongPress: (axis, x, y) => {
                 for (const cb of this.axisLongPressCbs) cb({ axis, x, y });
@@ -1622,6 +1626,7 @@ export class NativeRenderer implements IChartRenderer {
             paneSeparatorAt: (y) => this.paneSeparatorAt(y),
             beginPaneResize: (y) => this.beginPaneResize(y),
             paneResizeBy: (dy) => this.paneResizeBy(dy),
+            endPaneResize: () => this.endPaneResize(),
             resetPaneSize: (y) => this.resetPaneSize(y),
             resetView: () => this.resetView(),
             // User drawings claim a gesture before pan when armed / over a drawing.
@@ -1763,6 +1768,12 @@ export class NativeRenderer implements IChartRenderer {
             move: (id, target) => {
                 for (const cb of this.moveIndicatorCbs) cb(id, target);
             },
+        });
+        this.inputsUI.setStackApi({
+            above: (id) => layerAbove(this.overlayStack(), id),
+            below: (id) => layerBelow(this.overlayStack(), id),
+            raise: (id) => this.restackOverlay(id, raisedZ),
+            lower: (id) => this.restackOverlay(id, loweredZ),
         });
 
         this.paneControls = new PaneControls(this.plot, theme, {
@@ -2137,7 +2148,7 @@ export class NativeRenderer implements IChartRenderer {
 
     // ── panes ──
     ensurePane(pane: Pane): void {
-        this.scene.ensurePane(pane.id, pane.kind, pane.order, pane.heightWeight ?? (pane.kind === 'price' ? 3 : 1));
+        this.scene.ensurePane(pane.id, pane.kind, pane.order, pane.heightWeight);
         this.layoutPanes();
         // A new pane changes the count, so the lone price pane's maximize button appears.
         this.paneControls?.refresh();
@@ -2162,6 +2173,7 @@ export class NativeRenderer implements IChartRenderer {
         model.ownScale = opts?.ownScale === true;
         if (!model.ownScale) this.scene.dropIndicatorScale(handle.id);
         this.inputsUI.setPane(handle.id, paneId);
+        this.syncLegendOrder();
         this.refreshAnchorOffset(model);
         this.refreshAxisWidth();
         this.layoutPanes();
@@ -2191,6 +2203,17 @@ export class NativeRenderer implements IChartRenderer {
         this.layoutPanes();
         this.paneControls?.refresh();
         this.scheduler.invalidate(InvalidateLevel.Full);
+    }
+
+    setPaneHeightWeight(paneId: string, weight: number): void {
+        const pane = this.scene.panes.get(paneId);
+        if (!pane || !(weight > 0) || pane.heightWeight === weight) return;
+        pane.heightWeight = weight;
+        this.afterPaneLayoutChange();
+    }
+
+    paneHeightWeight(paneId: string): number | null {
+        return this.scene.panes.get(paneId)?.heightWeight ?? null;
     }
 
     onPaneAction(cb: (a: PaneAction) => void): Unsubscribe {
@@ -2305,6 +2328,7 @@ export class NativeRenderer implements IChartRenderer {
             this.vpvrHidden = false;
         }
         if (model.ownScale) this.refreshAxisWidth();
+        this.syncLegendOrder();
         this.paneControls?.refresh();
         this.scheduler.invalidate(InvalidateLevel.Full);
         return { id: model.id };
@@ -2796,7 +2820,7 @@ export class NativeRenderer implements IChartRenderer {
             this.setMarkHover(null);
             this.scheduler.invalidate(InvalidateLevel.Cursor);
             this.hoverLogical = null; // off the plot ⇒ the readout falls back to the latest bar
-            const empty: CrosshairEvent = { time: null, price: null, paneKind: null, values: new Map(), ohlc: null };
+            const empty: CrosshairEvent = { time: null, price: null, paneKind: null, paneId: null, values: new Map(), ohlc: null };
             for (const cb of this.crosshairCbs) cb(empty);
             return;
         }
@@ -2837,15 +2861,24 @@ export class NativeRenderer implements IChartRenderer {
         const bar = onBar ? this.bars[logical] : void 0;
         const ohlc = bar ? { time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: bar.volume } : null;
         this.hoverLogical = onBar ? logical : null;
-        const event = { time, price, paneKind: inData && pane ? pane.kind : null, values, ohlc };
+        const onPane = inData && pane ? pane : null;
+        const event: CrosshairEvent = { time, price, paneKind: onPane?.kind ?? null, paneId: onPane?.id ?? null, values, ohlc };
         for (const cb of this.crosshairCbs) cb(event);
     }
 
-    private handleClick(x: number): void {
+    private handleClick(x: number, y: number): void {
         if (this.coords.barCount === 0) return;
         const logical = Math.round(this.coords.xToLogical(x));
         const onBar = logical >= 0 && logical < this.coords.barCount;
-        for (const cb of this.clickCbs) cb({ time: onBar ? this.coords.logicalToTime(logical) : null, price: null });
+        const inData = x >= 0 && y >= 0 && x <= this.coords.width && y <= this.coords.height;
+        const pane = inData ? this.paneNodeAtY(y) : null;
+        const event: ClickEvent = {
+            time: onBar ? this.coords.logicalToTime(logical) : null,
+            price: pane ? this.coords.yToPrice(y, pane.scale, pane.bounds) : null,
+            paneKind: pane?.kind ?? null,
+            paneId: pane?.id ?? null,
+        };
+        for (const cb of this.clickCbs) cb(event);
     }
 
     /**
@@ -3123,6 +3156,7 @@ export class NativeRenderer implements IChartRenderer {
         const below = panes[i]!;
         this.resizeAbove = above;
         this.resizeBelow = below;
+        this.resizeStartAboveWeight = above.heightWeight;
         this.resizeSplitStart = {
             combinedTop: above.bounds.top,
             combinedHeight: above.bounds.height + below.bounds.height,
@@ -3144,6 +3178,17 @@ export class NativeRenderer implements IChartRenderer {
         this.rememberPaneWeights();
         this.layoutPanes();
         this.scheduler.invalidate(4 /* Full */);
+    }
+
+    /** Release the separator: report the resize once, at the end of the drag, if it changed anything. */
+    private endPaneResize(): void {
+        const above = this.resizeAbove;
+        const below = this.resizeBelow;
+        const startAbove = this.resizeStartAboveWeight;
+        this.resizeAbove = null;
+        this.resizeBelow = null;
+        this.resizeSplitStart = null;
+        if (above && below && above.heightWeight !== startAbove) this.emitPaneAction({ type: 'resize', paneIds: [above.id, below.id] });
     }
 
     /** Double-click a separator → split the two adjacent panes evenly (each gets half of
@@ -3173,7 +3218,8 @@ export class NativeRenderer implements IChartRenderer {
         below.heightWeight = half;
         this.rememberPaneWeights();
         this.layoutPanes();
-        this.scheduler.invalidate(4 /* Full */);
+        this.scheduler.invalidate(InvalidateLevel.Full);
+        this.emitPaneAction({ type: 'resize', paneIds: [above.id, below.id] });
     }
 
     // ── keyboard navigation / accessibility (item 11) ──
@@ -3494,6 +3540,7 @@ export class NativeRenderer implements IChartRenderer {
         // every path that can move them (a z write, a restored config, a mount/remove, a
         // pane move) is covered without its own call site. No-op when unchanged.
         this.syncLayerCanvasOrder();
+        this.syncLegendOrder(); // catches any path that moved a key without its own call
         this.stampScaleInvert(); // flip axes (if inverted) before any layer reads pane.scale
         this.backend.modelAlpha = this.modelAlpha;
         this.backend.candleBodyAlpha = this.candleBodyAlpha;
@@ -3724,6 +3771,8 @@ export class NativeRenderer implements IChartRenderer {
         const i0 = Math.max(0, Math.floor(vr.from));
         const i1 = Math.min(n - 1, Math.ceil(vr.to));
         if (i1 < i0) return;
+        // Series points past the last bar paint in the right whitespace, so they scale there too.
+        const s1 = Math.max(i1, Math.ceil(vr.to));
         // Percent mode: the reference is the first visible bar's close (the common idiom).
         this.scene.percentBaseline = this.bars[i0]?.close ?? 0;
         const panes = this.scene.orderedPanes();
@@ -3749,7 +3798,7 @@ export class NativeRenderer implements IChartRenderer {
             // force_overlay series render on the price pane whatever pane their indicator
             // owns — fold their visible range in here (their own pane excludes them).
             if (pane === pricePane) {
-                const or = overlaySeriesRange(this.scene.indicators.values(), i0, i1, (id) => this.scene.offsetOf(id));
+                const or = overlaySeriesRange(this.scene.indicators.values(), i0, s1, (id) => this.scene.offsetOf(id));
                 if (or) dr = dr ? { min: Math.min(dr.min, or.min), max: Math.max(dr.max, or.max) } : or;
             }
             // Hidden candles drop out of the price pane's autoscale, so overlay indicators fill
@@ -3760,7 +3809,7 @@ export class NativeRenderer implements IChartRenderer {
                 && (!this.scene.candlesHidden || this.priceLayersAnchoredToBars(masterModels) || !this.paneHasMeasurableContent(masterModels, dr));
             // Each pane logs (or not) on its OWN flag — the price pane from the scene setting,
             // study panes from their own — so a study going log never touches the price pane.
-            pane.scaleTarget = computePaneScale(masterModels, this.bars, includeCandles, i0, i1, dr, paneLogScale(this.scene, pane), (id) => this.scene.offsetOf(id), margins);
+            pane.scaleTarget = computePaneScale(masterModels, this.bars, includeCandles, i0, s1, dr, paneLogScale(this.scene, pane), (id) => this.scene.offsetOf(id), margins);
             // Percent baseline for THIS pane (the first visible value it measures change from):
             // the first visible bar close on the price pane, else the master series' first
             // visible value. 0 ⇒ no reference yet, so the axis falls back to absolute.
@@ -3825,7 +3874,7 @@ export class NativeRenderer implements IChartRenderer {
                     continue;
                 }
                 const mdr = this.chrome.paneDrawingsRange([model], this.scene, false, vr, this.drawingWindow(vr));
-                sl.scaleTarget = computePaneScale([model], this.bars, false, i0, i1, mdr, false, (id) => this.scene.offsetOf(id), margins);
+                sl.scaleTarget = computePaneScale([model], this.bars, false, i0, s1, mdr, false, (id) => this.scene.offsetOf(id), margins);
                 if (!animating || !sl.initialized) {
                     sl.scale = { ...sl.scaleTarget };
                     sl.initialized = true;
@@ -3902,6 +3951,37 @@ export class NativeRenderer implements IChartRenderer {
         const models = this.scene.orderedIndicatorsForPane(paneId);
         const master = models.find((m) => m.ownScale !== true) ?? models[0];
         return master?.title || null;
+    }
+
+    /**
+     * The price pane's layers back to front, as the legend restacks them: every indicator
+     * with a legend row, in paint order, plus the candles. The same layers and order the
+     * object tree lists (see `indicatorZOrder`).
+     */
+    private overlayStack(): StackEntry[] {
+        const painted = this.scene
+            .orderedIndicatorsForPane(PRICE_PANE_ID)
+            .filter((m) => m.legend !== false)
+            .map((m) => ({ id: m.id, z: this.scene.zOf(m.id) }));
+        return priceStack(painted, this.scene.candleZ);
+    }
+
+    /** List the legend rows the way the indicators stack, front-most first (no-op when unchanged). */
+    private syncLegendOrder(): void {
+        this.inputsUI?.orderRows(this.scene.indicatorZOrder().map((e) => e.id));
+    }
+
+    /** Apply a legend restacking step: shared keys are spread apart first (the order stays),
+     *  so the step lands exactly one layer over. No-op when there is nothing to step over. */
+    private restackOverlay(id: string, step: (stack: StackEntry[], id: string) => number | null): void {
+        for (const fix of untie(this.overlayStack())) this.scene.setIndicatorZ(fix.id, fix.z);
+        const z = step(this.overlayStack(), id);
+        if (z === null) return;
+        this.scene.setIndicatorZ(id, z);
+        this.syncLegendOrder();
+        this.scheduler.invalidate(InvalidateLevel.Full);
+        // The stacking is part of the config: host chrome mirroring it (an object tree) follows.
+        for (const cb of this.configChangedCbs) cb();
     }
 
     /** The pane a bespoke-layer native indicator (volume/vpvr) currently lives in (null = not mounted). */
@@ -4434,18 +4514,46 @@ export class NativeRenderer implements IChartRenderer {
  */
 function leadingPointsBefore(model: IndicatorModel, headTime: number): number | null {
     for (const s of model.series) {
-        const times: ReadonlyArray<{ time: number }> | null = s.kind === 'candle' || s.kind === 'bar' ? s.bars : isLineLikeSeries(s) ? s.points : null;
+        const times: ReadonlyArray<{ time: number } | undefined> | null = s.kind === 'candle' || s.kind === 'bar' ? s.bars : isLineLikeSeries(s) ? s.points : null;
         if (!times || times.length === 0) continue;
-        let lo = 0;
-        let hi = times.length; // lower bound: first index whose time is >= headTime
-        while (lo < hi) {
-            const mid = (lo + hi) >> 1;
-            if (times[mid]!.time < headTime) lo = mid + 1;
-            else hi = mid;
-        }
-        return lo;
+        const count = slotsBefore(times, headTime);
+        if (count !== null) return count;
     }
     return null;
+}
+
+/** How many of `times`' slots sit before `headTime`: a lower-bound search, or a scan once it
+ *  meets an empty slot (a bar the series has no value for), which carries no time. Null
+ *  when every slot is empty. */
+function slotsBefore(times: ReadonlyArray<{ time: number } | undefined>, headTime: number): number | null {
+    let lo = 0;
+    let hi = times.length;
+    while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        const t = times[mid]?.time;
+        if (t === undefined) return slotsBeforeScan(times, headTime);
+        if (t < headTime) lo = mid + 1;
+        else hi = mid;
+    }
+    return lo;
+}
+
+/**
+ * {@link slotsBefore} over empty slots: the index of the first entry at or after `headTime`
+ * when it IS the head bar, else one past the last entry before it (the empty slots in
+ * between count as at-or-after the head). Null when every slot is empty.
+ */
+function slotsBeforeScan(times: ReadonlyArray<{ time: number } | undefined>, headTime: number): number | null {
+    let lastBefore = -1;
+    let any = false;
+    for (let i = 0; i < times.length; i += 1) {
+        const t = times[i]?.time;
+        if (t === undefined) continue;
+        any = true;
+        if (t >= headTime) return t === headTime ? i : lastBefore + 1;
+        lastBefore = i;
+    }
+    return any ? times.length : null;
 }
 
 /** Apply a scene patch to a stored indicator model so the next frame reflects it.

@@ -285,40 +285,50 @@ const maEnvelope: ClassicIndicatorSpec = {
     },
 };
 
-const LINREG_CURVE = 'Curve';
-const LINREG_SLOPE = 'Slope';
+const leastSquaresMa: ClassicIndicatorSpec = {
+    type: 'lsma',
+    title: 'Least Squares Moving Average',
+    shortTitle: 'LSMA',
+    overlay: true,
+    inputs: [
+        sourceInput('Close', 'source', 'Source', 'Price series the regression line is fitted to.'),
+        { ...lengthInput(25, 'length', 'LSMA Length', 5000, 'Number of bars N in each least-squares fit. Every bar fits a straight line to its last N values and plots where that line ends, so the average leads turns that a same-length SMA trails, at the cost of overshooting after sharp moves.'), min: 2 },
+        intInput('offset', 'Regression Offset', 0, 0, 500, "Bars to step back along each bar's fitted line. 0 plots the line's endpoint at the current bar; larger values read the fit further back, trading lead for smoothness."),
+        ...directionInputs(),
+    ],
+    compute: (bars, inputs) => {
+        const src = sourceValues(bars, str(inputs, 'source', 'Close'));
+        const values = linreg(src, num(inputs, 'length', 25), Math.trunc(num(inputs, 'offset', 0)));
+        return { plots: [slopeColoredPlot('lsma', 'LSMA', values, inputs)] };
+    },
+};
 
-const linearRegression: ClassicIndicatorSpec = {
-    type: 'linear-regression',
-    title: 'Linear Regression Curve',
-    shortTitle: 'LinReg',
-    // Slope lives in its own pane; Curve force-overlays itself onto the price candles.
+const linearRegressionSlope: ClassicIndicatorSpec = {
+    type: 'linear-regression-slope',
+    title: 'Linear Regression Slope',
+    shortTitle: 'LRS',
     overlay: false,
     inputs: [
-        optionInput('mode', 'Mode', LINREG_CURVE, [LINREG_CURVE, LINREG_SLOPE], 'Curve plots the regression value on the price chart; Slope plots the per-bar slope of the fit in the pane.'),
         { ...lengthInput(100, 'length', 'Length', 5000, 'Number of bars used to fit the linear regression.'), min: 2 },
         sourceInput('Close', 'source', 'Source', 'Price series the regression is fitted to.'),
-        colorInput(BULLISH, 'Rising', 'bullColor', 'Color of the regression curve and slope line while the fit slopes upward.'),
-        colorInput(BEARISH, 'Falling', 'bearColor', 'Color of the regression curve and slope line while the fit slopes downward.'),
-        colorInput(NEUTRAL, 'Regression Line', 'lineColor', 'Color of the regression curve and slope line while the fit is flat.'),
+        colorInput(BULLISH, 'Rising', 'bullColor', 'Color of the slope line while the fit slopes upward.'),
+        colorInput(BEARISH, 'Falling', 'bearColor', 'Color of the slope line while the fit slopes downward.'),
+        colorInput(NEUTRAL, 'Slope Line', 'lineColor', 'Color of the slope line while the fit is flat.'),
     ],
     compute: (bars, inputs) => {
         const len = num(inputs, 'length', 100);
         const src = sourceValues(bars, str(inputs, 'source', 'Close'));
-        const curve = linreg(src, len, 0);
-        const slope = zip(curve, linreg(src, len, 1), (a, b) => a - b);
+        // Price change per bar along the current fit: its endpoint minus the point one bar back.
+        const slope = zip(linreg(src, len, 0), linreg(src, len, 1), (a, b) => a - b);
         const bull = str(inputs, 'bullColor', BULLISH);
         const bear = str(inputs, 'bearColor', BEARISH);
         const flat = str(inputs, 'lineColor', NEUTRAL);
         const colors = slope.map((s) => (Number.isFinite(s) ? (s > 0 ? bull : s < 0 ? bear : flat) : null));
-        if (str(inputs, 'mode', LINREG_CURVE) === LINREG_SLOPE) {
-            return {
-                plots: [{ key: 'slope', title: 'Slope', values: slope, color: flat, width: 2, colors }],
-                levels: [{ key: 'zero', price: 0, color: transp(NEUTRAL, 50), lineStyle: 'dashed' }],
-            };
-        }
-        return { plots: [{ key: 'curve', title: 'Curve', values: curve, color: flat, width: 2, colors, overlay: true }] };
+        return {
+            plots: [{ key: 'slope', title: 'Slope', values: slope, color: flat, width: 2, colors }],
+            levels: [{ key: 'zero', price: 0, color: transp(NEUTRAL, 50), lineStyle: 'dashed' }],
+        };
     },
 };
 
-export const averageSpecs: ClassicIndicatorSpec[] = [simpleMa, exponentialMa, movingAverage, smoothedMa, zlema, vidya, maEnvelope, linearRegression];
+export const averageSpecs: ClassicIndicatorSpec[] = [simpleMa, exponentialMa, movingAverage, smoothedMa, zlema, vidya, maEnvelope, leastSquaresMa, linearRegressionSlope];

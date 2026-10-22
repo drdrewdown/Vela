@@ -229,6 +229,9 @@ export function classicDescriptor(spec: ClassicIndicatorSpec): NativeIndicatorDe
         overlay: spec.overlay,
         // Studies stack (a 20 and a 200 moving average side by side) — unlike the layer-backed natives.
         multiInstance: true,
+        // A study's values depend on every bar before them (an EMA's seed, an RSI's
+        // smoothing), so it computes once over the whole history, as script indicators do.
+        waitsForHistory: true,
         inputsSchema: () => spec.inputs,
         defaultInputs: () => Object.fromEntries(spec.inputs.map((i) => [i.key, i.defval])),
         create: () => new ClassicIndicator(spec),

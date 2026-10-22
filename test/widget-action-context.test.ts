@@ -23,7 +23,7 @@ function liveContext(state: { symbol: string }): WidgetContext {
     } as unknown as WidgetContext;
 }
 
-const pointer: ContextMenuPointer = { price: 5001.25, time: 1_700_000_000_000, paneKind: 'price' };
+const pointer: ContextMenuPointer = { price: 5001.25, time: 1_700_000_000_000, paneKind: 'price', paneId: 'price' };
 
 /** The pointer attached the way the context menu does it: a fresh view by property descriptor, so the base's live getters stay live. */
 function withPointer(ctx: WidgetContext, p: ContextMenuPointer): WidgetContext {

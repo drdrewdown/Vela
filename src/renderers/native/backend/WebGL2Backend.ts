@@ -326,6 +326,12 @@ export class WebGL2Backend implements IRenderBackend {
         const i0 = Math.max(0, Math.floor(vr.from));
         const i1 = Math.min(n - 1, Math.ceil(vr.to));
         if (i1 < i0) return;
+        // Indicator series and fills may carry points past the last bar (a plot shifted
+        // forward), so they paint through the visible right whitespace too.
+        const s1 = Math.max(i1, Math.ceil(vr.to));
+
+        // Blend/scissor are enabled once; the program/VAO/uniform bindings live in each pane's
+        // `flush`, since an interleave-layer quad swaps them mid-pane anyway.
         gl.enable(gl.BLEND);
         gl.enable(gl.SCISSOR_TEST);
         const barColorMap = mergeBarColors(scene.indicators);
@@ -385,8 +391,11 @@ export class WebGL2Backend implements IRenderBackend {
                     b.alpha = this.modelAlpha;
                     const off = scene.offsetOf(m.id);
                     const mp = effPane(m);
-                    for (const f of m.fills) if (f.overlay !== true) this.emitFill(b, m, f, mp, coords, i0, i1, off);
-                    for (const s of m.series) if (s.overlay !== true) this.emitSeries(b, s, mp, coords, i0, i1, theme, off);
+                    // Fills paint at the model's z slot, under its own series — a band between
+                    // two plots sits behind the plot lines, and the whole model moves as one
+                    // unit when its object-tree row is reordered.
+                    for (const f of m.fills) if (f.overlay !== true) this.emitFill(b, m, f, mp, coords, i0, s1, off);
+                    for (const s of m.series) if (s.overlay !== true) this.emitSeries(b, s, mp, coords, i0, s1, theme, off);
                 }
                 if (drawCandles && !candleDrawn) {
                     drawSlicesUpTo(scene.candleZ);
@@ -397,11 +406,11 @@ export class WebGL2Backend implements IRenderBackend {
                 if (isPrice) {
                     for (const m of scene.indicators.values()) {
                         const off = scene.offsetOf(m.id);
-                        for (const f of m.fills) if (f.overlay === true) this.emitFill(b, m, f, pane, coords, i0, i1, off);
+                        for (const f of m.fills) if (f.overlay === true) this.emitFill(b, m, f, pane, coords, i0, s1, off);
                     }
                     for (const m of scene.indicators.values()) {
                         const off = scene.offsetOf(m.id);
-                        for (const s of m.series) if (s.overlay === true) this.emitSeries(b, s, pane, coords, i0, i1, theme, off);
+                        for (const s of m.series) if (s.overlay === true) this.emitSeries(b, s, pane, coords, i0, s1, theme, off);
                     }
                 }
                 drawSlicesUpTo(Infinity);
@@ -422,8 +431,8 @@ export class WebGL2Backend implements IRenderBackend {
         }
         if (this.glow > 0 && !this.screenProgram && !this.ensureScreenPipeline()) this.glow = 0;
         if (this.glow > 0 && this.screenProgram) {
-            this.glowBatch.alpha = this.modelAlpha;
-            this.renderGlow(gl, scene, coords, i0, i1);
+            this.glowBatch.alpha = this.modelAlpha; // the glow of faded series fades too
+            this.renderGlow(gl, scene, coords, i0, s1);
         }
     }
 
@@ -1037,7 +1046,7 @@ export class WebGL2Backend implements IRenderBackend {
         const tickW = Math.max(1, Math.round(spacing * 0.35));
         for (let i = i0; i <= i1; i += 1) {
             const bar = s.bars[i - off];
-            if (!bar) continue;
+            if (!bar || !Number.isFinite(bar.open + bar.high + bar.low + bar.close)) continue;
             const bc: CandleBarColor | null | undefined = s.barColors?.[i - off];
             const body = parseColor(bc?.color ?? (bar.close >= bar.open ? up : down));
             const x = Math.round(coords.logicalToX(i));

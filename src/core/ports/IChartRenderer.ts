@@ -131,6 +131,9 @@ export interface CrosshairEvent {
      *  horizontal level from the price pane). Optional and additive: a renderer that
      *  doesn't track panes omits it. */
     paneKind?: 'price' | 'study' | null;
+    /** The id of the pane under the cursor — the same id `chart.panes.list()` reports;
+     *  null off the plot. Optional and additive, like {@link paneKind}. */
+    paneId?: string | null;
     /** Value at the crosshair per series, keyed by stable series id. */
     values: ReadonlyMap<string, number>;
     /** The hovered price bar's OHLCV (null when the cursor is off any bar). */
@@ -139,7 +142,12 @@ export interface CrosshairEvent {
 
 export interface ClickEvent {
     time: Millis | null;
+    /** Value at the click on its pane's scale, as {@link CrosshairEvent.price}. */
     price: number | null;
+    /** The kind of pane clicked; null off the plot. Optional — a renderer that doesn't track panes omits it. */
+    paneKind?: 'price' | 'study' | null;
+    /** The id of the pane clicked (as `chart.panes.list()` reports it); null off the plot. Optional. */
+    paneId?: string | null;
 }
 
 /** A touch long-press on an axis strip — the mobile substitute for a right-click menu. */
@@ -254,7 +262,9 @@ export type PaneAction =
     | { type: 'move'; paneId: string; dir: 'up' | 'down' }
     | { type: 'remove'; paneId: string }
     | { type: 'collapse'; paneId: string; collapsed: boolean }
-    | { type: 'maximize'; paneId: string; maximized: boolean };
+    | { type: 'maximize'; paneId: string; maximized: boolean }
+    /** The user finished resizing panes (a separator drag or reset); read the new weights back through `paneHeightWeight`. */
+    | { type: 'resize'; paneIds: string[] };
 
 /**
  * The rendering backend abstraction. No backend (e.g. lightweight-charts) types
@@ -348,6 +358,14 @@ export interface IChartRenderer {
     setPaneCollapsed?(paneId: string, collapsed: boolean): void;
     /** Maximize one pane to fill the plot, or restore the previous split (`null`). */
     setPaneMaximized?(paneId: string | null): void;
+    /**
+     * Set a pane's height weight: panes share the plot height in proportion to their weights
+     * (collapsed panes aside). The weight must survive later `ensurePane` calls that carry
+     * none — only an explicit `heightWeight` replaces it.
+     */
+    setPaneHeightWeight?(paneId: string, weight: number): void;
+    /** A pane's current height weight, or null when the renderer has no such pane. */
+    paneHeightWeight?(paneId: string): number | null;
     /**
      * The renderer reports a user-initiated pane action (from a pane hover button or a
      * double-click). The host/core reflects it: `'remove'` tears down the pane's

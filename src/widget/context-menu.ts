@@ -25,7 +25,7 @@ import { resolveTimezone } from './timezones';
 const PRICE_AXIS_W = 60;
 const TIME_AXIS_H = 26;
 
-const OFF_PLOT: ContextMenuPointer = { price: null, time: null, paneKind: null };
+const OFF_PLOT: ContextMenuPointer = { price: null, time: null, paneKind: null, paneId: null };
 
 export interface ContextMenuCallbacks {
     /** Reset the view (all history, autoscale back on). */
@@ -83,7 +83,7 @@ export class ChartContextMenu {
         this.chart = chart;
         this.crosshair = OFF_PLOT;
         this.offCrosshair = chart.renderer.onCrosshairMove((e) => {
-            this.crosshair = { price: e.price, time: e.time, paneKind: e.paneKind ?? null };
+            this.crosshair = { price: e.price, time: e.time, paneKind: e.paneKind ?? null, paneId: e.paneId ?? null };
         });
     }
 

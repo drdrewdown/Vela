@@ -2,6 +2,83 @@
 
 All notable changes to Vela, newest first.
 
+## [0.8.5]
+
+### Added
+
+- **Size panes from code.** `chart.panes.setHeightWeight(paneId, weight)` sets how much of the
+  chart's height a pane takes, relative to the others: the price pane starts at 3 and each
+  indicator pane at 1, so a weight of 6 on the price pane next to two indicator panes gives it
+  three quarters of the height. `chart.panes.list()` now reports each pane's `heightWeight`, and
+  `pane:changed` fires when a pane's size changes, including when the user lets go of a pane
+  separator, and when a new indicator creates its pane, so a host can save the layout and keep
+  its own pane controls in step without polling.
+- **Bring an overlay in front of the candles from its legend.** New indicators start behind the
+  candles, so a line or a candle overlay on the price chart could be hidden under them. Its
+  legend row's **Move to** menu, and its right-click menu, now step it one layer at a time:
+  **Bring in front of price** or **Bring in front of** the indicator directly in front of it, and
+  **Send behind price** or **Send behind** the indicator directly behind it. Every other layer
+  keeps its place, and the order is saved with the chart. The legend now lists each pane's
+  indicators in their drawing order, front-most on top, the same order as the object tree.
+- **Clicks and the crosshair name the pane.** `onClick` now reports the pane that was clicked
+  and the value under the click on that pane's scale, alongside the bar time, and
+  `onCrosshairMove` reports the pane under the cursor. Both carry the pane's `paneId`, the same
+  id `chart.panes` uses, and right-click menu actions get it on `ctx.pointer` too, so a click
+  on one of several indicator panes can be told apart.
+- **Plugin indicators can wait for the full history.** A native indicator registered with
+  `waitsForHistory: true` does not compute while the chart's history is still loading: its
+  legend row shows a loading state, and it computes once, over every candle, when the history
+  is complete. A history extended later holds its previous output in place until the new
+  candles have all arrived. Without the flag, an indicator keeps computing as each part of the
+  history lands.
+- **Indicator plots can continue past the last candle.** A plot shifted forward, such as a
+  Pine Script `plot()` with a positive `offset`, now keeps drawing into the empty space to
+  the right of the latest candle instead of stopping at it. Fills between such plots follow
+  them, and the price scale keeps their values in view. Engines get this by emitting points
+  beyond the last bar, one per future bar; older engines are unaffected.
+
+### Changed
+
+- **Linear Regression is now two studies: an LSMA and a slope.** The Linear Regression
+  Curve opened an empty pane below the chart while its curve drew over the candles. It is
+  replaced by the **Least Squares Moving Average**, which draws on the price chart like the
+  other averages, colored by its slope and with a regression offset, and the **Linear
+  Regression Slope**, which plots the fit's change per bar in its own pane around a zero
+  line. Saved charts keep their study: a saved curve opens as an LSMA with the same length,
+  and a saved slope as a Linear Regression Slope.
+  _(Breaking: the `linear-regression` built-in type is gone. Add `lsma` or
+  `linear-regression-slope` instead.)_
+
+### Fixed
+
+- **Built-in indicators stay on their candles while history loads.** When older candles
+  arrived after the chart first painted, as they do while a symbol's history is still being
+  completed, a built-in study such as an EMA could slide back in time, end well before the last
+  candle, or vanish from view entirely, until the next price update or the end of the load.
+  The built-in studies now wait until the history has finished loading, showing a loading state
+  in their legend meanwhile, then compute once over every candle, the way script indicators do.
+  Volume still paints from the first candles. Plugin indicators no longer slide either, and
+  shortening the history from the chart settings leaves every indicator on its candles.
+- **Studies follow a switch to Heikin Ashi at once.** After switching the chart style to Heikin
+  Ashi, the built-in studies kept showing values computed from the regular candles until the
+  next price update. They now recalculate over the Heikin Ashi candles straight away, and over
+  the regular candles again when you switch back.
+- **Resized panes keep their size when indicators are added.** Dragging a pane separator, then
+  adding an indicator that draws on an existing pane (a moving average on the price chart, or
+  one merged into another indicator's pane), snapped the panes back to their default heights.
+  Pane sizes now stay until you change them.
+- **Candle overlays with gaps keep updating.** An indicator drawing its own candles or bars
+  (Pine Script's `plotcandle()` and `plotbar()`, or a custom engine) with no candle on some
+  bars — Pine Script's `show_last`, for one — painted the first time, then failed on its next
+  update: a live tick, an input change, a replay step. Such an indicator now keeps updating and
+  leaves those bars empty, and a candle with any missing price is skipped the same way.
+- **Plugin visuals clear the moment you switch markets.** Changing the symbol or timeframe on a
+  chart showing plugin-drawn data, such as a custom chart type or an indicator that paints its
+  own layer, could stack the old market's visuals in a single column at the right edge until
+  the new bars arrived, and data the old market was still loading could land on the new one
+  afterwards. The old market's visuals now disappear as soon as you switch, and nothing it was
+  still loading is drawn.
+
 ## [0.8.4]
 
 ### Added

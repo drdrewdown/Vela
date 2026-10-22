@@ -105,12 +105,21 @@ interface SeriesBase {
 
 export interface LineLikeSeries extends SeriesBase {
     kind: LineLikeKind;
+    /**
+     * One entry per bar the indicator ran over, index-aligned to the bars: entry `i` draws on
+     * bar `i`, whatever its `time`. Entries past the last bar draw on the bar slots after it,
+     * one per slot, so a series shifted forward continues into the chart's right whitespace;
+     * give them the times those slots would have. A gap is a `value: null` entry.
+     */
     points: SeriesPoint[];
     style: LineLikeStyle;
 }
 
 export interface CandleSeries extends SeriesBase {
     kind: 'candle' | 'bar';
+    /** One entry per bar the indicator ran over, index-aligned like `points`. A bar with no
+     *  candle is an empty slot (or an entry with `NaN` prices): it draws nothing, and the
+     *  candles after it stay on their own bars. Never compact the array to drop it. */
     bars: OHLCV[];
     style?: Partial<CandleStyle>;
     /** Per-bar plotcandle/plotbar colours, aligned to `bars` by index (null ≡ use defaults). */

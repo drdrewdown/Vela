@@ -98,6 +98,14 @@ describe('buildTree — the unified stack', () => {
         expect(names(tree[0]!)).toEqual(['b', 'price', 'a']);
     });
 
+    it('on a shared key, follows the paint order zOrder lists, not the pane listing', () => {
+        // zOrder comes back to front as the indicators paint: b paints after a, so b is in front,
+        // and both paint after the candles that share their key.
+        const p = pane('price', 'price', 0, [{ id: 'a' }, { id: 'b' }]);
+        const tree = buildTree(snap({ panes: [p], zOrder: [{ id: 'a', z: 0 }, { id: 'b', z: 0 }], candleZ: 0 }));
+        expect(names(tree[0]!)).toEqual(['b', 'a', 'price']);
+    });
+
     it('interleaves drawings into the column by their z — under the candles, between overlays', () => {
         const p = pane('price', 'price', 0, [{ id: 'a' }, { id: 'b' }]);
         const drawings = [draw('deep', 'price', -9), draw('mid', 'price', -1), draw('top', 'price', 7)];

@@ -78,6 +78,8 @@ export interface ContextMenuPointer {
     time: number | null;
     /** The kind of pane the pointer is on; null off the plot. */
     paneKind: 'price' | 'study' | null;
+    /** The id of the pane the pointer is on, as `chart.panes.list()` reports it; null off the plot. */
+    paneId: string | null;
 }
 
 /** What {@link WidgetContext.addIndicator} takes: a named script, ready to run. */

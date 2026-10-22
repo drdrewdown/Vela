@@ -38,17 +38,23 @@ export interface SeriesDataEngineHost {
 
 /**
  * A per-chart data engine behind a chart type: created on first entry into the style,
- * suspended/resumed as the user switches styles, stopped when the chart is destroyed.
+ * suspended/resumed as the user switches styles, replaced by a fresh engine when the
+ * market or the replay state changes, stopped when the chart is destroyed.
  * All methods are fire-and-forget from the chart's point of view — the engine owns its
- * own scheduling and pushes results through the host channels.
+ * own scheduling and pushes results through the host channels. The host forwards pushes
+ * only from the chart's current, unsuspended engine: work still in flight when the
+ * engine is suspended or stopped never reaches the scene.
  */
 export interface SeriesDataEngine {
     start(host: SeriesDataEngineHost): void;
-    /** The style was left — stop fetching/pushing, keep state for a cheap resume. */
+    /** The style was left, or a market switch began — stop fetching/pushing, keep state
+     *  for a cheap resume. Host pushes are dropped from here until `resume()`. */
     suspend(): void;
-    /** The style was re-entered. */
+    /** The style was re-entered — re-push what the layer shows (nothing pushed while
+     *  suspended reached it). */
     resume(): void;
-    /** The chart is going away — release everything. */
+    /** The chart is going away, or the engine is being replaced — release everything.
+     *  Its host drops every push from here on. */
     stop(): void;
     /** The visible range changed (pan/zoom) while the style is active. */
     onViewport?(range: { from: number; to: number }): void;

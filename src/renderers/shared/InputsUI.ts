@@ -45,6 +45,23 @@ export interface LegendMoveApi {
     move(id: string, target: MoveTarget): void;
 }
 
+/** What paints next to an indicator in the price pane's stack: the candles (`'price'`),
+ *  another indicator (`{ indicator: id }`), or nothing to step over (`null` — the end of
+ *  the stack, or an indicator that doesn't stack with the candles). */
+export type LegendStackNeighbor = 'price' | { indicator: string } | null;
+
+/** Host hook that lets the legend restack an overlay indicator among the price pane's layers. */
+export interface LegendStackApi {
+    /** What paints directly in front of the indicator. */
+    above(id: string): LegendStackNeighbor;
+    /** What paints directly behind it. */
+    below(id: string): LegendStackNeighbor;
+    /** Move the indicator directly in front of what {@link above} reports. */
+    raise(id: string): void;
+    /** Move the indicator directly behind what {@link below} reports. */
+    lower(id: string): void;
+}
+
 /** One plot's current value as shown beside the legend title (pre-formatted, plot-colored). */
 export interface LegendPlotValue {
     value: string;
@@ -119,6 +136,9 @@ const LEGEND_CTL_CSS =
     `border:none;line-height:0;padding:0;` +
     `width:${LEGEND_CTL_PX}px;height:${LEGEND_CTL_PX}px;border-radius:3px;box-sizing:border-box;flex:none;`;
 const LEGEND_ROW_MIN_H = LEGEND_CTL_PX + LEGEND_ROW_PAD_Y * 2;
+/** Menu ids of the one-step restacking entries (never numeric: the move menu's targets are). */
+const STACK_RAISE = 'stack:raise';
+const STACK_LOWER = 'stack:lower';
 const EYE_SVG = iconAt('eye', LEGEND_ICON_PX);
 const EYE_OFF_SVG = iconAt('eye-off', LEGEND_ICON_PX);
 const GEAR_SVG = iconAt('gear', LEGEND_ICON_PX);
@@ -167,6 +187,10 @@ export class InputsUI {
     private mobileLayout = false;
     /** Pane move/merge hook — when set, rows get a "Move to" menu + become drag-to-pane sources. */
     private moveApi: LegendMoveApi | null = null;
+    /** Overlay restacking hook — when set, a row's menus offer to step it forward or back. */
+    private stackApi: LegendStackApi | null = null;
+    /** What {@link orderRows} last ordered the rows by (skips unchanged frames). */
+    private rowOrderKey = '';
     /** Host-contributed legend actions, resolved PER ROW at render time (see setLegendActions). */
     private legendActions: ((indicatorId: string) => LegendActionView[]) | null = null;
     /** Host-contributed callout bubbles, resolved PER ROW at render time (see setLegendCallouts). */
@@ -336,6 +360,11 @@ export class InputsUI {
     /** Enable legend-driven move/merge (a "Move to" menu + drag-to-pane). Null disables it. */
     setMoveApi(api: LegendMoveApi | null): void {
         this.moveApi = api;
+    }
+
+    /** Enable the context menu's "Bring in front of …" entry for overlay indicators. Null disables it. */
+    setStackApi(api: LegendStackApi | null): void {
+        this.stackApi = api;
     }
 
     /**
@@ -516,16 +545,22 @@ export class InputsUI {
         }
         this.moveTargets = items.map((it) => it.target);
         this.moveMenuId = id;
-        const descriptors: MenuItemDescriptor[] = items.map((it, i) => ({ id: String(i), label: it.label }));
+        // Restacking within the pane leads: it is where an overlay hidden behind the candles
+        // is looked for.
+        const stack = this.stackItems(id);
+        const moves: MenuItemDescriptor[] = items.map((it, i) => ({ id: String(i), label: it.label }));
+        if (moves[0] && stack.length > 0) moves[0].separatorBefore = true;
+        const descriptors = [...stack, ...moves];
         if (!this.moveMenu) {
             this.moveMenu = new Menu({
                 host: this.container,
                 items: descriptors,
                 placement: 'bottom-start',
                 onSelect: (itemId) => {
-                    const target = this.moveTargets[Number(itemId)];
                     const rowId = this.moveMenuId;
-                    if (target && rowId) api.move(rowId, target);
+                    if (!rowId || this.runStackItem(itemId, rowId)) return;
+                    const target = this.moveTargets[Number(itemId)];
+                    if (target) api.move(rowId, target);
                 },
             });
         } else {
@@ -541,18 +576,24 @@ export class InputsUI {
 
     // ── legend row context menu (right-click) ───────────────────────────────
 
-    /** Open the row's action menu at the pointer. One entry today: the values toggle. */
+    /** Open the row's action menu at the pointer: an overlay indicator's restacking steps
+     *  first (where a layer is there to pass), then the values toggle. */
     private openRowMenu(id: string, x: number, y: number): void {
         this.closeRowMenu();
         this.closeMoveMenu();
         const row = this.rows.get(id);
         if (!row) return;
         this.rowMenuId = id;
-        const items: MenuItemDescriptor[] = [{
-            id: 'values',
-            label: 'Indicator values',
-            checked: this.rowValuesShown(row),
-        }];
+        const stack = this.stackItems(id);
+        const items: MenuItemDescriptor[] = [
+            ...stack,
+            {
+                id: 'values',
+                label: 'Indicator values',
+                checked: this.rowValuesShown(row),
+                separatorBefore: stack.length > 0,
+            },
+        ];
         if (!this.rowMenu) {
             this.rowMenu = new Menu({
                 host: this.container,
@@ -561,8 +602,10 @@ export class InputsUI {
                 // Right-click action menu — checked state reads as a leading ✓ (see the kit Menu).
                 checkmarks: true,
                 onSelect: (itemId) => {
-                    if (itemId !== 'values' || !this.rowMenuId) return;
-                    const target = this.rows.get(this.rowMenuId);
+                    const rowId = this.rowMenuId;
+                    if (!rowId || this.runStackItem(itemId, rowId)) return;
+                    if (itemId !== 'values') return;
+                    const target = this.rows.get(rowId);
                     if (!target) return;
                     target.showValues = !this.rowValuesShown(target);
                     this.renderRowValues(target);
@@ -576,6 +619,59 @@ export class InputsUI {
 
     private closeRowMenu(): void {
         this.rowMenu?.close();
+    }
+
+    /** A row's one-step restacking entries (forward, then back), for whichever neighbor exists. */
+    private stackItems(id: string): MenuItemDescriptor[] {
+        const api = this.stackApi;
+        if (!api) return [];
+        const items: MenuItemDescriptor[] = [];
+        const forward = this.stackLabel('Bring in front of', api.above(id), 'the indicator in front');
+        if (forward) items.push({ id: STACK_RAISE, label: forward });
+        const back = this.stackLabel('Send behind', api.below(id), 'the indicator behind');
+        if (back) items.push({ id: STACK_LOWER, label: back });
+        return items;
+    }
+
+    private stackLabel(verb: string, neighbor: LegendStackNeighbor, fallback: string): string | null {
+        if (neighbor === null) return null;
+        if (neighbor === 'price') return `${verb} price`;
+        return `${verb} ${this.rows.get(neighbor.indicator)?.title ?? fallback}`;
+    }
+
+    /** Run a restacking entry; false when `itemId` is not one. */
+    private runStackItem(itemId: string, rowId: string): boolean {
+        if (itemId === STACK_RAISE) this.stackApi?.raise(rowId);
+        else if (itemId === STACK_LOWER) this.stackApi?.lower(rowId);
+        else return false;
+        return true;
+    }
+
+    /**
+     * List each pane's rows front-most first, the way the indicators stack (the object
+     * tree's order). `backToFront` is the paint order; rows it doesn't name keep their
+     * place after the others. Cheap to call every frame: no-op while nothing changed.
+     */
+    orderRows(backToFront: readonly string[]): void {
+        const key = `${backToFront.join(',')}|${[...this.rows.values()].map((r) => `${r.id}@${r.paneId}`).join(',')}`;
+        if (key === this.rowOrderKey) return;
+        this.rowOrderKey = key;
+        const rank = new Map(backToFront.map((id, i) => [id, i]));
+        for (const lg of this.legends.values()) {
+            const els = [...this.rows.values()].filter((r) => r.el.parentElement === lg).map((r) => r.el);
+            const dom = [...lg.children];
+            const ofEl = new Map([...this.rows.values()].map((r) => [r.el, r.id]));
+            const at = (el: HTMLElement): number => rank.get(ofEl.get(el)!) ?? -1;
+            els.sort((a, b) => {
+                const ra = at(a);
+                const rb = at(b);
+                if (ra >= 0 && rb >= 0) return rb - ra;
+                if (ra >= 0 || rb >= 0) return ra >= 0 ? -1 : 1;
+                return dom.indexOf(a) - dom.indexOf(b);
+            });
+            const anchor = this.foldToggle?.parentElement === lg ? this.foldToggle : null;
+            for (const el of els) lg.insertBefore(el, anchor);
+        }
     }
 
     /** Move a legend row to another pane (indicator merged/moved), tidying an emptied container. */

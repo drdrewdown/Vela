@@ -347,9 +347,17 @@ function paneItems(snap: TreeSnapshot, pane: PaneInfo, units: DrawUnit[]): TreeI
         return [...unitItems, ...rows];
     }
     const zOf = new Map(snap.zOrder.map((e) => [e.id, e.z]));
-    const rows: Array<{ item: TreeItem; z: number }> = pane.indicators.map((i) => ({ item: { kind: 'row', row: indicatorRow(i) }, z: zOf.get(i.id) ?? 0 }));
-    if (pane.kind === 'price') rows.push({ item: { kind: 'row', row: priceRow() }, z: snap.candleZ });
-    rows.sort((a, b) => b.z - a.z);
+    // `zOrder` lists the indicators back to front as they paint, so on a shared key its
+    // order (not the pane's listing order) says which one is in front.
+    const rank = new Map(snap.zOrder.map((e, i) => [e.id, i]));
+    const rows: Array<{ item: TreeItem; z: number; rank: number }> = pane.indicators.map((i) => ({
+        item: { kind: 'row', row: indicatorRow(i) },
+        z: zOf.get(i.id) ?? 0,
+        rank: rank.get(i.id) ?? -1,
+    }));
+    // The candles paint before an indicator sharing their key.
+    if (pane.kind === 'price') rows.push({ item: { kind: 'row', row: priceRow() }, z: snap.candleZ, rank: -Infinity });
+    rows.sort((a, b) => b.z - a.z || b.rank - a.rank);
     if (!snap.interleave) return [...unitItems, ...rows.map((r) => r.item)];
     const entries = [...rows, ...units.map((unit) => ({ item: { kind: 'unit', unit } as TreeItem, z: unitZ(unit) }))];
     // Front-first; on a tie the series row leads — a drawing at a series' own z paints under it.

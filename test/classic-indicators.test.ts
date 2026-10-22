@@ -110,7 +110,8 @@ describe('classic catalog registration', () => {
     });
 
     it('legend short titles match the library declarations', () => {
-        // Second argument of each published `indicator("…", "…")` in the LuxAlgo library.
+        // Second argument of each published `indicator("…", "…")` in the LuxAlgo library;
+        // the library publishes the regression as one study, so LSMA and LRS name themselves.
         const libraryShort: Record<string, string> = {
             'percent-b': '%B',
             '52-week-high-low': '52W H/L',
@@ -145,7 +146,8 @@ describe('classic catalog registration', () => {
             'keltner-channels': 'KC',
             'klinger-oscillator': 'KVO',
             'know-sure-thing': 'KST',
-            'linear-regression': 'LinReg',
+            lsma: 'LSMA',
+            'linear-regression-slope': 'LRS',
             macd: 'MACD',
             'ma-envelope': 'MA Env',
             'mass-index': 'MI',
@@ -229,6 +231,42 @@ describe('classic catalog registration', () => {
         // The offset shifts the line without changing its values.
         const shifted = smaSpec.compute(bars, { ...classicDescriptor(smaSpec).defaultInputs(), offset: 2 }).plots[0]!;
         expect(shifted.values[30]).toBe(smaOut.values[28]);
+    });
+
+    it('ships the regression as an LSMA on price and a Linear Regression Slope in its own pane', () => {
+        const bars = Array.from({ length: 200 }, (_, i) => bar(100 + 10 * Math.sin(i / 20) + i * 0.1, i));
+        const closes = bars.map((b) => b.close);
+        const byType = new Map(classicSpecs.map((s) => [s.type, s] as const));
+        expect(byType.has('linear-regression')).toBe(false);
+
+        const lsma = byType.get('lsma')!;
+        expect(lsma.title).toBe('Least Squares Moving Average');
+        expect(lsma.overlay).toBe(true);
+        const lsmaOut = lsma.compute(bars, classicDescriptor(lsma).defaultInputs());
+        expect(lsmaOut.plots).toHaveLength(1);
+        expect(lsmaOut.plots[0]!.values).toEqual(linreg(closes, 25, 0));
+        // The offset steps back along each bar's own fit, like the Moving Average study's LSMA type.
+        const stepped = lsma.compute(bars, { ...classicDescriptor(lsma).defaultInputs(), length: 30, offset: 3 }).plots[0]!;
+        expect(stepped.values).toEqual(linreg(closes, 30, 3));
+
+        const slope = byType.get('linear-regression-slope')!;
+        expect(slope.title).toBe('Linear Regression Slope');
+        expect(slope.overlay).toBe(false);
+        const slopeOut = slope.compute(bars, classicDescriptor(slope).defaultInputs());
+        const curve = linreg(closes, 100, 0);
+        const prior = linreg(closes, 100, 1);
+        expect(slopeOut.plots[0]!.values[150]).toBeCloseTo(curve[150]! - prior[150]!, 10);
+        expect(slopeOut.plots[0]!.values[98]).toBeNaN();
+        expect(slopeOut.levels?.map((l) => l.price)).toEqual([0]);
+    });
+
+    it('never leaves a study pane empty: each pane study keeps a visible plot in its own pane', () => {
+        const bars = Array.from({ length: 400 }, (_, i) => bar(100 + 10 * Math.sin(i / 15) + (i % 7), i, 1000 + (i % 50) * 10));
+        for (const spec of classicSpecs.filter((s) => !s.overlay)) {
+            const out = spec.compute(bars, classicDescriptor(spec).defaultInputs());
+            const inPane = out.plots.filter((p) => !p.overlay && p.display?.pane !== false);
+            expect(inPane.length, spec.type).toBeGreaterThan(0);
+        }
     });
 
     it('every compute yields bar-aligned plot arrays on synthetic bars', () => {

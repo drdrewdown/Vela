@@ -410,6 +410,9 @@ export class ObjectTree extends SidePanel {
         for (const ev of REFRESH_EVENTS) {
             this.unsubs.push(chart.on(ev, () => this.refresh()));
         }
+        // The stacking rides the renderer config: a reorder made on the chart (the legend's
+        // "Bring in front of …") reaches the tree through it.
+        this.unsubs.push(chart.renderer.onConfigChanged(() => this.refresh()));
         // Selection both stores and repaints, in that order: a refresh triggered before the id
         // is recorded would paint the previous selection and never come back to fix it.
         this.unsubs.push(

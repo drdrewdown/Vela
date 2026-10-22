@@ -57,7 +57,13 @@ export interface NativeIndicatorContext {
     bars(): readonly OHLCV[];
     /** Market-data access (trades / capabilities) for data-driven natives. */
     readonly data: DataControl;
-    /** Push a fresh render output; the chart mounts it (first call) or patches it (subsequent). */
+    /**
+     * Push a fresh render output; the chart mounts it (first call) or patches it (subsequent).
+     * Series payloads are index-aligned: one slot per bar of `bars()` AS IT STANDS AT THE
+     * CALL, first slot on its first bar. The chart keeps an emitted output on those bars
+     * when history later lands in front of them (or the oldest bars are trimmed), until the
+     * next emit replaces it.
+     */
     emit(out: NativeIndicatorOutput): void;
     /**
      * Push a BESPOKE render payload to the renderer's native layer for this indicator's type (for a
@@ -77,7 +83,8 @@ export interface NativeIndicatorContext {
 export interface NativeIndicator {
     /** Begin: compute + emit the first output. */
     start(ctx: NativeIndicatorContext, inputs: Record<string, InputValue>): void;
-    /** A live tick arrived (bars changed) — recompute + emit. */
+    /** The bars changed — a live tick, older history landing, or the candles re-derived
+     *  by a price style — recompute + emit. */
     onBars(): void;
     /** The viewport changed (scroll/zoom) — for range-aware natives (see `reactsToViewport`). */
     onViewport(range: VisibleRange): void;
@@ -89,7 +96,10 @@ export interface NativeIndicator {
     suspend(): void;
     /** Shown again — resume + re-emit. */
     resume(): void;
-    /** Removed — full teardown (clear caches, stop timers). Only ever called after `start`. */
+    /** Removed, or replaced by a fresh instance (a market switch stops it as the switch
+     *  begins) — full teardown (clear caches, stop timers). Only ever called after `start`.
+     *  Pushes made inside `stop()` still land (a layer-backed native clears its channel
+     *  here); once it returns, the context drops every push and emit. */
     stop(): void;
 }
 
@@ -116,6 +126,17 @@ export interface NativeIndicatorDescriptor {
     readonly overlay: boolean;
     /** Whether instances react to viewport changes (drives the orchestrator's viewport poke). */
     readonly reactsToViewport?: boolean;
+    /**
+     * Compute only over the chart's COMPLETE history, the way script indicators do. While
+     * the history is still loading (a deep load streaming in, a source healing a cold
+     * symbol, a deeper depth being fetched), the instance is not started — its legend row
+     * shows a loading state, and `ready` / `indicator:added` wait — or, when it already
+     * runs, `onBars()` is held and the previous output stays on its bars. The first
+     * compute (or the re-run) comes once the history completes, so values computed over
+     * a partial history never paint and never repaint. Absent ⇒ the instance starts on
+     * the first bars and `onBars()` fires for every history chunk as it lands.
+     */
+    readonly waitsForHistory?: boolean;
     /** Marks the type as beta — surfaced in the catalog so a host "add indicator" UI can badge it. */
     readonly beta?: boolean;
     /**

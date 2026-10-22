@@ -149,6 +149,8 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     private barTransform: BarTransform | null = null;
     // ── chart-type data engines (SDK): one lazily-created engine per style id ──
     private readonly typeEngines = new Map<string, SeriesDataEngine>();
+    /** Engines suspended by the chart — their host pushes are dropped until they resume. */
+    private readonly suspendedEngines = new WeakSet<SeriesDataEngine>();
     /** Last-seen chart-type settings per type id (dialog edits + persisted restores) —
      *  replayed into a data engine whenever one is (re)created. */
     private readonly typeSettings = new Map<string, Record<string, unknown>>();
@@ -503,12 +505,17 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                     this.mergeHistoryIntoReplay(bars); // a replay started before the history converged keeps its cut
                     return;
                 }
-                this.setBarSeries(bars, painted ? { preserveView: true } : undefined);
+                const repaint = painted;
+                this.setBarSeries(bars, repaint ? { preserveView: true } : undefined);
                 if (!painted && bars.length > 0) {
                     painted = true;
                     if (opts.firstLoad) this.activateBarLayers();
                     if (!final) this.historyState = 'backfill';
                 }
+                // A deeper snapshot is a prepend like any backfill chunk: the consumers that
+                // follow the history as it grows re-run over it. The final one is followed by
+                // the completion, which pokes everyone anyway.
+                if (repaint && !final) this.notifySessionsBars('backfill');
             };
             const abort = new AbortController();
             this.progressiveAbort = abort;
@@ -817,9 +824,17 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                 // bucket open-time, so on a same-timeframe switch the old market's cells would
                 // land exactly on the new market's first candles.
                 if (this.activeEngineStyle) {
-                    this.typeEngines.get(this.activeEngineStyle)?.suspend();
+                    this.suspendTypeEngine(this.typeEngines.get(this.activeEngineStyle));
                     this.renderer.setNativeData?.(this.activeEngineStyle, undefined);
                     this.renderer.setNativeData?.(`${this.activeEngineStyle}-pending`, []);
+                }
+                // Native indicators ride the old market too, and a layer payload is just as
+                // time-keyed: with no bars on the axis, every entry maps to the same slot. Release
+                // them now (the post-load restart builds fresh instances) and blank their channels.
+                for (const record of this.registry.all()) {
+                    if (!record.native?.started) continue;
+                    this.stopNativeInstance(record.native);
+                    this.renderer.setNativeData?.(this.nativeChannel(record), undefined);
                 }
             }
 
@@ -874,6 +889,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             this.restartChartTypeEngine();
             this.reexecuteIndicators();
         }
+        if (depthOnly) this.releaseHeldNatives();
         if (!replayBack) this.startLive(); // stopped above on every path, depth-only included
         if (identityChanged) {
             this.events.emit('market:changed', { symbol: m.symbol ?? 'TEST', timeframe: m.timeframe ?? '60', prev });
@@ -891,9 +907,8 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     private restartNativeIndicators(): void {
         for (const record of this.registry.all()) {
             if (!record.native) continue;
-            if (record.native.started) record.native.instance.stop();
+            this.stopNativeInstance(record.native);
             record.native.instance = record.native.descriptor.create();
-            record.native.started = false;
             record.pendingStructural = true; // the next emitted model remounts over the old visuals
             if (record.hidden) {
                 record.native.stale = true;
@@ -910,6 +925,23 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         for (const engine of this.typeEngines.values()) engine.stop();
         this.typeEngines.clear();
         if (this.activeEngineStyle) void this.startChartTypeEngine(this.activeEngineStyle);
+    }
+
+    /** Suspend a chart-type engine. Its host drops every push until the engine resumes:
+     *  work it left in flight lands in its own state, never on the scene. */
+    private suspendTypeEngine(engine: SeriesDataEngine | undefined): void {
+        if (!engine) return;
+        engine.suspend();
+        this.suspendedEngines.add(engine);
+    }
+
+    /** Stop a running native instance, then revoke its context: the teardown inside `stop()`
+     *  still reaches its layer, but work it left in flight (a fetch resolving later) does not. */
+    private stopNativeInstance(native: NonNullable<IndicatorRecord['native']>): void {
+        if (native.started) native.instance.stop();
+        native.started = false;
+        native.revokeContext?.();
+        native.revokeContext = undefined;
     }
 
     /**
@@ -1514,7 +1546,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         const def = chartType(id);
         const want = def?.dataEngine ? id : null;
         if (want === this.activeEngineStyle) return;
-        if (this.activeEngineStyle) this.typeEngines.get(this.activeEngineStyle)?.suspend();
+        if (this.activeEngineStyle) this.suspendTypeEngine(this.typeEngines.get(this.activeEngineStyle));
         this.activeEngineStyle = want;
         if (want) void this.startChartTypeEngine(want);
     }
@@ -1526,6 +1558,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         if (this.activeEngineStyle !== id) return; // the style left again while loading
         const existing = this.typeEngines.get(id);
         if (existing) {
+            this.suspendedEngines.delete(existing); // before resume(): its re-push must land
             existing.resume();
             return;
         }
@@ -1538,6 +1571,9 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         // the user's values — never on schema defaults they edited away.
         const stored = this.typeSettings.get(id);
         if (stored) engine.onSettings?.(stored);
+        // Only the chart's current, unsuspended engine reaches the scene — an engine stopped
+        // by a rebuild (market switch, replay) or suspended mid-fetch still holds this host.
+        const reachesScene = (): boolean => this.typeEngines.get(id) === engine && !this.suspendedEngines.has(engine);
         engine.start({
             symbol: this.config.market.symbol ?? 'TEST',
             timeframe: this.config.market.timeframe ?? '60',
@@ -1545,8 +1581,12 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             session: this.config.market.session,
             bars: () => this.bars,
             data: this.dataControl,
-            pushData: (data) => this.renderer.setNativeData?.(id, data),
-            pushPending: (ranges) => this.renderer.setNativeData?.(`${id}-pending`, ranges),
+            pushData: (data) => {
+                if (reachesScene()) this.renderer.setNativeData?.(id, data);
+            },
+            pushPending: (ranges) => {
+                if (reachesScene()) this.renderer.setNativeData?.(`${id}-pending`, ranges);
+            },
         });
     }
 
@@ -1555,8 +1595,9 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      * a pre-load style change is picked up by init's `setBarSeries`. With bars loaded, the
      * view is rebuilt in place (viewport preserved) and every Pine indicator re-executes:
      * its input data changed wholesale, which a streaming session's incremental context
-     * cannot absorb. Native indicators need nothing — their layers read the renderer's
-     * bars per frame.
+     * cannot absorb. Natives computed from `ctx.bars()` re-run over the new candles (a
+     * synthetic price style is their source too); layer natives that read the renderer's
+     * bars per frame ignore the poke.
      */
     private syncBarTransform(style: unknown): void {
         const transform = barTransformFor(style);
@@ -1566,6 +1607,10 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         this.bars = transform ? transform.full(this.rawBars) : this.rawBars;
         this.renderer.setBars(this.bars, { preserveView: true });
         this.reexecuteIndicators();
+        if (this.switchingMarket) return; // the restart after the load computes over the new view anyway
+        for (const record of this.registry.all()) {
+            if (record.native?.started && record.renderHandle && !record.hidden) this.pokeNative(record);
+        }
     }
 
     /**
@@ -1710,9 +1755,40 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             if (record.session) {
                 record.pendingCause = cause;
                 record.session.notifyBars(reason);
-            } else if (record.native) record.native.instance.onBars();
+            } else if (record.native) this.pokeNative(record);
         }
         if (this.activeEngineStyle) this.typeEngines.get(this.activeEngineStyle)?.onBars?.();
+    }
+
+    /**
+     * Tell a native its bars changed. A `waitsForHistory` native ignores every change while
+     * the history is still loading — a backfill chunk, a deeper snapshot, a tick arriving
+     * meanwhile — and its output stays on its bars through the anchor its emit carried.
+     * Once the history is complete, a held one starts and a running one re-runs.
+     */
+    private pokeNative(record: IndicatorRecord): void {
+        const native = record.native!;
+        if (!native.descriptor.waitsForHistory) {
+            native.instance.onBars();
+            return;
+        }
+        if (this.historyState === 'backfill') return;
+        if (native.heldForHistory) {
+            native.heldForHistory = false;
+            const handle = this.handles.get(record.id);
+            if (handle) void this.startNativeIndicator(record.id, handle);
+            return;
+        }
+        if (native.started) native.instance.onBars();
+    }
+
+    /** Start the natives still held for a history that has completed without poking them
+     *  (a depth-only switch finishes its trim while the switch gates every poke). */
+    private releaseHeldNatives(): void {
+        if (this.historyState === 'backfill') return;
+        for (const record of this.registry.all()) {
+            if (record.native?.heldForHistory && !record.hidden) this.pokeNative(record);
+        }
     }
 
     /** Gap healing needs a ranged feed and a provider-backed series (offline `data` has no source). */
@@ -2072,7 +2148,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         record?.session?.stop();
         // A native added hidden and never started (a restored ledger entry) has nothing
         // to tear down — and its `stop()` may not expect to run without a context.
-        if (record?.native?.started) record.native.instance.stop();
+        if (record?.native) this.stopNativeInstance(record.native);
         this.handles.delete(id);
         if (record?.renderHandle) this.renderer.removeIndicator(record.renderHandle);
         const paneId = record?.model?.paneId;
@@ -2225,7 +2301,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         for (const record of this.registry.all()) {
             this.settleCode(record, { ok: false, error: new Error('[vela] updateCode — the chart was destroyed.') });
             record.session?.stop();
-            if (record.native?.started) record.native.instance.stop();
+            if (record.native) this.stopNativeInstance(record.native);
         }
         for (const engine of this.typeEngines.values()) engine.stop(); // chart-type data engines (SDK)
         this.typeEngines.clear();
@@ -2389,16 +2465,22 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         try {
             await this.readyPromise;
             const record = this.registry.get(id);
-            if (!record?.native) return; // removed during the await
-            if (record.hidden) {
-                // Hidden before it ever ran (a restored hidden study, or hidden in the tick
-                // it was added): keep a legend row so the eye can bring it back, and mark
-                // it stale so showing starts the instance — there is no compute to resume.
-                record.native.stale = true;
-                if (!record.renderHandle) this.mountPlaceholder(id, record, this.buildNativeModel(record, {}));
+            if (!record?.native || record.hidden) return; // removed/hidden during the await
+            const native = record.native;
+            if (native.started) return; // a release raced another start of the same instance
+            if (native.descriptor.waitsForHistory && this.historyState === 'backfill') {
+                native.heldForHistory = true;
+                this.mountNativePlaceholder(id, record);
                 return;
             }
+            native.heldForHistory = false;
             const channel = this.nativeChannel(record);
+            // One context per start: once the instance is stopped, nothing it left in flight
+            // may reach the scene (a stopped market's payload, or a removed indicator's).
+            let alive = true;
+            native.revokeContext = () => {
+                alive = false;
+            };
             const ctx: NativeIndicatorContext = {
                 id,
                 chartId: this.aetherChartId,
@@ -2408,14 +2490,18 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                 session: this.config.market.session,
                 bars: () => this.bars,
                 data: this.dataControl,
-                emit: (out) => this.applyModel(id, this.buildNativeModel(record, out)),
-                pushData: (data) => this.renderer.setNativeData?.(channel, data),
+                emit: (out) => {
+                    if (alive) this.applyModel(id, this.buildNativeModel(record, out, this.bars[0]?.time));
+                },
+                pushData: (data) => {
+                    if (alive) this.renderer.setNativeData?.(channel, data);
+                },
                 setStatus: (status) => {
-                    if (record.renderHandle && !record.hidden) this.renderer.setIndicatorStatus?.(record.renderHandle, status);
+                    if (alive && record.renderHandle && !record.hidden) this.renderer.setIndicatorStatus?.(record.renderHandle, status);
                 },
             };
-            record.native.instance.start(ctx, record.inputValues);
-            record.native.started = true;
+            native.instance.start(ctx, record.inputValues);
+            native.started = true;
         } catch (err) {
             this.fail(id, handle, err);
         }
@@ -2430,8 +2516,14 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         return descriptor.multiInstance ? nativeInstanceChannel(type, record.id) : type;
     }
 
-    /** Wrap a native indicator's emitted visuals into a full IndicatorModel, tagged `native`. */
-    private buildNativeModel(record: IndicatorRecord, out: NativeIndicatorOutput): IndicatorModel {
+    /**
+     * Wrap a native indicator's emitted visuals into a full IndicatorModel, tagged `native`.
+     * `anchorTime` is the first bar the output is index-aligned to — the chart's first bar
+     * when it emitted. Without it the renderer pins the output's first slot to whatever the
+     * first bar is NOW, so history landing in front of a computed output (or the oldest
+     * bars trimmed under it) would slide the whole plot by that many bars.
+     */
+    private buildNativeModel(record: IndicatorRecord, out: NativeIndicatorOutput, anchorTime?: number): IndicatorModel {
         const d = record.native!.descriptor;
         const type = record.native!.type;
         const channel = this.nativeChannel(record);
@@ -2442,6 +2534,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             overlay: d.overlay,
             paneHint: d.paneHint,
             native: { type, ...(channel !== type ? { channel } : {}) },
+            ...(anchorTime != null ? { anchorTime } : {}),
             ...(d.legend === false ? { legend: false } : {}),
             ...(out.paneAxis != null ? { paneAxis: out.paneAxis } : {}),
             series: out.series ?? [],
@@ -2508,9 +2601,10 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     private mountPlaceholder(id: string, record: IndicatorRecord, model: IndicatorModel): void {
         const paneId = this.routePane(id, model, record.options ?? {});
         this.placeModel(model, id, paneId);
-        record.model = model;
-        this.ensurePaneFor(paneId);
+        record.model = model; // keeps pane routing + remove-time pane cleanup consistent
+        const paneCreated = this.ensurePaneFor(paneId);
         record.renderHandle = this.renderer.mountIndicator(model);
+        if (paneCreated) this.events.emit('pane:changed', undefined);
         record.pendingStructural = true; // the first computed model remounts over the placeholder
         if (record.hidden) {
             this.renderer.setIndicatorVisible?.(record.renderHandle, false);
@@ -2535,11 +2629,33 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         const paneId = this.routePane(id, model, record.options ?? {});
         this.placeModel(model, id, paneId);
         record.model = model;
-        this.ensurePaneFor(paneId);
+        const paneCreated = this.ensurePaneFor(paneId);
         record.renderHandle = this.renderer.mountIndicator(model);
+        if (paneCreated) this.events.emit('pane:changed', undefined);
         record.pendingStructural = true; // the first emit after show remounts over this row
         this.renderer.setIndicatorVisible?.(record.renderHandle, false);
         this.announce(record, this.handles.get(id));
+    }
+
+    /**
+     * The legend row of a native HELD for the history (see `waitsForHistory`): an empty
+     * model with the title and inputs schema, spinning, not announced — exactly a script
+     * indicator's loading placeholder, so `ready`/`indicator:added` and `inspect()` still
+     * mean "it produced output". A record that already has a row (restarted over a new
+     * market, or shown again) keeps it and only spins. The first emit remounts over it.
+     */
+    private mountNativePlaceholder(id: string, record: IndicatorRecord): void {
+        record.pendingStructural = true;
+        if (!record.renderHandle) {
+            const model = this.buildNativeModel(record, {});
+            const paneId = this.routePane(id, model, record.options ?? {});
+            this.placeModel(model, id, paneId);
+            record.model = model;
+            const paneCreated = this.ensurePaneFor(paneId);
+            record.renderHandle = this.renderer.mountIndicator(model);
+            if (paneCreated) this.events.emit('pane:changed', undefined);
+        }
+        this.setLoading(record, true);
     }
 
     /** Flip the record's loading state and reflect it in the legend row (spinner on/off). */
@@ -2548,13 +2664,18 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         if (record.renderHandle && !record.hidden) this.renderer.setIndicatorStatus?.(record.renderHandle, loading ? 'loading' : 'idle');
     }
 
-    private ensurePaneFor(paneId: string): void {
-        if (!this.paneOrder.includes(paneId)) this.paneOrder.push(paneId);
+    /** Make sure the renderer has the pane; true when it is new to the layout (the caller
+     *  emits `pane:changed` once the indicator's model sits on it, so `list()` shows it). */
+    private ensurePaneFor(paneId: string): boolean {
+        const created = !this.paneOrder.includes(paneId);
+        if (created) this.paneOrder.push(paneId);
+        // No heightWeight: the renderer keeps the weight an existing pane already has.
         this.renderer.ensurePane({
             id: paneId,
             kind: paneId === 'price' ? 'price' : 'study',
             order: this.paneOrder.indexOf(paneId),
         });
+        return created;
     }
 
     /** True when any (still-registered) indicator sits on the given pane. */
@@ -2596,12 +2717,14 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         for (const paneId of this.paneOrder) {
             // The price pane always shows; a study pane only while it holds indicators.
             if (paneId !== 'price' && !byPane.has(paneId)) continue;
+            const heightWeight = this.renderer.paneHeightWeight?.(paneId) ?? null;
             panes.push({
                 id: paneId,
                 kind: paneId === 'price' ? 'price' : 'study',
                 order: panes.length,
                 collapsed: this.collapsedPanes.has(paneId),
                 maximized: this.maximizedPaneId === paneId,
+                ...(heightWeight !== null ? { heightWeight } : {}),
                 indicators: byPane.get(paneId) ?? [],
             });
         }
@@ -2636,6 +2759,23 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     maximizePane(paneId: string | null): void {
         this.maximizedPaneId = paneId;
         this.renderer.setPaneMaximized?.(paneId);
+        this.events.emit('pane:changed', undefined);
+    }
+
+    setPaneHeightWeight(paneId: string, weight: number): void {
+        if (!this.renderer.setPaneHeightWeight) {
+            console.warn('[vela] the active renderer does not support pane sizing — chart.panes.setHeightWeight ignored.');
+            return;
+        }
+        if (typeof weight !== 'number' || !Number.isFinite(weight) || weight <= 0) {
+            console.warn(`[vela] chart.panes.setHeightWeight: weight must be a positive number (got ${String(weight)}).`);
+            return;
+        }
+        if (!this.existingPaneIds().includes(paneId)) {
+            console.warn(`[vela] chart.panes.setHeightWeight: no pane "${paneId}".`);
+            return;
+        }
+        this.renderer.setPaneHeightWeight(paneId, weight);
         this.events.emit('pane:changed', undefined);
     }
 
@@ -2756,6 +2896,10 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                 this.maximizedPaneId = a.maximized ? a.paneId : null;
                 this.events.emit('pane:changed', undefined);
                 break;
+            case 'resize':
+                // The renderer holds the weights; `list()` reads them back.
+                this.events.emit('pane:changed', undefined);
+                break;
         }
     }
 
@@ -2809,15 +2953,17 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             const paneId = this.routePane(id, model, record.options ?? {});
             this.placeModel(model, id, paneId);
             record.model = model;
-            this.ensurePaneFor(paneId);
+            const paneCreated = this.ensurePaneFor(paneId);
             record.renderHandle = this.renderer.mountIndicator(model);
             record.pendingStructural = false;
+            if (paneCreated) this.events.emit('pane:changed', undefined);
             this.announce(record, handle);
             return true;
         }
 
         let paneId = record.model?.paneId ?? 'price';
         const prevOwnScale = record.model?.ownScale === true;
+        let rerouted = false;
         if (record.loading && !record.paneLocked) {
             // First COMPUTED model after the placeholder. The placeholder's pane came from
             // the prepare-time overlay guess — if the real model routes differently, move
@@ -2834,6 +2980,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                 this.ensurePaneFor(routed);
                 record.pendingStructural = true;
                 paneId = routed;
+                rerouted = true;
             }
         }
         this.placeModel(model, id, paneId);
@@ -2848,6 +2995,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         } else {
             this.renderer.updateIndicator(record.renderHandle, modelToValuePatch(model));
         }
+        if (rerouted) this.events.emit('pane:changed', undefined);
         if (record.loading) this.setLoading(record, false);
         this.announce(record, handle);
         return true;
@@ -2878,13 +3026,16 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         return overlay ? 'price' : `pane-${id}`;
     }
 
-    /** Each named value series' last plotted value — the model is the one source every
-     *  engine fills, so this works without an execution context. */
-    private static plotsAtLastBar(model: IndicatorModel): Record<string, number | null> {
+    /** Each named value series' value on the chart's last bar — the model is the one source
+     *  every engine fills, so this works without an execution context. Points past the last
+     *  bar (a series shifted forward) are skipped by time. */
+    private static plotsAtLastBar(model: IndicatorModel, lastBarTime: number | undefined): Record<string, number | null> {
         const out: Record<string, number | null> = {};
         for (const spec of model.series) {
             if (!isLineLikeSeries(spec)) continue;
-            out[spec.title] = spec.points[spec.points.length - 1]?.value ?? null;
+            let i = spec.points.length - 1;
+            if (lastBarTime !== undefined) while (i >= 0 && spec.points[i]!.time > lastBarTime) i -= 1;
+            out[spec.title] = spec.points[i]?.value ?? null;
         }
         return out;
     }
@@ -2966,7 +3117,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             // whatever produced this run.
             forming: this.config.live && this.bars.length > 0,
             complete: this.historyState !== 'backfill',
-            plots: EngineOrchestrator.plotsAtLastBar(model),
+            plots: EngineOrchestrator.plotsAtLastBar(model, lastBar?.time),
             vars: snapshot?.variables ?? {},
             ...(snapshot?.strategy ? { strategy: snapshot.strategy } : {}),
             warnings: snapshot?.warnings ?? [],
@@ -3060,11 +3211,14 @@ function sameInputValue(a: InputValue, b: InputValue): boolean {
 /**
  * A copy of a mounted model with every painted output emptied. The structure — series
  * specs (ids, titles, styles), pane routing, inputs — survives, so an idempotent
- * remount keeps the legend and settings while nothing stale paints.
+ * remount keeps the legend and settings while nothing stale paints. The anchor goes:
+ * nothing index-aligned is left to place, and the old market's bar time matches none
+ * of the incoming bars (the renderer would warn on every switch).
  */
 function blankedModel(model: IndicatorModel): IndicatorModel {
+    const { anchorTime: _anchor, ...rest } = model;
     return {
-        ...model,
+        ...rest,
         series: model.series.map((s) => (s.kind === 'candle' || s.kind === 'bar' ? { ...s, bars: [] } : s.kind === 'markers' ? { ...s, markers: [] } : { ...s, points: [] })),
         fills: [],
         backgrounds: [],
@@ -3091,10 +3245,16 @@ export function modelToValuePatch(model: IndicatorModel): ValuePatch {
     // The dirty span from each series' ENDS: Vela series are time-ascending, so the first and
     // last elements bound the span without a walk — O(series), never O(points). A streamed
     // native re-emits every live tick; walking 24 series × 24k bars cost ~7 ms per tick.
-    const span = (arr: ReadonlyArray<{ time: number }>): void => {
-        if (arr.length === 0) return;
-        const a = arr[0]!.time;
-        const b = arr[arr.length - 1]!.time;
+    // A series may carry EMPTY slots (a bar it has no value for — index alignment keeps them),
+    // so each end steps inward to its first filled slot: still O(1) per series in practice.
+    const span = (arr: ReadonlyArray<{ time: number } | undefined>): void => {
+        let i = 0;
+        while (i < arr.length && !arr[i]) i += 1;
+        if (i === arr.length) return;
+        let j = arr.length - 1;
+        while (!arr[j]) j -= 1;
+        const a = arr[i]!.time;
+        const b = arr[j]!.time;
         if (a < from) from = a;
         if (b > to) to = b;
     };

@@ -417,6 +417,10 @@ export interface PaneInfo {
     order: number;
     collapsed: boolean;
     maximized: boolean;
+    /** The pane's share of the plot height relative to the other panes (the price pane
+     *  defaults to 3, study panes to 1 on the native renderer). Absent on a renderer that
+     *  doesn't report pane sizes. */
+    heightWeight?: number;
     indicators: Array<{
         id: string;
         title: string;
