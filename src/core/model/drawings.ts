@@ -45,6 +45,9 @@ export interface DrawingLine {
     arrowRight: boolean;
     /** `force_overlay` → render on the price pane regardless of the indicator's pane. */
     overlay?: boolean;
+    /** Ease `y1`/`y2` toward a later run's values (same `id`) with the live-bar glide
+     *  (`animations.liveBar`) instead of jumping. Off by default. */
+    glide?: boolean;
 }
 
 /** A Pine `box.new(...)`. `left/right` follow `xloc`; `top/bottom` are prices. */
@@ -79,6 +82,9 @@ export interface DrawingBox {
     italic: boolean;
     /** `force_overlay` → render on the price pane regardless of the indicator's pane. */
     overlay?: boolean;
+    /** Ease `top`/`bottom` toward a later run's values (same `id`) with the live-bar glide
+     *  (`animations.liveBar`) instead of jumping. Off by default. */
+    glide?: boolean;
 }
 
 /** Pine `label.style_*` (the bubble/pointer variants and the point-marker shapes). */
@@ -150,6 +156,9 @@ export interface DrawingLabel {
      * setting applies.
      */
     merge?: boolean;
+    /** Ease `y` toward a later run's value (same `id`) with the live-bar glide
+     *  (`animations.liveBar`) instead of jumping. Off by default. */
+    glide?: boolean;
 }
 
 /** One vertex of a polyline (Pine `chart.point`). `x` follows `xloc`; `price` is y. */

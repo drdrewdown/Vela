@@ -50,6 +50,7 @@ import { WebGL2Backend } from './backend/WebGL2Backend';
 import { CoordinateSystem, type PaneBounds, type PriceScale } from './core/CoordinateSystem';
 import { Scheduler, InvalidateLevel, repaintsData, repaintsChrome } from './core/Scheduler';
 import { Animator, EaseSetting, easeToward } from './core/Animator';
+import { DrawingGlide } from './core/DrawingGlide';
 import { InputController } from './core/InputController';
 import { KeyboardController } from './core/KeyboardController';
 import { SceneGraph, paneLogScale, paneScaleMode, paneInvert, type PaneNode, type HighlightArea, type SessionZones, type ScaleMode } from './core/SceneGraph';
@@ -281,6 +282,8 @@ export class NativeRenderer implements IChartRenderer {
     private readonly animScroll = new EaseSetting(SCROLL_EASE_DEFAULT_MS); // scroll-to-latest / panBy glide
     private readonly animAutoscale = new EaseSetting(AUTOSCALE_EASE_DEFAULT_MS); // autoscale glide during zoom/fling
     private readonly animLiveBar = new EaseSetting(LIVE_BAR_EASE_DEFAULT_MS, 0); // forming-bar OHLC glide; ships off
+    /** Indicator drawings marked `glide`: eased on the same clock as the forming bar. */
+    private readonly drawingGlide = new DrawingGlide();
     // Brand default candles.
     private candleUp = BULLISH;
     private candleDown = BEARISH;
@@ -2347,6 +2350,8 @@ export class NativeRenderer implements IChartRenderer {
             }
         }
         applyPatch(model, patch);
+        // drawings marked `glide` ease from where they are toward the run's new prices
+        if (patch.kind === 'value' && this.drawingGlide.retarget(model, this.animLiveBar.tau)) this.animator.start();
         this.scheduler.invalidate(InvalidateLevel.Light);
     }
 
@@ -2362,6 +2367,7 @@ export class NativeRenderer implements IChartRenderer {
             this.scene.vpvrLayer = null;
         }
         this.scene.indicators.delete(handle.id);
+        this.drawingGlide.drop(handle.id);
         this.dropInstanceLayer(handle.id);
         this.scene.forgetIndicatorZ(handle.id);
         this.scene.forgetAnchorOffset(handle.id);
@@ -2744,6 +2750,7 @@ export class NativeRenderer implements IChartRenderer {
         this.computeScales(); // sets pane.scaleTarget (animator active → no snap)
         if (this.easeScales(dtMs)) active = true;
         if (this.easeLiveBar(dtMs)) active = true; // glide the forming bar toward the latest tick
+        if (this.drawingGlide.step(dtMs, this.animLiveBar.tau)) active = true; // and the `glide` drawings toward theirs
         this.skeletonClockMs += dtMs; // drives the loading-skeleton pulse (harmless when none show)
         this.paintData();
         this.renderCrosshairLayer();
