@@ -265,17 +265,6 @@ export function declaredOrder(cells: Record<string, unknown> | undefined): strin
     return names.filter((n) => !/^\d+$/.test(n));
 }
 
-/** Where a bare keystroke on the shell routes (pure): a letter opens the symbol search, a
- *  digit the timeframe entry, anything chorded or non-printable nowhere. Returns null for
- *  keys the shell does not route. */
-export function typingRoute(e: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey' | 'altKey'> & { defaultPrevented?: boolean }): 'symbol' | 'timeframe' | null {
-    if (e.ctrlKey || e.metaKey || e.altKey) return null;
-    if (e.defaultPrevented === true) return null; // a binding claimed it first (the keymap shares the root)
-    if (/^[a-zA-Z]$/.test(e.key)) return 'symbol';
-    if (/^[0-9]$/.test(e.key)) return 'timeframe';
-    return null;
-}
-
 const TEXT = {
     syncSymbol: msg('workspace.sync.symbol', 'Symbol'),
     syncInterval: msg('workspace.sync.interval', 'Interval'),
