@@ -1,3 +1,4 @@
+import type { Translator } from '../../../core/i18n/types';
 import type { VelaTheme } from '../../../core/options';
 import type { IndicatorModel } from '../../../core/model/indicator';
 import { resolveChrome, withAlpha } from '../../../core/theme';
@@ -18,10 +19,11 @@ import { parseColor, readableText } from '../backend/gl/color';
 import { PriceAxisTickSource } from './priceAxisTicks';
 import { countdownText } from './countdown';
 import { DARK_THEME } from '../../../core/theme';
-import { seriesNow, tzOffsetMs } from './tz';
+import { displayZone, seriesNow, tzOffsetMs } from './tz';
 import { markGroupVisible } from '../../shared/marks-state';
 import { clusterTooltip, layoutMarkLane, markGlyphAt, markStackAt, type MarkLaneLayout, type PlacedGlyph } from './marks/layout';
 import { MarkIconRaster, paintMarkLane } from './marks/paint';
+import { beginPlotFrame } from '../core/plotDirection';
 
 /** Opacity factor of a price-axis label whose tick is `major: false` (de-emphasized). */
 const MINOR_LABEL_ALPHA = 0.5;
@@ -98,9 +100,9 @@ export class ChromeRenderer {
     }
 
     /** Hover text of the mark glyph under a plot point, or null. */
-    markTooltipAt(x: number, y: number, groups: ReadonlyArray<{ id: string; label: string }>): string | null {
+    markTooltipAt(x: number, y: number, groups: ReadonlyArray<{ id: string; label: string }>, i18n?: Translator | null): string | null {
         const g = this.markGlyphAt(x, y);
-        return g ? clusterTooltip(g.cluster, groups) : null;
+        return g ? clusterTooltip(g.cluster, groups, i18n) : null;
     }
 
     /** Wire the drawing coordinate resolvers + theme (call once per frame before use). */
@@ -145,7 +147,7 @@ export class ChromeRenderer {
         // The gutters (and their labels) use the surface the host passes (the live chart
         // background); everything data-side keeps the live theme.
         this.axisTextColor = surface?.textColor ?? theme.textColor;
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        beginPlotFrame(ctx, dpr);
         ctx.clearRect(0, 0, fullW, fullH);
         // Paint the price-axis (right) + time-axis (bottom) gutters opaquely so drawings or
         // series pixels beneath never bleed into the scales. Data/drawings stay clear of
@@ -374,7 +376,7 @@ export class ChromeRenderer {
                 if (!sc) return;
                 const x = scaleColumnX(isLeft ? 'left' : 'right', axisW, fullW, k + 1); // column 0 is the master scale
                 const textX = isLeft ? x + AXIS_MERGED_W - 5 : x + 5;
-                for (const t of paneAxisTicks(sc, pane.bounds.height, undefined, scene.priceMintick)) {
+                for (const t of paneAxisTicks(sc, pane.bounds.height, undefined, scene.priceMintick, undefined, scene.format)) {
                     const y = coords.priceToY(t.price, sc, pane.bounds);
                     if (y < pane.bounds.top + 6 || y > pane.bounds.top + pane.bounds.height - 4) continue;
                     ctx.fillText(t.label, textX, y);
@@ -565,7 +567,7 @@ export class ChromeRenderer {
         ctx.font = chipFont(scene, theme);
         ctx.textBaseline = "middle";
 
-        const priceText = formatAxisValue(pricePane.scale, pricePane.bounds.height, last.close, percentScaleFor(scene, pricePane), scene.priceMintick);
+        const priceText = formatAxisValue(pricePane.scale, pricePane.bounds.height, last.close, percentScaleFor(scene, pricePane), scene.priceMintick, undefined, scene.format, 'lastPrice');
         const wPrice = Math.max(ctx.measureText(priceText).width + 8, 62);
         const wTicker = Math.max(ctx.measureText(tickerTag).width + 8, 36);
         const chipH = CHIP_H;
@@ -594,7 +596,7 @@ export class ChromeRenderer {
         // The countdown text is null once the bar has closed (the chip leaves with the bar) and
         // rounds the remaining time up, in step with the shared second pulse. "Now" is read on
         // the series' clock (bar times are wall-clock instants in the series' zone — see tz.ts).
-        const cdText = scene.showCountdown ? countdownText(last.time, interval, seriesNow(Date.now())) : null;
+        const cdText = scene.showCountdown ? countdownText(last.time, interval, seriesNow(Date.now()), scene.format) : null;
         const showCountdown = cdText !== null;
         const showLabel = scene.showPriceLabel;
         if (!showLabel && !showCountdown) return;
@@ -781,12 +783,22 @@ export class ChromeRenderer {
         ctx.textAlign = "center";
         const y = dataH + (fullH - dataH) / 2;
         const tr = coords.visibleTimeRange();
-        const offset = tzOffsetMs((tr.from + tr.to) / 2, scene.timezone);
+        const offset = tzOffsetMs((tr.from + tr.to) / 2, displayZone(scene.timezone, coords.barInterval));
+        // Width-adaptive density so a narrow surface — a phone, a multi-chart cell —
+        // asks for fewer ticks instead of cramming the default eight. The floor of 3
+        // keeps a narrow axis populated (a too-small target snaps the ladder to a huge
+        // step whose few ticks can all miss the frame); the collision pass below is
+        // what actually prevents overlap.
         const target = Math.max(3, Math.min(8, Math.floor(dataW / 64)));
-        const ticks = timeTicks(tr.from, tr.to, target, offset, scene.hour12).map((tick) => ({ ...tick, x: coords.timeToX(tick.time), half: ctx.measureText(tick.label).width / 2 })).filter((tick) => tick.x >= minX + 20 && tick.x <= maxX - 20);
-        const GAP = 12;
-        const placed: { l: number; r: number }[] = [];
-        const put = (tick: any) => {
+        const ticks = timeTicks(tr.from, tr.to, target, offset, scene.format)
+            .map((tick) => ({ ...tick, x: coords.timeToX(tick.time), half: ctx.measureText(tick.label).width / 2 }))
+            .filter((tick) => tick.x >= minX + 20 && tick.x <= maxX - 20);
+        // Measured collision pass on top: label pitch in PIXELS isn't uniform (bar-index
+        // mapping, session gaps), so overlapping labels are SKIPPED, majors placed first
+        // (a date beats the 12:00 beside it).
+        const GAP = 12; // min px between neighboring labels
+        const placed: Array<{ l: number; r: number }> = [];
+        const put = (tick: { x: number; half: number; label: string }): void => {
             const l = tick.x - tick.half;
             const r = tick.x + tick.half;
             if (!placed.every((p) => r + GAP <= p.l || l - GAP >= p.r)) return;

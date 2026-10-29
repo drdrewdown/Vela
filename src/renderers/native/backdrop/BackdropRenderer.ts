@@ -4,7 +4,8 @@ import type { SceneGraph } from '../core/SceneGraph';
 import { timeTicks } from '../chrome/ticks';
 import { PriceAxisTickSource } from '../chrome/priceAxisTicks';
 import { canvasWidthPx } from '../chrome/axisLayout';
-import { tzOffsetMs } from '../chrome/tz';
+import { displayZone, tzOffsetMs } from '../chrome/tz';
+import { beginPlotFrame } from '../core/plotDirection';
 
 /** Clip one time-band rectangle to its permitted horizontal paint interval. */
 export function clipHighlightRect(x1: number, x2: number, left: number, right: number): { x: number; width: number } | null {
@@ -60,7 +61,7 @@ export class BackdropRenderer {
         if (!ctx || !canvas) return;
 
         const dpr = coords.dpr;
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        beginPlotFrame(ctx, dpr);
         ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
 
         // Same gate as the geometry backend: no grid before data reaches the view.
@@ -120,9 +121,9 @@ export class BackdropRenderer {
             ctx.globalAlpha = gridAlpha;
             ctx.strokeStyle = vertColor;
             const tr = coords.visibleTimeRange();
-            const offset = tzOffsetMs((tr.from + tr.to) / 2, scene.timezone);
+            const offset = tzOffsetMs((tr.from + tr.to) / 2, displayZone(scene.timezone, coords.barInterval));
             ctx.beginPath();
-            for (const tick of timeTicks(tr.from, tr.to, 8, offset, scene.hour12)) {
+            for (const tick of timeTicks(tr.from, tr.to, 8, offset)) {
                 const x = Math.round(coords.timeToX(tick.time)) + 0.5;
                 if (x < minX || x > maxX) continue;
                 ctx.moveTo(x, 0);

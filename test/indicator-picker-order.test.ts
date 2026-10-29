@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
+import { sourceText } from '../src/core/i18n/text';
 import { orderCategories, setIndicatorCategoryOrder, rowBadge } from '../src/widget/indicator-picker';
 import { classicCategory, classicSpecs } from '../src/core/native-indicators/classics';
 
@@ -34,8 +35,8 @@ describe('classic catalog — family categories', () => {
     it('a study lands in the group its family names', () => {
         const rsi = classicSpecs.find((s) => s.type === 'rsi')!;
         const bb = classicSpecs.find((s) => s.type === 'bollinger-bands' || s.title === 'Bollinger Bands')!;
-        expect(classicCategory(rsi)).toBe('Oscillators');
-        expect(classicCategory(bb)).toBe('Bands & Channels');
+        expect(sourceText(classicCategory(rsi))).toBe('Oscillators');
+        expect(sourceText(classicCategory(bb))).toBe('Bands & Channels');
     });
 });
 

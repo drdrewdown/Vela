@@ -100,10 +100,11 @@ ws.setLayout('8');       // cells diff BY IDENTITY; identities past the new size
 // Shrinking never pools the ACTIVE chart: if its slot would leave the layout, it
 // moves into the last surviving slot instead (the other cells keep their order).
 ws.setTheme('light');    // re-skins the shared chrome + EVERY cell live (also reachable from any cell's chart settings → Canvas → Theme)
+ws.setLocale('de');      // one language, direction and formatting for EVERY cell and the shared chrome (see Localization)
 ws.maximizeCell('sol');  // one cell over the whole grid (null restores) — pure presentation,
 ws.maximizedCell;        //  the other cells keep everything; layout/state changes restore
 ws.swapCells('btc', 'eth'); // the two cells trade SLOTS (arrangement only — cells untouched)
-ws.on('cell:active' | 'layout:changed' | 'cell:maximized' | 'cell:created' | 'cell:destroyed' | 'cell:priceStyle' | 'state:changed', cb);
+ws.on('cell:active' | 'layout:changed' | 'cell:maximized' | 'cell:created' | 'cell:destroyed' | 'cell:priceStyle' | 'state:changed' | 'locale:changed', cb);
 ```
 
 **Rule of thumb:** hold the cell (or its identity), read `cell.chart` at the point of
@@ -121,7 +122,9 @@ applies it immediately. Rectangles matching a classic preset (`1`, `2h`, `2v`, `
 Plugin layouts the canvas cannot express (bespoke `areas`) list as labeled rows under
 the canvas, so `registerLayout` contributions keep appearing automatically. In code,
 the same composition is `layoutForGrid(rows, cols)` (exported from `@luxalgo/vela/workspace`),
-handed to `ws.setLayout(...)`.
+handed to `ws.setLayout(...)`. A registered layout's `label` may be a message (`msg()`), and
+`layouts(ws.i18n)` and `layoutDefinition(id, ws.i18n)` read every label as text in the
+workspace's language (English without a translator); read them again after `locale:changed`.
 
 Splitters between cells resize the grid tracks (double-click a divider for an even
 split).
@@ -303,7 +306,8 @@ const state = ws.getState();
 // stay-in-drawing-mode — shared by every chart of the workspace, like the favorite stars.
 // One ORDERED `charts` entry per cell, live AND dormant — array position i restores
 // into slot i, `id` is the cell's durable name: { id: 'btc', symbol, provider?, timeframe,
-//   priceStyle, bars?, watermark?, indicatorTitles?, rendererConfig (renderer.getConfig() document),
+//   priceStyle, bars?, watermark?, indicatorTitles?, statuslineParts? ({ logo?, name?, market?,
+//   ohlc?, change? }: the status line's segments), rendererConfig (renderer.getConfig() document),
 //   drawings (drawings.toJSON() document), indicators: { manifest: string[], natives: string[] },
 //   ext? (third-party per-chart state, by namespaced key) }
 // `ext` bags (document root and per chart) carry PLUGIN state — written and restored by
@@ -389,7 +393,10 @@ provider; an `EXCHANGE:` prefix pins a venue), `timeframe`, `bars`, `priceStyle`
 `data`, `visibleRange`, `theme`, `live`, `volume`, `upColor`, `downColor`, `glow`,
 `animations`, `logScale`, `currentPriceLine`, `drawings` (toolbar excepted),
 `priceAxis`, `defaultLanguage`, `renderer`, `nativeBackend` (explicit value wins over the
-`maxWebglCells` policy). `cells` overrides the market/view seeds per cell:
+`maxWebglCells` policy). The [localization options](./options.md#localization-options)
+(`locale`, `direction`, `messages`, `numberingSystem`, `hourCycle`, `weekStart`,
+`formatters`) are one choice for the whole workspace rather than per cell: every cell and
+the shared chrome follow them, and `ws.setLocale(...)` changes them at runtime. `cells` overrides the market/view seeds per cell:
 `{ symbol, timeframe, bars, priceStyle, data, visibleRange }`.
 
 **Cell names are identities, not positions.** A `cells` key is free-form (`btc`, `main`,
@@ -548,7 +555,7 @@ they work from the very first keystroke, before any click.
   whole workspace back to that zone.
 - **Context menus** — right-click the chart body for reset view, removing all drawings or all
   indicators, and the settings dialog; the price axis for that pane's own scale (autoscale,
-  invert, regular/percent/indexed/logarithmic, and the label and level toggles); the time axis
+  scale price chart only on the main price scale, invert, regular/percent/indexed/logarithmic, and the label and level toggles); the time axis
   for the display timezone. Every pane's price scale has its own menu, so a study pane's scale
   is independent of the main one. Each menu's settings entry opens the settings dialog on the
   tab that belongs to it — Canvas from the chart body, Scales and lines from either axis.
@@ -724,6 +731,14 @@ charts, topbar, menus, panels. Swap it at runtime with `ws.setTheme(...)`: every
 re-skins live and the chrome follows, no rebuild. Users reach the same switch in chart
 settings → Canvas → Theme. The built-in themes share the same candle colors, so
 switching never recolors the series.
+
+## Localization
+
+The [localization options](./localization.md) apply to the whole workspace: every cell's
+chart, the shared chrome, and cells a later layout creates. `ws.setLocale(...)` switches
+them at runtime and emits `locale:changed` once every cell has switched; `ws.i18n` is the
+workspace's translator, and contributed actions read it as `ctx.i18n`. The workspace root
+carries `lang` once a locale is set and `dir` once a direction is.
 
 ## Customization
 

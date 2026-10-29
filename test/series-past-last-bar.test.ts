@@ -84,14 +84,11 @@ describe('canvas2d — series points past the last bar', () => {
 });
 
 describe('autoscale — points past the last bar', () => {
-    // The fork scales the PRICE pane from its candles alone (UC-016, desk taste), so the
-    // projected-value claim is made on a study pane; the price pane keeps the fork's contract.
-    it('a visible projected value keeps a study pane covering it; the price pane stays on its candles', () => {
+    it('a visible projected value keeps the window covering it; candles stop at the last bar', () => {
         const bars = [0, 1, 2].map((i) => ({ time: T0 + i * HOUR, open: 10, high: 11, low: 9, close: 10 }));
         const m = model([line('a', [10, 11, 12, 13, 500])]);
-        expect(computePaneScale([m], bars, false, 0, 2).max).toBeLessThan(100);
-        expect(computePaneScale([m], bars, false, 0, 4).max).toBeGreaterThan(500);
-        expect(computePaneScale([m], bars, true, 0, 4).max).toBeLessThan(100);
+        expect(computePaneScale([m], bars, true, 0, 2).max).toBeLessThan(100);
+        expect(computePaneScale([m], bars, true, 0, 4).max).toBeGreaterThan(500);
     });
 
     it('force_overlay series fold their projected values in too', () => {
@@ -99,7 +96,7 @@ describe('autoscale — points past the last bar', () => {
         expect(overlaySeriesRange([m], 0, 4)?.max).toBe(500);
     });
 
-    it('the renderer scales a study pane over the visible right whitespace; the price pane stays on its candles', () => {
+    it('the renderer scales the price pane over the visible right whitespace', () => {
         const r = new NativeRenderer();
         const anyR = r as any;
         anyR.coords.setSize(800, 200, 1);
@@ -109,16 +106,11 @@ describe('autoscale — points past the last bar', () => {
         r.setBars([0, 1, 2].map((i) => ({ time: T0 + i * HOUR, open: 10, high: 11, low: 9, close: 10 })));
         const price = anyR.scene.ensurePane('price', 'price', 0, 3);
         price.bounds = { top: 0, height: 200 };
-        const study = anyR.scene.ensurePane('study', 'study', 1, 1);
-        study.bounds = { top: 200, height: 100 };
         const m = model([line('a', [10, 11, 12, 13, 500], { paneId: 'price' })], { paneId: 'price', overlay: true });
-        const sm = model([line('b', [10, 11, 12, 13, 500], { paneId: 'study' })], { id: 'study-ind', paneId: 'study' });
         anyR.scene.indicators.set(m.id, m);
-        anyR.scene.indicators.set(sm.id, sm);
         expect(anyR.coords.visibleLogicalRange().to).toBeGreaterThan(4);
         anyR.computeScales();
-        expect(study.scaleTarget.max).toBeGreaterThan(500);
-        expect(price.scaleTarget.max).toBeLessThan(100);
+        expect(price.scaleTarget.max).toBeGreaterThan(500);
     });
 });
 

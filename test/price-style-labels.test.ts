@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { priceStyleIds, priceStyleLabel, BUILTIN_PRICE_STYLES } from '../src/renderers/native/core/chartConfig';
-import '../src/chart-types/builtins';
+import { priceStyleIds, BUILTIN_PRICE_STYLES } from '../src/renderers/native/core/chartConfig';
+import { priceStyleLabel } from '../src/widget/topbar';
+import { registerBuiltinChartTypes } from '../src/chart-types/builtins';
+
+registerBuiltinChartTypes();
 
 // One list, one label map: every menu that offers a price style reads these, so a style can
 // never appear under a raw id in one place and a name in another.

@@ -2,6 +2,9 @@
 // (price axis / time axis / chart body) and current renderer feature states; the menu
 // itself is the kit Menu anchored at the pointer.
 import type { Vela } from '../Vela';
+import { msg } from '../core/i18n/message';
+import { textOf } from '../core/i18n/text';
+import type { MessageLike } from '../core/i18n/types';
 import { Menu, type MenuItemDescriptor } from '../ui/components/menu';
 import { actionDisabled, actionLabel, widgetActions, type ContextMenuPointer, type WidgetContext } from './contributions';
 import {
@@ -10,6 +13,7 @@ import {
     invertWrite,
     paneScaleAt,
     priceAxisItems,
+    priceOnlyState,
     scaleChoiceOf,
     scaleWrites,
     settingsSectionOf,
@@ -24,6 +28,14 @@ import { resolveTimezone } from './timezones';
 /** Approximate chrome insets used only to classify the right-clicked zone. */
 const PRICE_AXIS_W = 60;
 const TIME_AXIS_H = 26;
+
+/** The price scale's own rows beside the model's: range chips and the scale's side. */
+const SCALE_TEXT = {
+    rangeChips: msg('widget.contextMenu.rangeChips', 'High and low price labels'),
+    placement: msg('widget.contextMenu.scalePlacement', 'Scale placement'),
+    left: msg('widget.contextMenu.scalePlacement.left', 'Left'),
+    right: msg('widget.contextMenu.scalePlacement.right', 'Right'),
+};
 
 const OFF_PLOT: ContextMenuPointer = { price: null, time: null, paneKind: null, paneId: null };
 
@@ -132,7 +144,7 @@ export class ChartContextMenu {
     private contributed(zone: Zone): ContributedRow[] {
         const ctx = this.context();
         return widgetActions(`context:${zone}`, ctx).map((a) => ({
-            item: { id: `action:${a.id}`, label: actionLabel(a, ctx), icon: a.icon, disabled: ctx ? actionDisabled(a, ctx) : a.disabled === true },
+            item: { id: `action:${a.id}`, label: textOf(this.chart?.i18n, actionLabel(a, ctx)), icon: a.icon, disabled: ctx ? actionDisabled(a, ctx) : a.disabled === true },
             order: a.order,
         }));
     }
@@ -142,27 +154,30 @@ export class ChartContextMenu {
     }
 
     private builtinItems(zone: Zone): MenuItemDescriptor[] {
+        const chart = this.chart;
         if (zone === 'price-axis') {
             const pane = this.lastPane;
             const isLeft = this.chart?.renderer?.get('scaleSide') === 'left';
             const isHighLow = this.chart?.renderer?.get('rangeChips') !== false;
             const baseItems = priceAxisItems({
                 auto: this.chart?.renderer.get('autoScale') !== false,
+                priceOnly: priceOnlyState(pane, this.flag('scalePriceOnly')),
                 invert: pane ? pane.invert : this.flag('invertScale'),
                 choice: scaleChoiceOf(pane ?? { mode: String(this.chart?.renderer.get('scaleMode') ?? 'price'), log: this.flag('logScale') }),
                 axisLabels: this.flag('axisLabels'),
                 priceLabel: this.flag('priceLabel'),
                 countdown: this.flag('countdown'),
                 priceLine: this.flag('currentPriceLine'),
-            });
-            const highLowItem = { id: 'toggle:rangeChips', label: 'High and low price labels', checked: isHighLow };
+            }, this.chart?.i18n);
+            const t = (m: MessageLike): string => textOf(this.chart?.i18n, m);
+            const highLowItem = { id: 'toggle:rangeChips', label: t(SCALE_TEXT.rangeChips), checked: isHighLow };
             const placementItem = {
                 id: 'scale-placement',
-                label: 'Scale placement',
+                label: t(SCALE_TEXT.placement),
                 separatorBefore: true,
                 submenu: [
-                    { id: 'scale-side:left', label: 'Left', checked: isLeft },
-                    { id: 'scale-side:right', label: 'Right', checked: !isLeft },
+                    { id: 'scale-side:left', label: t(SCALE_TEXT.left), checked: isLeft },
+                    { id: 'scale-side:right', label: t(SCALE_TEXT.right), checked: !isLeft },
                 ],
             };
             const settingsIdx = baseItems.findIndex((it) => it.id?.startsWith('settings:'));
@@ -171,13 +186,15 @@ export class ChartContextMenu {
             return baseItems;
         }
         if (zone === 'time-axis') {
-            return timeAxisItems(this.cbs.timezone?.() ?? String(this.chart?.renderer.get('timezone') ?? 'Etc/UTC'));
+            return timeAxisItems(this.cbs.timezone?.() ?? String(this.chart?.renderer.get('timezone') ?? 'Etc/UTC'), chart?.i18n);
         }
-        const chart = this.chart;
-        return bodyItems({
-            drawings: chart?.drawings.supported ? chart.drawings.all().length : 0,
-            indicators: chart?.indicators().length ?? 0,
-        });
+        return bodyItems(
+            {
+                drawings: chart?.drawings.supported ? chart.drawings.all().length : 0,
+                indicators: chart?.indicators().length ?? 0,
+            },
+            chart?.i18n,
+        );
     }
 
     private run(id: string): void {
@@ -204,6 +221,8 @@ export class ChartContextMenu {
             else chart.renderer.set('timezone', resolveTimezone(zone, undefined));
         } else if (id === 'auto') {
             chart.renderer.set('autoScale', chart.renderer.get('autoScale') === false);
+        } else if (id === 'price-only') {
+            chart.renderer.set('scalePriceOnly', !this.flag('scalePriceOnly'));
         } else if (id === 'invert') {
             const pane = this.lastPane;
             const [feature, value] = invertWrite(!(pane ? pane.invert : this.flag("invertScale")), pane);

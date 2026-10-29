@@ -6,29 +6,37 @@
  * away from DST boundaries, with at most a one-hour seam across a transition, which is
  * an acceptable trade for cheap, dependency-free zoning.
  */
+import { zoneOffsetMs } from '../../../core/format/dates';
 
-/** The zone's offset from UTC at `ms`, in milliseconds (e.g. New York in winter ⇒ -5h).
- *  Returns 0 for UTC / empty / unknown zones so callers degrade to plain UTC. */
-export function tzOffsetMs(ms: number, timeZone: string): number {
-    if (!timeZone || timeZone === SERIES_ZONE || timeZone === "US/Eastern") return 0;
-    try {
-        const dtfTarget = new Intl.DateTimeFormat("en-US", { timeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
-        const dtfNY = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
-        const pT = dtfTarget.formatToParts(new Date(ms));
-        const pN = dtfNY.formatToParts(new Date(ms));
-        const getT = (t: string) => Number(pT.find((p) => p.type === t)?.value);
-        const getN = (t: string) => Number(pN.find((p) => p.type === t)?.value);
-        const asTarget = Date.UTC(getT("year"), getT("month") - 1, getT("day"), getT("hour") % 24, getT("minute"), getT("second"));
-        const asNY = Date.UTC(getN("year"), getN("month") - 1, getN("day"), getN("hour") % 24, getN("minute"), getN("second"));
-        return asTarget - asNY;
-    } catch {
-        return 0;
-    }
-}
+const DAY_MS = 86_400_000;
 
 /** The series' zone — the wall clock bar times are expressed in, and the zero-offset baseline
  *  of {@link tzOffsetMs}. */
 const SERIES_ZONE = 'America/New_York';
+
+/** The zone a bar time is read in. Bars of a day or longer (D, W, M and their multiples)
+ *  are stamped at 00:00 of their trading date on the series' clock: a date, not an instant.
+ *  Shifting one into another zone could move it onto a neighbouring day, so they read on
+ *  the series' clock whatever the display zone. Intraday bars read in `timeZone`. */
+export function displayZone(timeZone: string, barIntervalMs: number): string {
+    return barIntervalMs >= DAY_MS ? SERIES_ZONE : timeZone;
+}
+
+/** The zone's offset from the series' clock at `ms`, in milliseconds (e.g. UTC in winter ⇒ +5h).
+ *  Returns 0 for the series' zone or an empty one; an unknown zone degrades to plain UTC. */
+export function tzOffsetMs(ms: number, timeZone: string): number {
+    if (!timeZone || timeZone === SERIES_ZONE || timeZone === 'US/Eastern') return 0;
+    return zoneOffsetMs(ms, timeZone) - zoneOffsetMs(ms, SERIES_ZONE);
+}
+
+/** The UTC instant a bar time names. Bar times are wall-clock instants on the series' clock;
+ *  a formatter that takes an instant and a display zone (`chart.i18n.format`) is handed this.
+ *  The offset is read again at the first guess, so a wall time just after a DST change
+ *  takes the offset in force at that time, not the one before it. */
+export function seriesInstant(ms: number): number {
+    const guess = ms - zoneOffsetMs(ms, SERIES_ZONE);
+    return ms - zoneOffsetMs(guess, SERIES_ZONE);
+}
 
 /**
  * A UTC instant (`Date.now()`) read on the series' clock. Bar times are wall-clock instants

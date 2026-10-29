@@ -17,9 +17,17 @@ import type {
     DataWindowGroup,
     DataWindowReadout,
     PointerReadout,
+    RendererRootAttributes,
 } from '../../core/ports/IChartRenderer';
 import type { VelaTheme } from '../../core/options';
 import { pointerReadout } from './core/readout';
+import type { Translator } from '../../core/i18n/types';
+import { englishTranslator } from '../../core/i18n/translator';
+import { msg } from '../../core/i18n/message';
+import { textOf } from '../../core/i18n/text';
+import type { MessageLike } from '../../core/i18n/types';
+import { ENGLISH_FORMAT } from '../../core/format/formatters';
+import type { FormatSurface } from '../../core/format/types';
 import type { OHLCV } from '../../core/model/ohlcv';
 import type { Millis } from '../../core/model/time';
 import type { VolumeLayerData, VpvrLayerData } from '../../core/model/volume-layers';
@@ -41,13 +49,14 @@ import {
 } from '../../core/options';
 import type { Unsubscribe } from '../../core/util/types';
 import { SecondClock, type WallClock } from '../../core/util/wall-clock';
-import { isLineLikeSeries, seriesShownOn, type SeriesSurface } from '../../core/model/series';
+import { isLineLikeSeries, seriesShownOn, type SeriesSpec, type SeriesSurface } from '../../core/model/series';
 import { InputsUI, type LegendPlotValue } from '../shared/InputsUI';
 import { PaneControls } from './chrome/PaneControls';
 import { AxisScaleButtons, type AxisScaleView } from './chrome/AxisScaleButtons';
 import { NATIVE_CAPABILITIES, supportsWebGL2 } from './capabilities';
 import { WebGL2Backend } from './backend/WebGL2Backend';
 import { CoordinateSystem, type PaneBounds, type PriceScale } from './core/CoordinateSystem';
+import { pinPlotCanvas } from './core/plotDirection';
 import { Scheduler, InvalidateLevel, repaintsData, repaintsChrome } from './core/Scheduler';
 import { Animator, EaseSetting, easeToward } from './core/Animator';
 import { DrawingGlide } from './core/DrawingGlide';
@@ -69,7 +78,7 @@ import { createProjector } from './drawings/Projector';
 import type { Projector, SnapMode } from '../../core/drawings';
 import type { IDrawingsRendererPort } from '../../core/drawings';
 import { formatPriceLabel, tickDecimals } from './chrome/ticks';
-import { zonedDate } from './chrome/tz';
+import { displayZone, zonedDate } from './chrome/tz';
 import { computePaneScale, expandScaleByPixels, overlaySeriesRange } from './core/autoscale';
 import { mergeTradeMarkersState, tradesPriceHints, type TradeMarkerHints } from '../shared/trade-markers';
 import { markGroupOwnVisible, markGroupVisible, mergeMarksState } from '../shared/marks-state';
@@ -162,6 +171,20 @@ const SEPARATOR_HIT_PX = 4;
  * pointer/wheel pan-zoom over a placeholder grid. Series/fills/drawings/axes/
  * crosshair/inputs land in P1–P2.
  */
+const TEXT = {
+    chartSettings: msg('chart.settingsButton', 'Chart settings'),
+    scrollToLatest: msg('chart.scrollToLatest.label', 'Scroll to most recent bar'),
+    scrollToLatestTitle: msg('chart.scrollToLatest.title', 'Scroll to most recent bar (Alt+Shift+→)'),
+    mainChart: msg('chart.pane.mainChart', 'Main chart'),
+    pane: msg('chart.pane.numbered', 'Panel {n}'),
+    keyboardHelp: msg(
+        'chart.a11y.keyboardHelp',
+        'Interactive price chart. Use Left/Right arrows to move between bars, Shift+Arrow to pan, plus/minus to zoom, Home/End to jump, 0 to reset.',
+    ),
+    barSummary: msg('chart.a11y.barSummary', 'Open {open}, High {high}, Low {low}, Close {close}'),
+    valueSummary: msg('chart.a11y.valueSummary', '{name} {value}'),
+};
+
 export class NativeRenderer implements IChartRenderer {
     readonly capabilities: RendererCapabilities = NATIVE_CAPABILITIES;
 
@@ -173,6 +196,10 @@ export class NativeRenderer implements IChartRenderer {
     private surfaceBackground = DARK_THEME.background;
     private surfaceTextColor = DARK_THEME.textColor;
     private wrapper!: HTMLDivElement; // outer root: holds the left toolbar gutter + the plot sub-container
+    /** The chart's translator (null until the chart hands it over: English then). */
+    private i18n: Translator | null = null;
+    /** `lang`/`dir` the wrapper carries — null leaves the attribute to the host page. */
+    private rootAttrs: RendererRootAttributes = { lang: null, dir: null };
     private plot!: HTMLDivElement; // the plot area (canvases + DOM overlays), inset to the right of the toolbar gutter
     private toolbarGutter = 0; // px reserved on the left for the docked drawings toolbar (0 when hidden)
     private mountContainer: HTMLElement | null = null; // the host-owned element mount() renders into
@@ -420,7 +447,7 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     readonly name = 'native';
-    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animScroll', 'animAutoscale', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'scaleSide', 'rangeChips', 'indicatorChips', 'mergeChips', 'legendFolded', 'drawingTooltips', 'invertScale', 'paneScales', 'autoScale', 'timezone', 'hour12', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'marks', 'indicatorTitles', 'indicatorValues', 'crosshairOverride', 'drawingsInteractive', 'priceAxisTicks'];
+    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animScroll', 'animAutoscale', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'scaleSide', 'rangeChips', 'indicatorChips', 'mergeChips', 'legendFolded', 'drawingTooltips', 'invertScale', 'scalePriceOnly', 'paneScales', 'autoScale', 'timezone', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'marks', 'indicatorTitles', 'indicatorValues', 'crosshairOverride', 'drawingsInteractive', 'priceAxisTicks'];
 
     /** Apply a render feature live — mutate the field + invalidate, no engine re-run. */
     applyFeature(key: string, value: unknown): void {
@@ -516,9 +543,6 @@ export class NativeRenderer implements IChartRenderer {
             case 'scaleSide':
                 this.applyConfig({ priceScale: { side: value === 'left' ? 'left' : 'right' } });
                 break;
-            case 'hour12':
-                this.applyConfig({ timeScale: { hour12: Boolean(value) } });
-                break;
             case 'rangeChips':
                 this.applyConfig({ priceScale: { rangeChips: Boolean(value) } });
                 break;
@@ -554,6 +578,9 @@ export class NativeRenderer implements IChartRenderer {
                     return; // setPaneInvert invalidates
                 }
                 this.scene.invertScale = Boolean(value);
+                break;
+            case 'scalePriceOnly':
+                this.scene.scalePriceOnly = Boolean(value);
                 break;
             case 'autoScale':
                 // Auto on ⇒ drop every pane's frozen window so autoscale resumes (same as
@@ -670,7 +697,6 @@ export class NativeRenderer implements IChartRenderer {
             case 'sessionZones': return this.scene.sessionZones;
             case 'gridlines': return this.scene.showGrid;
             case 'scaleSide': return this.scene.scaleSide;
-            case 'hour12': return this.scene.hour12;
             case 'rangeChips': return this.scene.showRangeChips;
             case 'legendFolded': return this.legendFolded;
             case 'drawingTooltips': return this.drawingTooltips;
@@ -679,6 +705,7 @@ export class NativeRenderer implements IChartRenderer {
             case 'axisLabels': return this.scene.showAxisLabels;
             case 'scaleMode': return this.scene.scaleMode;
             case 'invertScale': return this.scene.invertScale;
+            case 'scalePriceOnly': return this.scene.scalePriceOnly;
             case 'paneScales': return this.paneScaleInfos();
             case 'autoScale': {
                 // Auto when the price pane isn't holding a frozen (manual) window.
@@ -824,6 +851,7 @@ export class NativeRenderer implements IChartRenderer {
                 side: this.scene.scaleSide,
                 log: this.scene.logScale,
                 invert: this.scene.invertScale,
+                priceOnly: this.scene.scalePriceOnly,
                 borderColor: s.borderColor ?? t.borderColor,
                 labelsVisible: this.scene.showAxisLabels,
                 currentPriceLine: this.scene.showPriceLine,
@@ -852,7 +880,7 @@ export class NativeRenderer implements IChartRenderer {
                 shortColor: this.scene.tradeMarkers.colors.short,
                 exitColor: this.scene.tradeMarkers.colors.exit,
             },
-            timeScale: { timezone: this.scene.timezone, hour12: this.scene.hour12, zoomAnchor: this.zoomAnchorMode },
+            timeScale: { timezone: this.scene.timezone, zoomAnchor: this.zoomAnchorMode },
             marks: { visible: this.scene.marks.visible, groups: { ...this.scene.marks.groups } },
             candles: {
                 upColor: this.candleUp,
@@ -979,6 +1007,7 @@ export class NativeRenderer implements IChartRenderer {
         }
         this.scene.logScale = next.priceScale.log;
         this.scene.invertScale = next.priceScale.invert;
+        this.scene.scalePriceOnly = next.priceScale.priceOnly;
         s.borderColor = keepInherit(s.borderColor, next.priceScale.borderColor, prevTheme.borderColor);
         this.scene.showAxisLabels = next.priceScale.labelsVisible;
         this.scene.showPriceLine = next.priceScale.currentPriceLine;
@@ -1024,7 +1053,6 @@ export class NativeRenderer implements IChartRenderer {
         };
         // time scale
         this.scene.timezone = next.timeScale.timezone;
-        this.scene.hour12 = next.timeScale.hour12;
         this.zoomAnchorMode = next.timeScale.zoomAnchor;
         if (this.input) this.input.rightEdgeZoom = this.zoomAnchorMode === 'right';
         // timeline marks (lane toggle + per-group visibility)
@@ -1122,7 +1150,7 @@ export class NativeRenderer implements IChartRenderer {
                 this.plot.appendChild(this.settingsButton);
             }
             if (this.settingsButton) this.settingsButton.style.display = 'flex';
-            if (this.plot && !this.settingsDialog) this.settingsDialog = new SettingsDialog(this.dialogHost ?? this.plot, this.theme);
+            if (this.plot && !this.settingsDialog) this.settingsDialog = new SettingsDialog(this.dialogHost ?? this.plot, this.theme, () => this.i18n ?? englishTranslator());
         } else {
             this.settingsButton?.style.setProperty('display', 'none');
             this.settingsDialog?.close();
@@ -1132,7 +1160,7 @@ export class NativeRenderer implements IChartRenderer {
     private makeSettingsButton(): HTMLButtonElement {
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.title = 'Chart settings';
+        btn.title = this.t(TEXT.chartSettings);
         btn.innerHTML = iconAt('gear', 14);
         Object.assign(btn.style, {
             position: 'absolute',
@@ -1165,7 +1193,7 @@ export class NativeRenderer implements IChartRenderer {
      *  in-chart gear — created on demand, independent of the gear feature being enabled. */
     openSettingsDialog(section?: string): void {
         if (!this.settingsDialog && this.plot) {
-            this.settingsDialog = new SettingsDialog(this.dialogHost ?? this.plot, this.theme);
+            this.settingsDialog = new SettingsDialog(this.dialogHost ?? this.plot, this.theme, () => this.i18n ?? englishTranslator());
             this.settingsDialog.setLayoutMode(this.layoutMode);
         }
         this.toggleSettingsDialog(section);
@@ -1235,8 +1263,8 @@ export class NativeRenderer implements IChartRenderer {
     private makeScrollToRealtimeButton(): HTMLButtonElement {
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.title = 'Scroll to most recent bar (Alt+Shift+→)';
-        btn.setAttribute('aria-label', 'Scroll to most recent bar');
+        btn.title = this.t(TEXT.scrollToLatestTitle);
+        btn.setAttribute('aria-label', this.t(TEXT.scrollToLatest));
         btn.innerHTML = this.scrollButtonIcon();
         Object.assign(btn.style, {
             position: 'absolute',
@@ -1491,7 +1519,7 @@ export class NativeRenderer implements IChartRenderer {
         if (want) {
             this.labelTooltip = new LabelTooltip(this.plot, {
                 theme: () => this.chromeTheme(),
-                lookup: (x, y) => this.indicatorSlices.labelTooltipAt(x, y) ?? this.chrome.markTooltipAt(x, y, this.markGroupsInUse()),
+                lookup: (x, y) => this.indicatorSlices.labelTooltipAt(x, y) ?? this.chrome.markTooltipAt(x, y, this.markGroupsInUse(), this.i18n),
             });
         } else {
             this.labelTooltip?.destroy();
@@ -1524,13 +1552,11 @@ export class NativeRenderer implements IChartRenderer {
 
         // L-2 backdrop: session highlights + gridlines, the very BOTTOM of the pile — even
         // an SDK layer canvas slotted below the data canvas stays above the grid.
-        this.backdropCanvas = document.createElement('canvas');
-        Object.assign(this.backdropCanvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' });
+        this.backdropCanvas = this.createPlotCanvas();
 
         // L0.25 volume columns: bottom-anchored per-bar volume, ABOVE the geometry canvas so
         // grid lines and candles cannot paint over them. Transparent + pointer-transparent.
-        this.volumeCanvas = document.createElement('canvas');
-        Object.assign(this.volumeCanvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' });
+        this.volumeCanvas = this.createPlotCanvas();
 
         // L0 geometry — the swappable backend (WebGL2 if available, else canvas2d)
         // owns the data canvas + gets its rendering context.
@@ -1538,24 +1564,20 @@ export class NativeRenderer implements IChartRenderer {
 
         // L0.6 VPVR: the visible-range volume profile against the right edge, painted ABOVE
         // the candles (it reads over them, translucent) but below the chrome/axes.
-        this.vpvrCanvas = document.createElement('canvas');
-        Object.assign(this.vpvrCanvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' });
+        this.vpvrCanvas = this.createPlotCanvas();
 
         // L1 chrome (canvas2d): Pine drawings + axes + current-price line. Transparent,
         // above the geometry layer (so the GL backend never has to rasterize text).
-        this.chromeCanvas = document.createElement('canvas');
-        Object.assign(this.chromeCanvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' });
+        this.chromeCanvas = this.createPlotCanvas();
 
         // L1.5 user drawings: trend lines/boxes/labels + selection handles + the live
         // placing ghost. Above Pine drawings (chrome), below the crosshair. Transparent +
         // pointer-transparent — pointer events reach the data canvas (InputController),
         // which hands gestures to the drawings layer via the region-claim seam.
-        this.drawingsCanvas = document.createElement('canvas');
-        Object.assign(this.drawingsCanvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' });
+        this.drawingsCanvas = this.createPlotCanvas();
 
         // L2 cursor: the crosshair, repainted alone on the cheap Cursor tier.
-        this.cursorCanvas = document.createElement('canvas');
-        Object.assign(this.cursorCanvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' });
+        this.cursorCanvas = this.createPlotCanvas();
 
         // The `shadeRight` veil's styleable twin, just under the cursor canvas: host CSS on
         // `.vela-shade-right` (a `backdrop-filter`) reaches the candles beneath it but never the
@@ -1578,7 +1600,7 @@ export class NativeRenderer implements IChartRenderer {
         Object.assign(this.plot.style, { position: 'absolute', top: '0', right: '0', bottom: '0', left: '0' });
         // SDK renderer layers: one transparent canvas each, stacked by placement —
         // 'below-data' behind the candles, 'above-data' over them (under the chrome/axes).
-        this.extLayers = rendererLayers().map((def) => ({ def, instance: def.create(), canvas: this.createLayerCanvas(), channel: def.id, owner: null }));
+        this.extLayers = rendererLayers().map((def) => ({ def, instance: def.create(), canvas: this.createPlotCanvas(), channel: def.id, owner: null }));
         const below = this.extLayers.filter((l) => l.def.placement === 'below-data').map((l) => l.canvas);
         const above = this.extLayers.filter((l) => l.def.placement !== 'below-data').map((l) => l.canvas);
         this.plot.append(this.backdropCanvas, ...below, this.dataCanvas, this.volumeCanvas, this.vpvrCanvas, ...above, this.chromeCanvas, this.drawingsCanvas, this.shadeRightEl, this.cursorCanvas, this.overlayRoot);
@@ -1590,6 +1612,7 @@ export class NativeRenderer implements IChartRenderer {
         this.positionAttribution();
         this.wrapper.appendChild(this.attributionEl);
         container.appendChild(this.wrapper);
+        this.applyRootAttributes();
         this.applyBackground();
 
         this.backdropRenderer.mount(this.backdropCanvas);
@@ -1668,6 +1691,7 @@ export class NativeRenderer implements IChartRenderer {
         this.syncLabelTooltip();
         // Timeline-mark popup, plus the chrome repaint a lane icon asks for once it has rasterized.
         this.markPopover = new MarkPopover({
+            i18n: () => this.i18n ?? englishTranslator(),
             plot: this.plot,
             host: () => this.dialogHost ?? this.plot,
             theme: () => this.chromeTheme(),
@@ -1682,6 +1706,7 @@ export class NativeRenderer implements IChartRenderer {
         // composites into the series stack, and owns the interaction/settings popup). It
         // implements the IDrawingsRendererPort the core DrawingController drives.
         this.userDrawings = new UserDrawingController(this.wrapper, this.plot, this.drawingsCanvas, {
+            i18n: () => this.i18n ?? englishTranslator(),
             projector: () => this.drawingProjector(),
             dpr: () => this.coords.dpr,
             theme: () => this.theme,
@@ -1736,6 +1761,7 @@ export class NativeRenderer implements IChartRenderer {
         this.setKeyboardEnabled(this.keyboardEnabled); // accessible by default; wires focus + ARIA
 
         this.inputsUI = new InputsUI(this.plot, theme, (paneId) => this.paneBoundsFor(paneId));
+        this.inputsUI.setI18n(this.i18n);
         this.inputsUI.setLayoutMode(this.layoutMode);
         this.inputsUI.setTitlesVisible(this.indicatorTitlesOn); // a remount keeps the toggle state
         this.inputsUI.setValuesVisible(this.indicatorValuesOn);
@@ -1764,7 +1790,7 @@ export class NativeRenderer implements IChartRenderer {
                     kind: p.kind,
                     // A study pane is named after its master indicator ("Move to RSI"), not a
                     // positional "Pane N" (which shifts as panes reorder and means little).
-                    label: p.kind === 'price' ? 'Main chart' : this.paneMasterTitle(p.id) ?? `Pane ${i}`,
+                    label: p.kind === 'price' ? this.t(TEXT.mainChart) : (this.paneMasterTitle(p.id) ?? this.t(TEXT.pane, { n: i })),
                     top: p.bounds.top,
                     height: p.bounds.height,
                 })),
@@ -1780,6 +1806,7 @@ export class NativeRenderer implements IChartRenderer {
         });
 
         this.paneControls = new PaneControls(this.plot, theme, {
+            i18n: () => this.i18n ?? englishTranslator(),
             panes: () => this.paneControlViews(),
             rightAxis: () => rightGutterPx(this.scene.scaleSide, this.rightAxisW),
             onMove: (paneId, dir) => this.movePaneLocal(paneId, dir),
@@ -1802,6 +1829,7 @@ export class NativeRenderer implements IChartRenderer {
         this.paneControls.setSuspended(this.layoutMode === 'mobile');
 
         this.axisScaleButtons = new AxisScaleButtons(this.plot, theme, {
+            i18n: () => this.i18n ?? englishTranslator(),
             panes: () => this.axisScaleViews(),
             axisGutter: () => this.rightAxisW,
             scaleSide: () => this.scene.scaleSide,
@@ -1840,9 +1868,7 @@ export class NativeRenderer implements IChartRenderer {
      * and a fresh one is made for canvas2d.
      */
     private makeDataCanvas(): HTMLCanvasElement {
-        const c = document.createElement('canvas');
-        Object.assign(c.style, { position: 'absolute', inset: '0', width: '100%', height: '100%' });
-        return c;
+        return this.createPlotCanvas({ pointerEvents: true });
     }
 
     private createGeometryBackend(): HTMLCanvasElement {
@@ -1929,6 +1955,71 @@ export class NativeRenderer implements IChartRenderer {
         this.userDrawings?.setTheme(this.chromeTheme());
         this.refreshAttributionColor();
         this.scheduler.invalidate(InvalidateLevel.Full);
+    }
+
+    /** Adopt the chart's localization (see `IChartRenderer.setLocalization`): the formatters
+     *  feed the axes, chips and readouts, the root carries `lang`/`dir`, and everything
+     *  repaints. */
+    setLocalization(i18n: Translator, root: RendererRootAttributes): void {
+        this.i18n = i18n;
+        this.rootAttrs = { lang: root.lang, dir: root.dir };
+        this.scene.format = i18n.format;
+        this.inputsUI?.setI18n(i18n);
+        this.applyRootAttributes();
+        this.relabel();
+        this.userDrawings?.relocalize();
+        this.settingsDialog?.relocalize();
+        if (this.scheduler) this.scheduler.invalidate(InvalidateLevel.Full);
+    }
+
+    /** Display text through the chart's translator (English until the chart hands one over). */
+    private t(m: MessageLike, values?: Record<string, string | number>): string {
+        return textOf(this.i18n, m, values);
+    }
+
+    /** An indicator's full name as the chart shows it. */
+    private modelTitle(model: IndicatorModel): string {
+        return this.t(model.displayTitle ?? model.title);
+    }
+
+    /** The compact name the legend chip, the settings dialog and the object tree show. */
+    private legendTitle(model: IndicatorModel): string {
+        const short = model.displayShorttitle ?? model.shorttitle;
+        return short !== undefined ? this.t(short) : this.modelTitle(model);
+    }
+
+    /** A series' name as the legend and the data window show it. */
+    private seriesTitle(s: SeriesSpec, model: IndicatorModel): string {
+        if (s.displayTitle) return this.t(s.displayTitle);
+        return s.title || this.modelTitle(model);
+    }
+
+    /** Re-read the chrome text the renderer owns in the current language. */
+    private relabel(): void {
+        if (this.settingsButton) this.settingsButton.title = this.t(TEXT.chartSettings);
+        if (this.scrollButton) {
+            this.scrollButton.title = this.t(TEXT.scrollToLatestTitle);
+            this.scrollButton.setAttribute('aria-label', this.t(TEXT.scrollToLatest));
+        }
+        if (this.keyboardEnabled && this.dataCanvas?.hasAttribute('aria-label')) this.dataCanvas.setAttribute('aria-label', this.t(TEXT.keyboardHelp));
+        this.paneControls?.refresh();
+        this.axisScaleButtons?.relabel();
+        if (this.attributionEl && this.attributionHtml === null) this.rebuildAttribution();
+        if (this.inputsUI) {
+            for (const model of this.scene.indicators.values()) {
+                if (model.legend !== false) this.inputsUI.setTitle(model.id, this.legendTitle(model));
+            }
+        }
+    }
+
+    private applyRootAttributes(): void {
+        const el = this.wrapper as HTMLDivElement | undefined;
+        if (!el) return;
+        const { lang, dir } = this.rootAttrs;
+        if (lang) el.setAttribute('lang', lang);
+        else el.removeAttribute('lang');
+        if (dir) el.setAttribute('dir', dir);
+        else el.removeAttribute('dir');
     }
 
     resize(): void {
@@ -2318,7 +2409,7 @@ export class NativeRenderer implements IChartRenderer {
         // shorttitle when declared; the full title stays on the picker and inspect(). A
         // `legend: false` native gets none of it — the scene model still mounts and paints.
         if (model.legend !== false) {
-            this.inputsUI.upsert(model.id, model.shorttitle ?? model.title, model.inputs, model.inputValues, model.paneId, {
+            this.inputsUI.upsert(model.id, this.legendTitle(model), model.inputs, model.inputValues, model.paneId, {
                 native: !!model.native,
                 ...(model.props ? { props: model.props, propValues: model.propValues ?? {} } : {}),
             });
@@ -3237,7 +3328,7 @@ export class NativeRenderer implements IChartRenderer {
         if (enabled) {
             this.dataCanvas.tabIndex = 0;
             this.dataCanvas.setAttribute('role', 'application');
-            this.dataCanvas.setAttribute('aria-label', 'Interactive price chart. Use Left/Right arrows to move between bars, Shift+Arrow to pan, plus/minus to zoom, Home/End to jump, 0 to reset.');
+            this.dataCanvas.setAttribute('aria-label', this.t(TEXT.keyboardHelp));
             if (!this.liveRegion && this.wrapper) {
                 this.liveRegion = document.createElement('div');
                 this.liveRegion.setAttribute('aria-live', 'polite');
@@ -3314,10 +3405,10 @@ export class NativeRenderer implements IChartRenderer {
         const pricePane = this.dataWindowPricePane();
         const ohlc = this.dataWindowOHLC(bar, pricePane);
         const parts: string[] = [];
-        if (bar) parts.push(formatStamp(bar.time, this.scene.timezone));
-        if (ohlc) parts.push(`Open ${ohlc.o}, High ${ohlc.h}, Low ${ohlc.l}, Close ${ohlc.c}`);
+        if (bar) parts.push(formatStamp(bar.time, displayZone(this.scene.timezone, this.coords.barInterval)));
+        if (ohlc) parts.push(this.t(TEXT.barSummary, { open: ohlc.o, high: ohlc.h, low: ohlc.l, close: ohlc.c }));
         for (const group of this.dataWindowGroups(idx, pricePane)) {
-            for (const row of group.rows) parts.push(`${row.label} ${row.value}`);
+            for (const row of group.rows) parts.push(this.t(TEXT.valueSummary, { name: row.label, value: row.value }));
         }
         this.liveRegion.textContent = parts.join('. ');
     }
@@ -3354,7 +3445,7 @@ export class NativeRenderer implements IChartRenderer {
         const idx = this.hoverLogical != null ? this.hoverLogical : n - 1;
         const bar = this.bars[idx];
         const pricePane = this.dataWindowPricePane();
-        const parts = bar ? formatStampParts(bar.time, this.scene.timezone) : { date: '', time: '' };
+        const parts = bar ? formatStampParts(bar.time, displayZone(this.scene.timezone, this.coords.barInterval)) : { date: '', time: '' };
         return { date: parts.date, time: parts.time, ohlc: this.dataWindowOHLC(bar, pricePane), groups: this.dataWindowGroups(idx, pricePane) };
     }
 
@@ -3362,8 +3453,13 @@ export class NativeRenderer implements IChartRenderer {
         return this.scene.orderedPanes().find((p) => p.kind === 'price') ?? null;
     }
 
-    private dataWindowFmt(v: number, pane: PaneNode | null): string {
-        return pane ? formatPriceLabel(pane.scale, pane.bounds.height, v, this.scene.priceMintick) : String(v);
+    private dataWindowFmt(v: number, pane: PaneNode | null, surface: FormatSurface = 'dataWindow'): string {
+        return pane ? formatPriceLabel(pane.scale, pane.bounds.height, v, this.scene.priceMintick, this.scene.format, surface) : String(v);
+    }
+
+    /** A volume in the data window and the volume legend row (`1.20M`: two decimals kept). */
+    private formatVolume(v: number, surface: FormatSurface): string {
+        return (this.scene.format ?? ENGLISH_FORMAT).compact(v, { decimals: 2, trimZeros: false, surface });
     }
 
     private dataWindowOHLC(bar: OHLCV | undefined, pricePane: PaneNode | null): DataWindowOHLC | null {
@@ -3373,7 +3469,7 @@ export class NativeRenderer implements IChartRenderer {
             h: this.dataWindowFmt(bar.high, pricePane),
             l: this.dataWindowFmt(bar.low, pricePane),
             c: this.dataWindowFmt(bar.close, pricePane),
-            vol: bar.volume != null ? formatVolume(bar.volume) : undefined,
+            vol: bar.volume != null ? this.formatVolume(bar.volume, 'dataWindow') : undefined,
             up: bar.close >= bar.open,
         };
     }
@@ -3383,7 +3479,7 @@ export class NativeRenderer implements IChartRenderer {
         const groups: DataWindowGroup[] = [];
         for (const model of this.scene.indicators.values()) {
             const rows = this.readoutRowsFor(model, idx, pricePane, 'dataWindow');
-            if (rows.length) groups.push({ name: model.title, rows });
+            if (rows.length) groups.push({ name: this.modelTitle(model), rows });
         }
         return groups;
     }
@@ -3394,7 +3490,7 @@ export class NativeRenderer implements IChartRenderer {
     private readoutRowsFor(model: IndicatorModel, idx: number, pricePane: PaneNode | null, surface: SeriesSurface): DataWindowRow[] {
         // The volume native draws through its bespoke layer and mounts a series-less model, so
         // its readout comes straight from the bar's volume instead of iterating `model.series`.
-        if (model.native?.type === 'volume') return this.volumeReadoutRows(model, idx);
+        if (model.native?.type === 'volume') return this.volumeReadoutRows(model, idx, surface === 'legend' ? 'legend' : 'dataWindow');
         const pane = (model.paneId ? this.scene.panes.get(model.paneId) : null) ?? pricePane;
         const off = this.scene.offsetOf(model.id);
         const rows: DataWindowRow[] = [];
@@ -3412,7 +3508,7 @@ export class NativeRenderer implements IChartRenderer {
                 continue; // markers carry no scalar readout
             }
             if (value == null || !Number.isFinite(value)) continue;
-            rows.push({ label: s.title || model.title, value: this.dataWindowFmt(value, pane), color });
+            rows.push({ label: this.seriesTitle(s, model), value: this.dataWindowFmt(value, pane, surface === 'legend' ? 'legend' : 'dataWindow'), color });
         }
         return rows;
     }
@@ -3420,14 +3516,14 @@ export class NativeRenderer implements IChartRenderer {
     /** The volume indicator's readout: the bar's volume, tinted with the layer's own direction
      *  colors. Hiding volume keeps its model in the scene (only the layer is suppressed — see
      *  `setIndicatorVisible`), so the hidden flag is checked here rather than by model absence. */
-    private volumeReadoutRows(model: IndicatorModel, idx: number): DataWindowRow[] {
+    private volumeReadoutRows(model: IndicatorModel, idx: number, surface: FormatSurface): DataWindowRow[] {
         if (this.volumeHidden) return [];
         const bar = this.bars[idx];
         const vol = bar?.volume;
         if (bar == null || vol == null || !Number.isFinite(vol)) return [];
         const cfg = this.scene.volumeLayer;
         const color = bar.close >= bar.open ? (cfg?.upColor ?? this.theme.upColor) : (cfg?.downColor ?? this.theme.downColor);
-        return [{ label: model.title, value: formatVolume(vol), color }];
+        return [{ label: this.modelTitle(model), value: this.formatVolume(vol, surface), color }];
     }
 
     /** Refresh the plot values beside every legend title — the same bar the data window reads
@@ -3538,6 +3634,7 @@ export class NativeRenderer implements IChartRenderer {
             priceStyle: this.scene.priceStyle,
             nowMs,
             cursor: this.lastPointer,
+            i18n: this.i18n ?? englishTranslator(),
         };
     }
 
@@ -3816,7 +3913,13 @@ export class NativeRenderer implements IChartRenderer {
                 && (!this.scene.candlesHidden || this.priceLayersAnchoredToBars(masterModels) || !this.paneHasMeasurableContent(masterModels, dr));
             // Each pane logs (or not) on its OWN flag — the price pane from the scene setting,
             // study panes from their own — so a study going log never touches the price pane.
-            pane.scaleTarget = computePaneScale(masterModels, this.bars, includeCandles, i0, s1, dr, paneLogScale(this.scene, pane), (id) => this.scene.offsetOf(id), margins);
+            // Scale price chart only: the bars alone set the price window, and indicator plots,
+            // price lines and Pine drawings paint where they fall (off the edge when outside it).
+            // With the bars out of the scale there is nothing else to fit, so it does not apply.
+            const priceOnly = pane === pricePane && this.scene.scalePriceOnly && includeCandles;
+            pane.scaleTarget = priceOnly
+                ? computePaneScale([], this.bars, true, i0, s1, null, paneLogScale(this.scene, pane), (id) => this.scene.offsetOf(id), margins)
+                : computePaneScale(masterModels, this.bars, includeCandles, i0, s1, dr, paneLogScale(this.scene, pane), (id) => this.scene.offsetOf(id), margins);
             // Percent baseline for THIS pane (the first visible value it measures change from):
             // the first visible bar close on the price pane, else the master series' first
             // visible value. 0 ⇒ no reference yet, so the axis falls back to absolute.
@@ -3957,7 +4060,7 @@ export class NativeRenderer implements IChartRenderer {
     private paneMasterTitle(paneId: string): string | null {
         const models = this.scene.orderedIndicatorsForPane(paneId);
         const master = models.find((m) => m.ownScale !== true) ?? models[0];
-        return master?.title || null;
+        return master ? this.modelTitle(master) || null : null;
     }
 
     /**
@@ -3999,11 +4102,16 @@ export class NativeRenderer implements IChartRenderer {
         return null;
     }
 
-    /** One transparent, pointer-transparent SDK layer canvas covering the plot. */
-    private createLayerCanvas(): HTMLCanvasElement {
+    /**
+     * Every canvas of the plot's pile comes from here: absolutely placed over the whole plot,
+     * pointer-transparent unless it is the data canvas (which takes the gestures), and pinned
+     * left to right whatever the page's direction (see `pinPlotCanvas`).
+     */
+    private createPlotCanvas(opts: { pointerEvents?: boolean } = {}): HTMLCanvasElement {
         const canvas = document.createElement('canvas');
-        Object.assign(canvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', pointerEvents: 'none' });
-        return canvas;
+        Object.assign(canvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%' });
+        if (!opts.pointerEvents) canvas.style.pointerEvents = 'none';
+        return pinPlotCanvas(canvas);
     }
 
     /**
@@ -4020,7 +4128,7 @@ export class NativeRenderer implements IChartRenderer {
         if (this.extLayers.some((l) => l.owner === model.id)) return;
         const base = this.extLayers.find((l) => l.owner === null && l.def.id === model.native!.type);
         if (!base) return; // no layer registered for the type — the model paints through its series alone
-        const canvas = this.createLayerCanvas();
+        const canvas = this.createPlotCanvas();
         // Match the pile's current backing size; the next resize re-sizes every layer anyway.
         canvas.width = this.dataCanvas.width;
         canvas.height = this.dataCanvas.height;
@@ -4418,7 +4526,7 @@ export class NativeRenderer implements IChartRenderer {
     private buildAttributionEl(): HTMLElement {
         return this.attributionHtml !== null
             ? createCustomMark(document, this.attributionHtml, this.theme.background)
-            : createAttributionMark(document, this.theme.background);
+            : createAttributionMark(document, this.theme.background, this.i18n);
     }
 
     /** Swap the mark in place — the content kind changed (built-in ↔ host-supplied). */
@@ -4656,15 +4764,6 @@ function isPriceStyle(v: unknown): v is PriceStyle {
 /** Coerce an untrusted value to a valid `ScaleMode`, defaulting to absolute `'price'`. */
 function asScaleMode(v: unknown): ScaleMode {
     return v === 'percent' || v === 'indexed' ? v : 'price';
-}
-
-/** Abbreviate a volume with a K/M/B suffix (e.g. `1.23M`). */
-function formatVolume(v: number): string {
-    const a = Math.abs(v);
-    if (a >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
-    if (a >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
-    if (a >= 1e3) return `${(v / 1e3).toFixed(2)}K`;
-    return v.toFixed(2);
 }
 
 /** Sort ascending + dedupe by time (last write wins). */

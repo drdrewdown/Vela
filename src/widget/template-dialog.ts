@@ -1,10 +1,27 @@
 // Template dialog — "Save indicator template" (a name and what to remember with it) and
 // "Rename template". The caller owns the rules: `onSubmit` says whether the name was taken
 // (the dialog then shows why and stays open).
+import { msg } from '../core/i18n/message';
+import { textOf } from '../core/i18n/text';
+import type { MessageArgs, MessageLike, Translator } from '../core/i18n/types';
 import { Dialog } from '../ui/components/dialog';
 import { Switch } from '../ui/components/switch';
 import { TextField } from '../ui/components/text-field';
 import { injectStyles } from '../ui/styles';
+
+const TEXT = {
+    name: msg('widget.templateDialog.name', 'Template name'),
+    cancel: msg('widget.templateDialog.cancel', 'Cancel'),
+    saveTitle: msg('widget.templateDialog.saveTitle', 'Save indicator template'),
+    renameTitle: msg('widget.templateDialog.renameTitle', 'Rename template'),
+    save: msg('widget.templateDialog.save', 'Save'),
+    rename: msg('widget.templateDialog.rename', 'Rename'),
+    rememberInterval: msg('widget.templateDialog.rememberInterval', 'Remember interval'),
+    rememberSymbol: msg('widget.templateDialog.rememberSymbol', 'Remember symbol'),
+    noStudies: msg('widget.templateDialog.noStudies', 'No studies on this chart — the template clears a chart it is applied to.'),
+    studies: msg('widget.templateDialog.studies', '{count, plural, one {# study} other {# studies}} on this chart.'),
+    needsName: msg('widget.templateDialog.needsName', 'A template needs a name.'),
+};
 
 const STYLE_ID = 'vela-widget-template-dialog';
 const CSS = `
@@ -40,15 +57,17 @@ export class TemplateDialog {
     private req: TemplateDialogRequest | null = null;
     private remember = { timeframe: true, symbol: false };
 
-    constructor(host: HTMLElement) {
+    private readonly i18n: Translator | null;
+    private readonly cancel: HTMLButtonElement;
+
+    constructor(host: HTMLElement, i18n?: Translator) {
+        this.i18n = i18n ?? null;
         const doc = host.ownerDocument;
         injectStyles(STYLE_ID, CSS, doc);
         this.form = doc.createElement('div');
         this.form.className = 'vela-td';
         this.name = new TextField({ fill: true });
-        this.name.input.placeholder = 'Template name';
         this.name.input.maxLength = 40;
-        this.name.input.setAttribute('aria-label', 'Template name');
         this.name.input.addEventListener('keydown', (e) => {
             e.stopPropagation();
             if (e.key === 'Enter') this.commit();
@@ -61,14 +80,14 @@ export class TemplateDialog {
         const cancel = doc.createElement('button');
         cancel.type = 'button';
         cancel.className = 'vela-dialog-btn';
-        cancel.textContent = 'Cancel';
         cancel.addEventListener('click', () => this.dialog.hide());
+        this.cancel = cancel;
         this.submit = doc.createElement('button');
         this.submit.type = 'button';
         this.submit.className = 'vela-dialog-btn vela-dialog-btn-primary';
         this.submit.addEventListener('click', () => this.commit());
         actions.append(cancel, this.submit);
-        this.dialog = new Dialog({ title: 'Save indicator template', host, content: this.form, footer: actions, align: 'center', draggable: true });
+        this.dialog = new Dialog({ title: this.t(TEXT.saveTitle), host, content: this.form, footer: actions, align: 'center', draggable: true });
     }
 
     open(req: TemplateDialogRequest): void {
@@ -76,17 +95,16 @@ export class TemplateDialog {
         this.remember = { timeframe: req.rememberTimeframe ?? true, symbol: req.rememberSymbol ?? false };
         const doc = this.form.ownerDocument;
         this.form.replaceChildren();
-        this.dialog.titleEl.textContent = req.mode === 'save' ? 'Save indicator template' : 'Rename template';
-        this.submit.textContent = req.mode === 'save' ? 'Save' : 'Rename';
+        this.relocalize();
         this.name.input.value = req.name ?? '';
         this.form.appendChild(this.name.el);
         if (req.mode === 'save') {
-            this.form.appendChild(this.switchRow(doc, 'Remember interval', req.timeframeLabel, this.remember.timeframe, (on) => (this.remember.timeframe = on)));
-            this.form.appendChild(this.switchRow(doc, 'Remember symbol', req.symbol, this.remember.symbol, (on) => (this.remember.symbol = on)));
+            this.form.appendChild(this.switchRow(doc, this.t(TEXT.rememberInterval), req.timeframeLabel, this.remember.timeframe, (on) => (this.remember.timeframe = on)));
+            this.form.appendChild(this.switchRow(doc, this.t(TEXT.rememberSymbol), req.symbol, this.remember.symbol, (on) => (this.remember.symbol = on)));
             if (req.studies !== undefined) {
                 const note = doc.createElement('div');
                 note.className = 'vela-td-note';
-                note.textContent = req.studies === 0 ? 'No studies on this chart — the template clears a chart it is applied to.' : `${req.studies} ${req.studies === 1 ? 'study' : 'studies'} on this chart.`;
+                note.textContent = req.studies === 0 ? this.t(TEXT.noStudies) : this.t(TEXT.studies, { count: req.studies });
                 this.form.appendChild(note);
             }
         }
@@ -97,12 +115,26 @@ export class TemplateDialog {
         this.name.input.select();
     }
 
+    /** Re-read the title, the buttons and the name field in the current language. */
+    relocalize(): void {
+        const rename = this.req?.mode === 'rename';
+        this.dialog.titleEl.textContent = this.t(rename ? TEXT.renameTitle : TEXT.saveTitle);
+        this.submit.textContent = this.t(rename ? TEXT.rename : TEXT.save);
+        this.cancel.textContent = this.t(TEXT.cancel);
+        this.name.input.placeholder = this.t(TEXT.name);
+        this.name.input.setAttribute('aria-label', this.t(TEXT.name));
+    }
+
     get open_(): boolean {
         return this.dialog.open;
     }
 
     destroy(): void {
         this.dialog.destroy();
+    }
+
+    private t(m: MessageLike, values?: MessageArgs): string {
+        return textOf(this.i18n, m, values);
     }
 
     private switchRow(doc: Document, label: string, hint: string | undefined, checked: boolean, onChange: (on: boolean) => void): HTMLElement {
@@ -125,7 +157,7 @@ export class TemplateDialog {
         if (!this.req) return;
         const name = this.name.input.value.trim();
         if (!name) {
-            this.error.textContent = 'A template needs a name.';
+            this.error.textContent = this.t(TEXT.needsName);
             return;
         }
         const why = this.req.onSubmit(name, this.remember);

@@ -26,12 +26,13 @@ export function computePaneScale(
 ): PriceScale {
     let min = Infinity;
     let max = -Infinity;
-    const consider = (v: number | null | undefined) => {
+    const consider = (v: number | null | undefined): void => {
         if (v != null && Number.isFinite(v)) {
             if (v < min) min = v;
             if (v > max) max = v;
         }
     };
+
     if (includeCandles) {
         for (let i = i0; i <= i1; i += 1) {
             const b = bars[i];
@@ -40,20 +41,25 @@ export function computePaneScale(
                 consider(b.low);
             }
         }
-    } else {
-        for (const model of models) {
-            const off = offsetOf(model.id);
-            for (const s of model.series) {
-                if (s.overlay === true) continue;
-                considerSeries(s, i0, i1, off, consider);
-            }
-            for (const pl of model.priceLines) consider(pl.price);
-        }
-        if (drawings) {
-            consider(drawings.min);
-            consider(drawings.max);
-        }
     }
+
+    for (const model of models) {
+        const off = offsetOf(model.id);
+        for (const s of model.series) {
+            // force_overlay series render (and scale) on the PRICE pane, not their own —
+            // the price pane folds them back in via overlaySeriesRange.
+            if (s.overlay === true) continue;
+            considerSeries(s, i0, i1, off, consider);
+        }
+        for (const pl of model.priceLines) consider(pl.price);
+    }
+
+    // Visible Pine drawings (boxes/lines/labels/…) also expand the scale.
+    if (drawings) {
+        consider(drawings.min);
+        consider(drawings.max);
+    }
+
     if (min === Infinity || max === -Infinity) return { min: 0, max: 1 };
     // A span of a few ulps is rounding noise, not a range: scale it like a flat series.
     if (max - min <= Math.max(Math.abs(min), Math.abs(max)) * 1e-12) {

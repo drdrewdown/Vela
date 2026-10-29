@@ -8,7 +8,7 @@ import { NativeRenderer } from '../src/renderers/native/NativeRenderer';
 import { resolveAnimations } from '../src/core/options';
 import type { DrawingBox, DrawingLabel, DrawingLine } from '../src/core/model/drawings';
 import type { IndicatorModel } from '../src/core/model/indicator';
-import type { ScenePatch } from '../src/core/engine/EngineOrchestrator';
+import type { ScenePatch } from '../src/core/model/patch';
 
 const box = (top: number, bottom: number, right: number, glide = true): DrawingBox => ({
     id: 'body', paneId: '', xloc: 'bar_index', left: 10, right, top, bottom, extend: 'none', borderWidth: 1, borderStyle: 'solid',
@@ -18,7 +18,7 @@ const line = (y: number): DrawingLine => ({
     id: 'wick', paneId: '', xloc: 'bar_index', x1: 12, y1: y, x2: 12, y2: y - 4, extend: 'none', invisible: false, width: 1,
     style: 'solid', arrowLeft: false, arrowRight: false, glide: true,
 });
-const label = (y: number): DrawingLabel => ({ id: 'delta', paneId: '', xloc: 'bar_index', x: 12, y, yloc: 'price', style: 'none', size: 'tiny', glide: true });
+const label = (y: number): DrawingLabel => ({ id: 'delta', paneId: '', xloc: 'bar_index', x: 12, y, yloc: 'price', style: 'none', size: 'tiny', textAlign: 'center', fontFamily: 'default', glide: true });
 const model = (b: DrawingBox[], l: DrawingLine[] = [], lb: DrawingLabel[] = []): IndicatorModel =>
     ({ id: 'ind', title: 'HTF candles', overlay: true, paneHint: 'price', series: [], boxes: b, lines: l, labels: lb }) as unknown as IndicatorModel;
 

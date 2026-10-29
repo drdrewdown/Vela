@@ -84,7 +84,8 @@ settings panel, laid out the same way for every tool:
   (on/off, ratio, color), including the ones that are off.
 - **Label** — the words, their styling and, on line tools, where they sit along the line and on
   which side. Placement options appear only once the label has words.
-- **Points** — each anchor's price, editable, and its time in the chart's time zone.
+- **Points** — each anchor's price, editable, and its time in the chart's time zone. On a
+  daily or coarser chart the point shows its bar's date, the same in every time zone.
 - **Show on** — every timeframe, intraday only, 1H and up, or a custom set. The timeframe list
   appears only for a custom set, and a dot marks the chart's own timeframe. A drawing limited to
   other timeframes is neither painted nor clickable on this chart.
@@ -351,7 +352,7 @@ whether it falls in that pattern's ideal Fibonacci band.
 | Tool | Type key | What it does |
 |---|---|---|
 | Date & Price Range | `datepricerange` | A box reporting the time span + price/% change it covers. |
-| Long/Short Position | `position` | An entry/stop/target box: click the entry, then drag in the profit direction (up for a long, down for a short). Shows risk:reward, percentages, dollar loss, and position size from your risk % and account balance (size is editable and back-solves the risk %). The settings panel has a long/short switch (mirrors the levels across the entry), exact level values in price or points, and per-label display toggles; zone colors and label styling sit on the quick bar. |
+| Long/Short Position | `position` | An entry/stop/target box: click the entry, then drag in the profit direction (up for a long, down for a short). Shows risk:reward, percentages, the amount lost at the stop, and position size from your risk % and account balance (size is editable and back-solves the risk %). The settings panel has a long/short switch (mirrors the levels across the entry), exact level values in price or points, and per-label display toggles; zone colors and label styling sit on the quick bar. |
 | Magnifier | `magnifier` | A press-drag-release rectangle whose interior shows the same market at a **lower timeframe**, rendered in the chart's own price style *and colors* (candles, bars, line, area, Heikin Ashi; custom chart types fall back to candles) at true time/price positions. The timeframe chip on the rectangle's bottom-left corner is a dropdown — click it to switch — and the same pick leads the quick bar, beside the up/down color overrides and the border style; **Auto** subdivides the chart's timeframe, and both pickers offer only timeframes below the chart's own. The finer bars load in the background and follow live data; when the chart is already at the finest timeframe, or the area needs more bars than the tool will fetch, a notice inside the rectangle says so. Needs a market with a ranged data source (offline `data` arrays have nothing to fetch). |
 
 ---

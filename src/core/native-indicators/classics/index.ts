@@ -1,3 +1,5 @@
+import type { MessageLike } from '../../i18n/types';
+import { INDICATOR_CATEGORIES } from '../categories';
 import { registerNativeIndicator } from '../NativeIndicator';
 import { classicDescriptor } from './define';
 import type { ClassicIndicatorSpec } from './define';
@@ -26,17 +28,17 @@ export const classicSpecs: ClassicIndicatorSpec[] = [
 ];
 
 /** Picker group per family — the catalog reads as a study library, not one long list. */
-const FAMILY_CATEGORY: ReadonlyArray<readonly [ClassicIndicatorSpec[], string]> = [
-    [averageSpecs, 'Moving Averages'],
-    [bandSpecs, 'Bands & Channels'],
-    [oscillatorSpecs, 'Oscillators'],
-    [trendSpecs, 'Trend'],
-    [volatilitySpecs, 'Volatility'],
-    [volumeSpecs, 'Volume'],
-    [overlaySpecs, 'Overlays'],
+const FAMILY_CATEGORY: ReadonlyArray<readonly [ClassicIndicatorSpec[], MessageLike]> = [
+    [averageSpecs, INDICATOR_CATEGORIES.movingAverages],
+    [bandSpecs, INDICATOR_CATEGORIES.bands],
+    [oscillatorSpecs, INDICATOR_CATEGORIES.oscillators],
+    [trendSpecs, INDICATOR_CATEGORIES.trend],
+    [volatilitySpecs, INDICATOR_CATEGORIES.volatility],
+    [volumeSpecs, INDICATOR_CATEGORIES.volume],
+    [overlaySpecs, INDICATOR_CATEGORIES.overlays],
 ];
 
-export function classicCategory(spec: ClassicIndicatorSpec): string | undefined {
+export function classicCategory(spec: ClassicIndicatorSpec): MessageLike | undefined {
     return FAMILY_CATEGORY.find(([family]) => family.includes(spec))?.[1];
 }
 

@@ -11,7 +11,7 @@ describe('wheel zoom anchor', () => {
         expect(base.timeScale.zoomAnchor).toBe('right');
         expect(mergeConfig(base, { timeScale: { zoomAnchor: 'cursor' } }).timeScale.zoomAnchor).toBe('cursor');
         expect(mergeConfig(base, { timeScale: { zoomAnchor: 'middle' } }).timeScale.zoomAnchor).toBe('right');
-        expect(mergeConfig(base, { timeScale: { hour12: true } }).timeScale.zoomAnchor).toBe('right');
+        expect(mergeConfig(base, { timeScale: { timezone: 'America/New_York' } }).timeScale.zoomAnchor).toBe('right');
     });
 
     it('the feature and the config are one setting, and a change reaches config listeners', () => {

@@ -2,10 +2,33 @@
 // applies, right-click manages), the host's read-only presets after a divider, and a `+`
 // that saves the active chart's set. The chip whose set the active chart shows is
 // highlighted; a chart that drifted from the template it last applied shows a dot.
+import { msg } from '../core/i18n/message';
+import { textOf } from '../core/i18n/text';
+import type { MessageLike, Translator } from '../core/i18n/types';
 import { Menu } from '../ui/components/menu';
 import { injectStyles } from '../ui/styles';
 import { TemplateDialog } from './template-dialog';
 import { timeframeLabel } from './timeframe';
+
+const TEXT = {
+    group: msg('widget.templates.group', 'Indicator templates'),
+    save: msg('widget.templates.save', 'Save indicator template'),
+    saveHint: msg('widget.templates.saveHint', 'Save the current indicators as a template'),
+    full: msg('widget.templates.full', 'Ten templates already — update or remove one'),
+    noStudies: msg('widget.templates.noStudies', 'No studies (clears the chart)'),
+    remembersInterval: msg('widget.templates.remembersInterval', 'Remembers interval {timeframe}'),
+    remembersSymbol: msg('widget.templates.remembersSymbol', 'Remembers symbol {symbol}'),
+    remembersBoth: msg('widget.templates.remembersBoth', 'Remembers interval {timeframe} and symbol {symbol}'),
+    builtIn: msg('widget.templates.builtIn', 'Built-in — right-click to save as your own'),
+    exportAll: msg('widget.templates.export', 'Export templates…'),
+    importAll: msg('widget.templates.import', 'Import templates…'),
+    copy: msg('widget.templates.copy', 'Save as my template…'),
+    update: msg('widget.templates.update', 'Update from chart'),
+    rename: msg('widget.templates.rename', 'Rename…'),
+    rememberInterval: msg('widget.templates.rememberInterval', 'Remember interval'),
+    rememberSymbol: msg('widget.templates.rememberSymbol', 'Remember symbol'),
+    remove: msg('widget.templates.remove', 'Remove'),
+};
 
 const STYLE_ID = 'vela-widget-template-strip';
 const CSS = `
@@ -63,6 +86,8 @@ export interface TemplateChipRow {
 export interface TemplateStripOptions {
     /** Where the menu and the dialog portal to. */
     host: HTMLElement;
+    /** The shell's translator (labels, menus, the dialog). Absent: English. */
+    i18n?: Translator;
     rows: () => readonly TemplateChipRow[];
     /** The active chart's market and study count, for the save dialog. */
     context: () => { timeframe: string; symbol: string; studies: number };
@@ -95,21 +120,22 @@ export function chipLabel(name: string): string {
 }
 
 /** A chip's tooltip: the studies, then what the template remembers. */
-export function chipTooltip(row: TemplateChipRow, label: (timeframe: string) => string = timeframeLabel): string {
-    const lines = [row.name, row.studies.length > 0 ? row.studies.join(', ') : 'No studies (clears the chart)'];
-    const remembers: string[] = [];
-    if (row.timeframe) remembers.push(`interval ${label(row.timeframe)}`);
-    if (row.symbol) remembers.push(`symbol ${row.symbol}`);
-    if (remembers.length > 0) lines.push(`Remembers ${remembers.join(' and ')}`);
-    if (row.builtIn) lines.push('Built-in — right-click to save as your own');
+export function chipTooltip(row: TemplateChipRow, label: (timeframe: string) => string = timeframeLabel, i18n?: Translator | null): string {
+    const t = (m: MessageLike, values?: Record<string, string>): string => textOf(i18n, m, values);
+    const lines = [row.name, row.studies.length > 0 ? row.studies.join(', ') : t(TEXT.noStudies)];
+    const timeframe = row.timeframe ? label(row.timeframe) : '';
+    if (row.timeframe && row.symbol) lines.push(t(TEXT.remembersBoth, { timeframe, symbol: row.symbol }));
+    else if (row.timeframe) lines.push(t(TEXT.remembersInterval, { timeframe }));
+    else if (row.symbol) lines.push(t(TEXT.remembersSymbol, { symbol: row.symbol }));
+    if (row.builtIn) lines.push(t(TEXT.builtIn));
     return lines.join('\n');
 }
 
 /** The `+` chip's right-click menu: the whole list in and out as a file. */
-export function addMenuRows(hasTemplates: boolean): Array<{ id: string; label: string; disabled?: boolean }> {
+export function addMenuRows(hasTemplates: boolean, i18n?: Translator | null): Array<{ id: string; label: string; disabled?: boolean }> {
     return [
-        { id: 'export', label: 'Export templates…', disabled: !hasTemplates },
-        { id: 'import', label: 'Import templates…' },
+        { id: 'export', label: textOf(i18n, TEXT.exportAll), disabled: !hasTemplates },
+        { id: 'import', label: textOf(i18n, TEXT.importAll) },
     ];
 }
 
@@ -124,14 +150,15 @@ function downloadText(doc: Document, text: string, filename: string): void {
 }
 
 /** The right-click menu of a chip, by the chip's kind. */
-export function templateMenuRows(row: TemplateChipRow): Array<{ id: string; label: string; checked?: boolean; toggle?: boolean; separatorBefore?: boolean }> {
-    if (row.builtIn) return [{ id: 'copy', label: 'Save as my template…' }];
+export function templateMenuRows(row: TemplateChipRow, i18n?: Translator | null): Array<{ id: string; label: string; checked?: boolean; toggle?: boolean; separatorBefore?: boolean }> {
+    const t = (m: MessageLike): string => textOf(i18n, m);
+    if (row.builtIn) return [{ id: 'copy', label: t(TEXT.copy) }];
     return [
-        { id: 'update', label: 'Update from chart' },
-        { id: 'rename', label: 'Rename…' },
-        { id: 'timeframe', label: 'Remember interval', checked: Boolean(row.timeframe), toggle: true, separatorBefore: true },
-        { id: 'symbol', label: 'Remember symbol', checked: Boolean(row.symbol), toggle: true },
-        { id: 'remove', label: 'Remove', separatorBefore: true },
+        { id: 'update', label: t(TEXT.update) },
+        { id: 'rename', label: t(TEXT.rename) },
+        { id: 'timeframe', label: t(TEXT.rememberInterval), checked: Boolean(row.timeframe), toggle: true, separatorBefore: true },
+        { id: 'symbol', label: t(TEXT.rememberSymbol), checked: Boolean(row.symbol), toggle: true },
+        { id: 'remove', label: t(TEXT.remove), separatorBefore: true },
     ];
 }
 
@@ -153,16 +180,16 @@ export class TemplateStrip {
         this.el = doc.createElement('div');
         this.el.className = 'vela-bb-templates';
         this.el.setAttribute('role', 'group');
-        this.el.setAttribute('aria-label', 'Indicator templates');
+        this.el.setAttribute('aria-label', this.t(TEXT.group));
         this.add = doc.createElement('button');
         this.add.className = 'vela-bb-template-add';
         this.add.textContent = '+';
-        this.add.setAttribute('aria-label', 'Save indicator template');
+        this.add.setAttribute('aria-label', this.t(TEXT.save));
         this.add.addEventListener('click', () => this.openSave());
         this.add.addEventListener('contextmenu', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            this.addMenu.setItems(addMenuRows(this.opts.rows().some((r) => !r.builtIn)));
+            this.addMenu.setItems(addMenuRows(this.opts.rows().some((r) => !r.builtIn), this.opts.i18n));
             this.addMenu.openAt(e.clientX, e.clientY);
         });
         this.addMenu = new Menu({ host: opts.host, items: [], placement: 'top-start', onSelect: (id) => this.runAdd(id) });
@@ -178,7 +205,7 @@ export class TemplateStrip {
         });
         opts.host.appendChild(this.fileInput);
         this.menu = new Menu({ host: opts.host, items: [], placement: 'top-start', checkmarks: true, onSelect: (id) => this.run(id) });
-        this.dialog = new TemplateDialog(opts.host);
+        this.dialog = new TemplateDialog(opts.host, opts.i18n);
         this.refresh();
     }
 
@@ -199,8 +226,16 @@ export class TemplateStrip {
         }
         const full = !this.opts.canSave();
         this.add.disabled = full;
-        this.add.title = full ? 'Ten templates already — update or remove one' : 'Save the current indicators as a template';
+        this.add.title = this.t(full ? TEXT.full : TEXT.saveHint);
         this.el.appendChild(this.add);
+    }
+
+    /** Re-read the strip's labels in the current language. */
+    relocalize(): void {
+        this.el.setAttribute('aria-label', this.t(TEXT.group));
+        this.add.setAttribute('aria-label', this.t(TEXT.save));
+        this.dialog.relocalize();
+        this.refresh();
     }
 
     destroy(): void {
@@ -216,6 +251,10 @@ export class TemplateStrip {
         this.opts.onImport?.(text);
     }
 
+    private t(m: MessageLike): string {
+        return textOf(this.opts.i18n, m);
+    }
+
     private chip(doc: Document, row: TemplateChipRow): HTMLButtonElement {
         const b = doc.createElement('button');
         b.className = 'vela-bb-template';
@@ -224,7 +263,7 @@ export class TemplateStrip {
         if (row.state === 'exact') b.dataset.active = '1';
         if (row.state === 'drifted') b.dataset.drifted = '1';
         const label = this.opts.timeframeLabel ?? timeframeLabel;
-        b.title = chipTooltip(row, label);
+        b.title = chipTooltip(row, label, this.opts.i18n);
         b.textContent = chipLabel(row.name);
         if (row.timeframe) {
             const tf = doc.createElement('span');
@@ -258,7 +297,7 @@ export class TemplateStrip {
             e.preventDefault();
             e.stopPropagation();
             this.menuRow = row;
-            this.menu.setItems(templateMenuRows(row));
+            this.menu.setItems(templateMenuRows(row, this.opts.i18n));
             this.menu.openAt(e.clientX, e.clientY);
         });
         return b;

@@ -133,9 +133,9 @@ describe('NativeRenderer.getConfig — defaults resolve to concrete values', () 
         expect(cfg.grid.vertLines).toEqual({ visible: true, color: '#0e131d' });
         expect(cfg.grid.horzLines).toEqual({ visible: true, color: '#0e131d' });
         expect(cfg.crosshair).toEqual({ color: '#9aa0ad', width: 1, style: 'dashed', opacity: 0.4, labelBackground: '#595959' });
-        expect(cfg.priceScale).toEqual({ mode: 'price', side: 'right', log: false, invert: false, borderColor: '#161d2b', labelsVisible: true, currentPriceLine: true, priceLabel: true, countdown: true, animateLastPrice: false, rangeChips: true, indicatorChips: true, mergeChips: true });
+        expect(cfg.priceScale).toEqual({ mode: 'price', side: 'right', log: false, invert: false, priceOnly: false, borderColor: '#161d2b', labelsVisible: true, currentPriceLine: true, priceLabel: true, countdown: true, animateLastPrice: false, rangeChips: true, indicatorChips: true, mergeChips: true });
         expect(cfg.panes).toEqual({ separatorColor: '#161d2b', weights: {} }); // inherits the theme border
-        expect(cfg.timeScale).toEqual({ timezone: 'UTC', hour12: false, zoomAnchor: 'right' });
+        expect(cfg.timeScale).toEqual({ timezone: 'UTC', zoomAnchor: 'right' });
         expect(cfg.candles.upColor).toBe('#5aa1ff');
         expect(cfg.candles.downColor).toBe('#ff709a');
         expect(cfg.candles.borderUpColor).toBeNull(); // follows the body colour — stored as such, so it round-trips
@@ -192,7 +192,7 @@ describe('NativeRenderer.applyConfig — applies + syncs the live scene fields',
         const r = new NativeRenderer();
         r.applyConfig({
             priceScale: { log: true, mode: 'percent', labelsVisible: false, currentPriceLine: false },
-            timeScale: { timezone: 'America/New_York', hour12: true },
+            timeScale: { timezone: 'America/New_York' },
             series: { style: 'area' },
         });
         expect(r.readFeature('logScale')).toBe(true);

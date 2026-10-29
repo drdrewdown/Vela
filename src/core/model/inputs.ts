@@ -4,6 +4,8 @@
  * declarations onto this at its boundary). Drives the renderer's settings dialog
  * (the gear settings UI).
  */
+import type { MessageLike } from '../i18n/types';
+
 export type InputType =
     | 'int'
     | 'float'
@@ -19,6 +21,24 @@ export type InputType =
     | 'text_area';
 
 export type InputValue = number | string | boolean;
+
+/**
+ * The display side of an input: what the settings dialog and the legend SHOW, in the
+ * chart's language. The input's own `title`, `group` and `options` stay what they are
+ * (a script reads them, layouts persist the option values), and this side-car only
+ * changes how they read. Each field is optional and falls back to the identity field.
+ */
+export interface InputDisplay {
+    /** Shown instead of `title`. */
+    title?: MessageLike;
+    /** Shown instead of `tooltip`. */
+    tooltip?: MessageLike;
+    /** Shown instead of `group` as the section heading. */
+    group?: MessageLike;
+    /** Shown label per stored option value (`'Close'` → a translated "Close"). Values
+     *  without an entry show as themselves. */
+    options?: Readonly<Record<string, MessageLike>>;
+}
 
 /**
  * Host-provided symbol picker for the settings dialog's `input.symbol` control. Called when the
@@ -62,12 +82,6 @@ export interface InputSchema {
     step?: number;
     /** Choices for a dropdown (`input.string(..., options=[...])`). */
     options?: readonly string[];
-    /**
-     * Display text per option value, for a dropdown whose stored values are identifiers (a
-     * host's saved objects, bound by id so a rename never orphans the instance). An option
-     * without an entry shows its value.
-     */
-    optionLabels?: Readonly<Record<string, string>>;
     /** Grouping label for the dialog layout. */
     group?: string;
     /** Inline grouping label (controls placed on one row). */
@@ -79,6 +93,8 @@ export interface InputSchema {
      *  `inline=` row show while ANY member's gate passes. A hidden input keeps its value. */
     when?: InputWhen;
     tooltip?: string;
+    /** Translatable display text for this input (see {@link InputDisplay}). */
+    display?: InputDisplay;
 }
 
 /**

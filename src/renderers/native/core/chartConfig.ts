@@ -237,6 +237,8 @@ export interface ChartConfig {
         log: boolean;
         /** Inverted price axis (high at the bottom). */
         invert: boolean;
+        /** Autoscale fits the price bars only; indicators no longer widen the window. */
+        priceOnly: boolean;
         borderColor: string;
         labelsVisible: boolean;
         currentPriceLine: boolean;
@@ -302,8 +304,6 @@ export interface ChartConfig {
     };
     timeScale: {
         timezone: string;
-        /** Wall-clock format on the time axis, the crosshair time chip and the bottom-bar clock. */
-        hour12: boolean;
         /** What a wheel zoom keeps pinned: the latest bar (`right`, the common idiom) or the bar
          *  under the pointer (`cursor`). Ctrl/⌘ + wheel zooms at the pointer in either mode. */
         zoomAnchor: 'right' | 'cursor';
@@ -388,23 +388,6 @@ const LINE_STYLES: readonly LineStyle[] = ['solid', 'dashed', 'dotted'];
 /** The library's own price styles, in picker order — {@link priceStyleIds} appends the
  *  SDK-registered chart types after these, so UIs can group the two families. */
 export const BUILTIN_PRICE_STYLES: readonly PriceStyle[] = ["candles", "hollow", "bars", "line", "area", "baseline", "heikinashi"];
-
-/** Display names of the built-in price styles — the ONE list every menu reads (topbar,
- *  settings dialog, hosts). A plugin chart type supplies its own label via the registry. */
-export const BUILTIN_PRICE_STYLE_LABELS: Readonly<Record<string, string>> = {
-    candles: 'Candles',
-    hollow: 'Hollow Candles',
-    bars: 'Bars',
-    line: 'Line',
-    area: 'Area',
-    baseline: 'Baseline',
-    heikinashi: 'Heikin Ashi',
-};
-
-/** Display label for a price style: registry label, then the built-in name, else the raw id. */
-export function priceStyleLabel(id: string): string {
-    return chartType(id)?.label ?? BUILTIN_PRICE_STYLE_LABELS[id] ?? id;
-}
 
 /** Base price-series painting for a style: built-ins paint themselves; a plugin type
  *  may declare `basePainting: 'none'` to suppress candles under its layer. */
@@ -752,6 +735,7 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
             side: ps.side === 'left' || ps.side === 'right' ? ps.side : base.priceScale.side,
             log: isBool(ps.log) ? ps.log : base.priceScale.log,
             invert: isBool(ps.invert) ? ps.invert : base.priceScale.invert,
+            priceOnly: isBool(ps.priceOnly) ? ps.priceOnly : base.priceScale.priceOnly,
             borderColor: isColor(ps.borderColor) ? ps.borderColor : base.priceScale.borderColor,
             labelsVisible: isBool(ps.labelsVisible) ? ps.labelsVisible : base.priceScale.labelsVisible,
             currentPriceLine: isBool(ps.currentPriceLine) ? ps.currentPriceLine : base.priceScale.currentPriceLine,
@@ -789,7 +773,6 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
         },
         timeScale: {
             timezone: typeof ts.timezone === 'string' && ts.timezone ? ts.timezone : base.timeScale.timezone,
-            hour12: isBool(ts.hour12) ? ts.hour12 : base.timeScale.hour12,
             zoomAnchor: ts.zoomAnchor === 'cursor' || ts.zoomAnchor === 'right' ? ts.zoomAnchor : base.timeScale.zoomAnchor,
         },
         marks: {

@@ -1,6 +1,7 @@
 // Public composition root + default backends
 export { Vela } from './Vela';
-export { priceStyleIds, priceStyleLabel, BUILTIN_PRICE_STYLES, BUILTIN_PRICE_STYLE_LABELS } from './renderers/native/core/chartConfig';
+export { priceStyleIds, BUILTIN_PRICE_STYLES } from './renderers/native/core/chartConfig';
+export { priceStyleLabel } from './widget/topbar';
 export { setIndicatorCategoryOrder, orderCategories, rowBadge } from './widget/indicator-picker';
 export type { VelaDeps, RunIndicatorResult } from './Vela';
 export { RendererControl } from './core/RendererControl';
