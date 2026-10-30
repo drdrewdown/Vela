@@ -2142,6 +2142,7 @@ export class VelaWorkspace {
                 onPriceStyleChanged: (id) => this.onCellPriceStyleChanged(id),
                 onBarsChanged: (id) => this.onCellBarsChanged(id),
                 onIndicatorsChanged: (id) => this.onCellIndicatorsChanged(id),
+                onIndicatorSettingsChanged: (id) => this.onCellIndicatorSettingsChanged(id),
                 onCellConfigChanged: (id) => this.syncChromeToCell(id),
                 onStatusPrefsChanged: (id) => this.propagateStylePrefs(id),
                 onStateDirty: () => this.markStateDirty(),
@@ -2687,6 +2688,12 @@ export class VelaWorkspace {
         this.topbar.setIndicatorCount(cell.indicatorCount);
         this.indicatorPicker?.sync();
         this.refreshTemplateStrip();
+    }
+
+    /** An indicator's inputs or visibility changed: a template matches settings and visibility
+     *  too, so the strip re-reads whether the active chart still shows one. */
+    private onCellIndicatorSettingsChanged(id: string): void {
+        if (id === this.activeId) this.refreshTemplateStrip();
     }
 
     /** Timeframe changes routed from the topbar menu / quick entry (chip state follows). */

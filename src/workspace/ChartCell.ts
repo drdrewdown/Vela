@@ -215,6 +215,9 @@ export interface CellDeps {
     onBarsChanged(id: string): void;
     /** The cell's indicator ledger changed (count/picker refresh upstream). */
     onIndicatorsChanged(id: string): void;
+    /** An indicator's inputs or visibility changed on this cell — the ledger a template matches
+     *  against, so the template strip re-reads upstream. */
+    onIndicatorSettingsChanged?(id: string): void;
     /** The cell's renderer config changed (scale side, clock, …) — the shared chrome follows the active cell upstream. */
     onCellConfigChanged?(id: string): void;
     /** A Status line tab pref changed on this cell (the style link mirrors upstream). */
@@ -582,10 +585,16 @@ export class ChartCell {
             this.refreshNativeCatalog();
             this.deps.onIndicatorsChanged(this.id);
         });
-        this.inner.on('indicator:inputs', () => this.deps.onStateDirty());
+        this.inner.on('indicator:inputs', () => {
+            this.deps.onStateDirty();
+            this.deps.onIndicatorSettingsChanged?.(this.id);
+        });
         // A legend-eye toggle is a persistable choice like an input edit — without this
         // a hidden indicator came back visible on reload (nothing marked the doc dirty).
-        this.inner.on('indicator:visibility', () => this.deps.onStateDirty());
+        this.inner.on('indicator:visibility', () => {
+            this.deps.onStateDirty();
+            this.deps.onIndicatorSettingsChanged?.(this.id);
+        });
         this.inner.on('indicator:removed', ({ id }) => {
             if (this.destroyed) return;
             // Out-of-band removals (legend ✕, object tree, middle-click, handle.remove())

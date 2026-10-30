@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The template strip in the bottom bar: a chip per saved template and per preset, the one
-// the active chart shows highlighted, a click applies, the `+` saves through the dialog,
-// and a host can leave the strip out.
+// the active chart shows highlighted (following its studies, their settings and visibility),
+// a click applies, the `+` saves through the dialog, and a host can leave the strip out.
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 
 (globalThis as { CSS?: unknown }).CSS ??= { escape: (v: string) => v };
@@ -48,6 +48,30 @@ describe('the template strip', () => {
 
         ws.cell('c1')!.chart.addNativeIndicator('rsi');
         await new Promise((r) => setTimeout(r, 0)); // the chart announces the add on its own tick
+        expect(chips(host)[0]!.dataset.active).toBeUndefined();
+        expect(chips(host)[0]!.dataset.drifted).toBe('1');
+    });
+
+    it('follows a study\'s settings and visibility, not only the studies added and removed', async () => {
+        const { ws, host } = mount();
+        const sma = ws.cell('c1')!.chart.addNativeIndicator('sma', { inputs: { length: 50 } });
+        ws.setActiveCell('c1');
+        ws.saveIndicatorTemplate('Fifty');
+        const tick = () => new Promise((r) => setTimeout(r, 0));
+        await tick();
+        expect(chips(host)[0]!.dataset.active).toBe('1');
+
+        sma.setInputs({ length: 20 });
+        await tick();
+        expect(chips(host)[0]!.dataset.active).toBeUndefined();
+        expect(chips(host)[0]!.dataset.drifted).toBe('1');
+
+        sma.setInputs({ length: 50 });
+        await tick();
+        expect(chips(host)[0]!.dataset.active).toBe('1');
+
+        sma.setVisible(false);
+        await tick();
         expect(chips(host)[0]!.dataset.active).toBeUndefined();
         expect(chips(host)[0]!.dataset.drifted).toBe('1');
     });
