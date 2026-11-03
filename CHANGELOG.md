@@ -2,6 +2,34 @@
 
 All notable changes to Vela, newest first.
 
+## [0.9.3]
+
+### Added
+
+- **Know which language runs each script.** An indicator handle now tells which
+  scripting language runs it, in `language`: the language you added it with, or the
+  chart's `defaultLanguage`. It is available as soon as `addIndicator` returns, stays the
+  same after `updateCode`, and is absent on native indicators. Legend actions and legend
+  callouts receive it too, so an action that only suits one language, such as opening
+  that language's editor, can show only on the scripts it supports.
+
+- **A strategy's risk-adjusted and benchmark figures.** A strategy's state can now carry
+  its compound annual growth (`cagr`), its Sharpe and Sortino ratios (`sharpe`,
+  `sortino`) and the buy-and-hold benchmark (`buyHoldPnl`, `buyHoldPct`,
+  `outperformance`), so a dashboard shows the figures the engine computed over every
+  bar. All are optional: an engine that does not compute them leaves them out, and
+  nothing changes for existing engines or hosts.
+
+## [0.9.2]
+
+### Added
+
+- **Scripting engines know the chart's trading session.** Every execution request now
+  carries the session the chart shows in `market.session` (`'regular'` | `'extended'`;
+  absent on a chart without one), so an engine that computes on its own copy of the
+  market works on the same bars as the chart. Switching the session restarts every
+  script with the new value. Engines that ignore the field behave exactly as before.
+
 ## [0.9.1]
 
 ### Added
