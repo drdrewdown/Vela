@@ -90,4 +90,42 @@ describe('native WebGL2 · Batch (triangle geometry)', () => {
             expect([0, 4]).toContainEqual(Math.round(fromCenter)); // center, or rim padded by 1
         }
     });
+
+    it('roundJoin fills a bend with the same fan circle() draws', () => {
+        const joined = new Batch();
+        joined.roundJoin(10, 20, 5, 0, 0, 5, 1.5, RED, 8); // a right-angle turn
+        const circle = new Batch();
+        circle.circle(10, 20, 1.5, RED, 8);
+        expect(joined.vertexCount).toBe(8 * 3);
+        expect(Array.from(joined.view)).toEqual(Array.from(circle.view));
+    });
+
+    it('roundJoin draws a reversal, where the two segments fold back on each other', () => {
+        const b = new Batch();
+        b.roundJoin(0, 0, 5, 0, -5, 0, 1, RED, 6);
+        expect(b.vertexCount).toBe(6 * 3);
+    });
+
+    it('roundJoin emits nothing where the line carries straight on', () => {
+        const b = new Batch();
+        b.roundJoin(0, 0, 10, 0, 10, 0, 2, RED, 8); // flat run
+        b.roundJoin(0, 0, 3, 4, 6, 8, 2, RED, 8); // sloped run, same direction
+        expect(b.vertexCount).toBe(0);
+    });
+
+    it('roundJoin emits nothing for a bend too slight to leave a visible notch', () => {
+        const b = new Batch();
+        b.roundJoin(0, 0, 100, 0, 100, 0.001, 0.5, RED, 6); // ~1e-5 rad turn: a notch far below a pixel
+        expect(b.vertexCount).toBe(0);
+    });
+
+    it('circle keeps its geometry when the same segment count repeats', () => {
+        const first = new Batch();
+        first.circle(3, 4, 2, BLUE, 12);
+        const second = new Batch();
+        second.circle(3, 4, 2, BLUE, 12);
+        second.reset();
+        second.circle(3, 4, 2, BLUE, 12);
+        expect(Array.from(second.view)).toEqual(Array.from(first.view));
+    });
 });

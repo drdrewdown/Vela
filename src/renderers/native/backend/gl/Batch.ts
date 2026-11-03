@@ -165,13 +165,13 @@ export class Batch {
      */
     circle(cx: number, cy: number, r: number, c: RGBA, segments = 16): void {
         const ext = r + AA_PAD;
+        const rim = unitCircle(segments);
         let px = cx + ext;
         let py = cy;
         this.ensure(segments * 3);
         for (let i = 1; i <= segments; i += 1) {
-            const a = (i / segments) * Math.PI * 2;
-            const nx = cx + Math.cos(a) * ext;
-            const ny = cy + Math.sin(a) * ext;
+            const nx = cx + rim[i * 2]! * ext;
+            const ny = cy + rim[i * 2 + 1]! * ext;
             this.v(cx, cy, c, 0, r);
             this.v(px, py, c, ext, r);
             this.v(nx, ny, c, ext, r);
@@ -179,4 +179,39 @@ export class Batch {
             py = ny;
         }
     }
+
+    /**
+     * Round join where a stroked polyline bends at (x, y): the {@link circle} that fills the notch
+     * two butt-capped {@link seg}s leave on the outside of the bend. `(inX, inY)` and `(outX, outY)`
+     * are the incoming and outgoing segment vectors. Where the line carries straight on, or bends
+     * too little for the notch to reach {@link JOIN_MIN_PX} across the padded edge, the two quads
+     * already meet edge to edge and nothing is emitted.
+     */
+    roundJoin(x: number, y: number, inX: number, inY: number, outX: number, outY: number, hw: number, c: RGBA, segments = 16): void {
+        const lengths = Math.hypot(inX, inY) * Math.hypot(outX, outY);
+        const forward = inX * outX + inY * outY > 0;
+        const notch = lengths > 0 ? ((hw + AA_PAD) * Math.abs(inX * outY - inY * outX)) / lengths : Infinity;
+        if (forward && notch < JOIN_MIN_PX) return;
+        this.circle(x, y, hw, c, segments);
+    }
+}
+
+/** A bend whose notch is narrower than this (CSS px) is invisible, so it gets no join. */
+const JOIN_MIN_PX = 0.05;
+
+const unitCircles = new Map<number, Float64Array>();
+
+/** The fan's rim for `segments` slices as interleaved [cos, sin] pairs, from angle 0 round to 2π. */
+function unitCircle(segments: number): Float64Array {
+    let rim = unitCircles.get(segments);
+    if (!rim) {
+        rim = new Float64Array((segments + 1) * 2);
+        for (let i = 0; i <= segments; i += 1) {
+            const a = (i / segments) * Math.PI * 2;
+            rim[i * 2] = Math.cos(a);
+            rim[i * 2 + 1] = Math.sin(a);
+        }
+        unitCircles.set(segments, rim);
+    }
+    return rim;
 }

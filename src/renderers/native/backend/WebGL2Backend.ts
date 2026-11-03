@@ -944,6 +944,9 @@ export class WebGL2Backend implements IRenderBackend {
         const rounded = !pattern && !step;
         const segs = joinSegments(hw);
         let have = false;
+        let inX = 0;
+        let inY = 0;
+        let inC: RGBA = parseColor(s.style.color);
         for (let i = Math.max(1, i0 - 1); i <= i1; i += 1) {
             const p = s.points[i - off];
             const pv = s.points[i - 1 - off];
@@ -961,7 +964,12 @@ export class WebGL2Backend implements IRenderBackend {
             }
             if (rounded) {
                 if (!have) b.circle(px, py, hw, parseColor(pv.color ?? s.style.color), segs); // cap at a run's start
-                b.circle(x, y, hw, c, segs); // round join at this vertex (cap at a run's end)
+                else b.roundJoin(px, py, inX, inY, x - px, y - py, hw, inC, segs); // the bend into this segment
+                const next = s.points[i + 1 - off];
+                if (i === i1 || !next || next.value === null) b.circle(x, y, hw, c, segs); // cap at a run's end
+                inX = x - px;
+                inY = y - py;
+                inC = c;
             }
             have = true;
         }
