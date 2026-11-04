@@ -39,6 +39,27 @@ export class Batch {
         return this.buf.subarray(0, this.n);
     }
 
+    /** Floats pushed so far: a mark to read the vertices pushed after it with {@link floatsSince}. */
+    get floatCount(): number {
+        return this.n;
+    }
+
+    /**
+     * The vertices pushed since `mark` (an earlier {@link floatCount}), as a view of the batch's
+     * own buffer — valid until the next push or reset, so copy it to keep it. Their alpha is
+     * already applied; replay the copy with {@link append}.
+     */
+    floatsSince(mark: number): Float32Array {
+        return this.buf.subarray(mark, this.n);
+    }
+
+    /** Push whole vertices exactly as they were built (a kept {@link floatsSince} copy): no alpha is re-applied. */
+    append(vertices: Float32Array): void {
+        this.ensure(vertices.length / FLOATS_PER_VERT);
+        this.buf.set(vertices, this.n);
+        this.n += vertices.length;
+    }
+
     private ensure(verts: number): void {
         const need = this.n + verts * FLOATS_PER_VERT;
         if (need <= this.buf.length) return;

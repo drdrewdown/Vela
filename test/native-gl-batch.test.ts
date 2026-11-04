@@ -119,6 +119,25 @@ describe('native WebGL2 · Batch (triangle geometry)', () => {
         expect(b.vertexCount).toBe(0);
     });
 
+    it('floatsSince + append replay the vertices pushed since a mark exactly, across growth', () => {
+        const b = new Batch(2); // tiny initial capacity → append has to grow the buffer
+        b.rect(0, 0, 4, 4, BLUE);
+        const mark = b.floatCount;
+        b.alpha = 0.5;
+        b.seg(1, 2, 30, 40, 3, RED);
+        b.circle(5, 6, 2, RED, 8);
+        const built = Array.from(b.view.subarray(mark));
+        const kept = b.floatsSince(mark).slice();
+        expect(Array.from(kept)).toEqual(built);
+        expect(b.floatCount).toBe(b.vertexCount * STRIDE);
+        b.reset();
+        b.alpha = 1; // replayed vertices keep the alpha they were built with
+        b.append(kept);
+        b.append(kept);
+        expect(b.vertexCount).toBe((2 * built.length) / STRIDE);
+        expect(Array.from(b.view)).toEqual([...built, ...built]);
+    });
+
     it('circle keeps its geometry when the same segment count repeats', () => {
         const first = new Batch();
         first.circle(3, 4, 2, BLUE, 12);
