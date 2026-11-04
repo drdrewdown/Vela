@@ -2,7 +2,7 @@ import type { VelaTheme } from '../../../core/options';
 import type { OHLCV } from '../../../core/model/ohlcv';
 import type { IndicatorModel } from '../../../core/model/indicator';
 import type { Fill, Background, PriceLine } from '../../../core/model/scene';
-import type { SeriesSpec, LineLikeSeries, CandleSeries, LineStyle, CandleBarColor } from '../../../core/model/series';
+import type { SeriesSpec, SeriesPoint, LineLikeSeries, CandleSeries, LineStyle, CandleBarColor } from '../../../core/model/series';
 import { isLineLikeSeries, seriesShownOn } from '../../../core/model/series';
 import type { CoordinateSystem } from '../core/CoordinateSystem';
 import type { SceneGraph, PaneNode, DrawingSlice } from '../core/SceneGraph';
@@ -85,6 +85,132 @@ function joinSegments(hw: number): number {
 }
 
 /**
+ * Everything but the points that a line's vertices are built from. X reaches the geometry only
+ * through `logicalToX(i) = anchorX − (rightEdge − i) · pitch`, so those three numbers stand for
+ * the whole horizontal mapping; `first`/`last` are the bars the build walks; Y comes from the
+ * scale and the pane bounds; the shape from the style, the step flag and the batch alpha baked
+ * into every vertex. The model's index offset needs no place here: the build reads a point only
+ * relative to the bar it draws (`points[i − off]`, `points[i − 1 − off]`), so the run's
+ * slot-by-slot copy of the points it read already holds all an offset can change.
+ */
+interface LineInputs {
+    anchorX: number;
+    rightEdge: number;
+    pitch: number;
+    first: number;
+    last: number;
+    min: number;
+    max: number;
+    log: boolean;
+    invert: boolean;
+    top: number;
+    height: number;
+    width: number;
+    lineStyle: LineStyle;
+    color: string;
+    step: boolean;
+    alpha: number;
+}
+
+/** Marks a slot of a {@link LineRun} snapshot that held no point (before a series starts, past its end). */
+const NO_POINT = Symbol('no point');
+
+/**
+ * A line series' finished vertices, kept between frames with the inputs they were built from.
+ * The points are kept by the value and colour of every entry the build reads — never by array
+ * or object identity, since a producer may edit `points` in place, or hand over equal points in
+ * new objects.
+ *
+ * What a run records grows with how long its inputs hold, so a line that changes every frame
+ * pays little beyond its rebuild: a frame on which the inputs moved (a scale glide, a pan, a
+ * zoom) records only the inputs; the first frame on which they held also copies the points; the
+ * next one on which the points held too keeps the vertices; and from then on they are replayed.
+ * A frame on which only a point changed copies the points again, so the line is kept on the
+ * frame after.
+ */
+interface LineRun {
+    inputs: LineInputs;
+    /** Whether `values` and `colors` hold the points read under `inputs`. */
+    pointsKept: boolean;
+    /** `value` of each entry from `first − 1 − off` to `last − off`, or {@link NO_POINT}. */
+    values: Array<number | null | typeof NO_POINT>;
+    /** `color` of the same entries. */
+    colors: Array<string | undefined | typeof NO_POINT>;
+    /** Backing store of `vertices`: grows to fit, and is reallocated when they need under a quarter of it. */
+    store: Float32Array;
+    /** The kept vertices (an exact-length view of `store`), or null while they are not kept. */
+    vertices: Float32Array | null;
+    /** The line came out longer than {@link MAX_RUN_FLOATS} under `inputs`: it is built every frame,
+     *  with no copy and no check of its points, until the inputs move. */
+    oversized: boolean;
+}
+
+/**
+ * The most floats a run keeps (1 MiB; its store may take a quarter more). A solid line costs 48
+ * floats per segment (one quad per dash when dashed, two segments per bar when stepped) plus
+ * `24 · joinSegments(w / 2)` — 144 to 480 — per round join or cap, so this holds some 1,300 bars
+ * of a thin line with a join at every bar. A longer one is built every frame while its inputs
+ * hold, as if it were not kept, with no copy and no check of its points.
+ */
+const MAX_RUN_FLOATS = 1 << 18;
+
+const NO_FLOATS = new Float32Array(0);
+
+function sameLineInputs(a: LineInputs, b: LineInputs): boolean {
+    return Object.is(a.anchorX, b.anchorX) && Object.is(a.rightEdge, b.rightEdge) && Object.is(a.pitch, b.pitch)
+        && a.first === b.first && a.last === b.last
+        && Object.is(a.min, b.min) && Object.is(a.max, b.max) && a.log === b.log && a.invert === b.invert
+        && Object.is(a.top, b.top) && Object.is(a.height, b.height)
+        && Object.is(a.width, b.width) && a.lineStyle === b.lineStyle && a.color === b.color
+        && a.step === b.step && Object.is(a.alpha, b.alpha);
+}
+
+/**
+ * Whether `points` from index `from` still hold the values and colours the run copied. Walks from
+ * the last entry back, since a live series changes at its end: a moving last point fails at once.
+ */
+function samePoints(run: LineRun, points: readonly SeriesPoint[], from: number): boolean {
+    const { values, colors } = run;
+    for (let j = values.length - 1; j >= 0; j -= 1) {
+        const p = points[from + j];
+        if (!p) {
+            if (values[j] !== NO_POINT) return false;
+        } else if (!Object.is(p.value, values[j]) || p.color !== colors[j]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function keepPoints(run: LineRun, points: readonly SeriesPoint[], from: number, count: number): void {
+    const { values, colors } = run;
+    values.length = count;
+    colors.length = count;
+    for (let j = 0; j < count; j += 1) {
+        const p = points[from + j];
+        values[j] = p ? p.value : NO_POINT;
+        colors[j] = p ? p.color : NO_POINT;
+    }
+}
+
+/** Keep the vertices `b` took since `mark`, or mark the run oversized when there are too many to keep. */
+function keepVertices(run: LineRun, b: Batch, mark: number): void {
+    const n = b.floatCount - mark;
+    if (n > MAX_RUN_FLOATS) {
+        run.oversized = true;
+        run.pointsKept = false;
+        run.values.length = 0;
+        run.colors.length = 0;
+        run.store = NO_FLOATS;
+        run.vertices = null;
+        return;
+    }
+    if (run.store.length < n || n < run.store.length / 4) run.store = new Float32Array(Math.ceil(n * 1.25));
+    run.store.set(b.floatsSince(mark));
+    run.vertices = run.store.subarray(0, n);
+}
+
+/**
  * Hand-rolled WebGL2 GEOMETRY backend (L0). Same `IRenderBackend` seam as the
  * canvas2d backend: it consumes the retained scene + coordinate system and draws
  * bgcolor + fills + candles + series + hline — everything else stays on canvas2d
@@ -140,6 +266,18 @@ export class WebGL2Backend implements IRenderBackend {
     private readonly sliceTex = new Map<HTMLCanvasElement, WebGLTexture>();
     /** The slice version each texture holds: an unchanged slice is drawn without re-uploading. */
     private readonly sliceTexVersion = new Map<HTMLCanvasElement, number>();
+    /** Each line series' kept vertices (see {@link emitPolylineRun}). */
+    private readonly lineRuns = new WeakMap<LineLikeSeries, LineRun>();
+    /** The glow pass keeps its own runs: it draws every series against its pane's scale, a
+     *  merged (own-scale) model's included, so such a line has other inputs there than in the
+     *  main pass, and a run the two passes shared would never hold for it. */
+    private readonly glowLineRuns = new WeakMap<LineLikeSeries, LineRun>();
+    /** Scratch for the inputs of the line being emitted (reused, so a kept line allocates nothing). */
+    private readonly lineInputs: LineInputs = {
+        anchorX: 0, rightEdge: 0, pitch: 0, first: 0, last: 0,
+        min: 0, max: 0, log: false, invert: false, top: 0, height: 0,
+        width: 0, lineStyle: 'solid', color: '', step: false, alpha: 0,
+    };
 
     private readonly onLost = (e: Event): void => {
         e.preventDefault(); // keep the context recoverable
@@ -553,7 +691,7 @@ export class WebGL2Backend implements IRenderBackend {
             if (!isLineLikeSeries(s) || !seriesShownOn(s, 'pane')) return;
             if (s.kind === 'histogram' || s.kind === 'columns') return;
             if (s.kind === 'circles' || s.kind === 'cross') this.emitPointMarkers(b, s, pane, coords, i0, i1, off);
-            else this.emitPolyline(b, s, pane, coords, i0, i1, s.kind === 'step', off);
+            else this.emitPolylineRun(b, this.glowLineRuns, s, pane, coords, i0, i1, s.kind === 'step', off);
         };
         for (const m of scene.indicatorsForPane(pane.id)) {
             const off = scene.offsetOf(m.id);
@@ -934,18 +1072,80 @@ export class WebGL2Backend implements IRenderBackend {
                 break;
             case 'area':
                 this.emitArea(b, spec, pane, coords, i0, i1, off);
-                this.emitPolyline(b, spec, pane, coords, i0, i1, false, off);
+                this.emitPolylineRun(b, this.lineRuns, spec, pane, coords, i0, i1, false, off);
                 break;
             case 'circles':
             case 'cross':
                 this.emitPointMarkers(b, spec, pane, coords, i0, i1, off);
                 break;
             case 'step':
-                this.emitPolyline(b, spec, pane, coords, i0, i1, true, off);
+                this.emitPolylineRun(b, this.lineRuns, spec, pane, coords, i0, i1, true, off);
                 break;
             default:
-                this.emitPolyline(b, spec, pane, coords, i0, i1, false, off);
+                this.emitPolylineRun(b, this.lineRuns, spec, pane, coords, i0, i1, false, off);
         }
+    }
+
+    /**
+     * {@link emitPolyline}, replaying the line's kept vertices from `runs` while everything the
+     * build reads is unchanged — the view, scale, bounds, style, step flag, batch alpha, and the
+     * value and colour of every point it reads — so an unchanged line costs a comparison of its
+     * visible points and one copy instead of a rebuild. The output is the same vertices either way.
+     */
+    private emitPolylineRun(b: Batch, runs: WeakMap<LineLikeSeries, LineRun>, s: LineLikeSeries, pane: PaneNode, coords: CoordinateSystem, i0: number, i1: number, step: boolean, off: number): void {
+        const now = this.lineInputs;
+        now.rightEdge = coords.rightEdgeLogical;
+        now.anchorX = coords.logicalToX(now.rightEdge);
+        now.pitch = coords.pxPerBar();
+        now.first = Math.max(1, i0 - 1);
+        now.last = i1;
+        now.min = pane.scale.min;
+        now.max = pane.scale.max;
+        now.log = !!pane.scale.log;
+        now.invert = !!pane.scale.invert;
+        now.top = pane.bounds.top;
+        now.height = pane.bounds.height;
+        now.width = s.style.width;
+        now.lineStyle = s.style.lineStyle;
+        now.color = s.style.color;
+        now.step = step;
+        now.alpha = b.alpha;
+        let run = runs.get(s);
+        if (!run || !sameLineInputs(run.inputs, now)) {
+            if (run) {
+                Object.assign(run.inputs, now);
+                run.pointsKept = false;
+                run.vertices = null;
+            } else {
+                run = { inputs: { ...now }, pointsKept: false, values: [], colors: [], store: NO_FLOATS, vertices: null, oversized: false };
+                runs.set(s, run);
+            }
+            // measured where the inputs move, so a line too long to keep is never checked or copied
+            const mark = b.floatCount;
+            this.emitPolyline(b, s, pane, coords, i0, i1, step, off);
+            run.oversized = b.floatCount - mark > MAX_RUN_FLOATS;
+            return;
+        }
+        if (run.oversized) {
+            this.emitPolyline(b, s, pane, coords, i0, i1, step, off);
+            return;
+        }
+        // the build reads points[i − 1 − off] … points[i − off] for i in [first, last]
+        const from = now.first - 1 - off;
+        if (run.pointsKept && samePoints(run, s.points, from)) {
+            if (run.vertices) {
+                b.append(run.vertices);
+                return;
+            }
+            const mark = b.floatCount;
+            this.emitPolyline(b, s, pane, coords, i0, i1, step, off);
+            keepVertices(run, b, mark);
+            return;
+        }
+        keepPoints(run, s.points, from, Math.max(0, i1 - off - from + 1));
+        run.pointsKept = true;
+        run.vertices = null;
+        this.emitPolyline(b, s, pane, coords, i0, i1, step, off);
     }
 
     private emitPolyline(b: Batch, s: LineLikeSeries, pane: PaneNode, coords: CoordinateSystem, i0: number, i1: number, step: boolean, off = 0): void {
