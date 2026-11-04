@@ -8,8 +8,8 @@ import type { OHLCV } from '../model/ohlcv';
  *   haHigh  = max(H, haOpen, haClose)
  *   haLow   = min(L, haOpen, haClose)
  *
- * Time and volume carry through unchanged. The series is RECURSIVE — each bar needs the
- * previous DERIVED bar — so a full series computes front-to-back ({@link heikinAshiFull})
+ * Time, volume and the trading day carry through unchanged. The series is RECURSIVE — each
+ * bar needs the previous DERIVED bar — so a full series computes front-to-back ({@link heikinAshiFull})
  * and a live tick derives in O(1) from the previous view bar ({@link heikinAshiNext}).
  * Synthetic by construction: derived values are never stored back into any data cache.
  */
@@ -25,6 +25,7 @@ export function heikinAshiNext(raw: OHLCV, prevHa: OHLCV | undefined): OHLCV {
         low: Math.min(raw.low, haOpen, haClose),
         close: haClose,
         ...(raw.volume != null ? { volume: raw.volume } : {}),
+        ...(raw.tradingDay != null ? { tradingDay: raw.tradingDay } : {}),
     };
 }
 

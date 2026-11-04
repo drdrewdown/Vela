@@ -1329,7 +1329,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                 c = { ...c, high: Math.max(c.high, hi), low: Math.min(c.low, lo), close: t.price, volume: (c.volume ?? 0) + v };
             } else {
                 const open = t.open ?? t.price;
-                c = { time: f.bar.time, open, high: Math.max(open, hi), low: Math.min(open, lo), close: t.price, volume: v };
+                c = { time: f.bar.time, open, high: Math.max(open, hi), low: Math.min(open, lo), close: t.price, volume: v, ...(f.bar.tradingDay != null ? { tradingDay: f.bar.tradingDay } : {}) };
             }
         }
         f.candle = c;

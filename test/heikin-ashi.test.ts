@@ -40,6 +40,14 @@ describe('heikin ashi transform', () => {
         }
     });
 
+    it('a bar keeps the trading day of the raw bar it stands for, and has none when the raw bar has none', () => {
+        const day = Date.UTC(2026, 10, 2);
+        const raw = RAW.map((b) => ({ ...b, tradingDay: day }));
+        expect(heikinAshiFull(raw).map((b) => b.tradingDay)).toEqual([day, day, day, day]);
+        expect(heikinAshiNext(raw[1]!, undefined).tradingDay).toBe(day);
+        expect(heikinAshiFull(RAW).some((b) => 'tradingDay' in b)).toBe(false);
+    });
+
     it('incremental derivation matches the full recompute (append + forming-bar replace)', () => {
         const ha = heikinAshiFull(RAW);
         // Append: next(raw[i], ha[i-1]) === full()[i]

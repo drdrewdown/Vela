@@ -46,8 +46,8 @@ class ReplayFeed implements MarketDataFeed {
     unsubs = 0;
     onBar: ((bar: OHLCV) => void) | null = null;
 
-    constructor(total = 200) {
-        this.all = universe(total);
+    constructor(total = 200, stamp: (bar: OHLCV) => OHLCV = (bar) => bar) {
+        this.all = universe(total).map(stamp);
     }
 
     async load(cfg: MarketConfig): Promise<OHLCV[]> {
@@ -148,8 +148,8 @@ class RecordingEngine implements ScriptingEngine {
 
 const EL = {} as unknown as HTMLElement;
 const charts: Vela[] = [];
-function make(opts: { live?: boolean; bars?: number; total?: number; priceStyle?: string; engine?: ScriptingEngine } = {}) {
-    const feed = new ReplayFeed(opts.total ?? 200);
+function make(opts: { live?: boolean; bars?: number; total?: number; priceStyle?: string; engine?: ScriptingEngine; stamp?: (bar: OHLCV) => OHLCV } = {}) {
+    const feed = new ReplayFeed(opts.total ?? 200, opts.stamp);
     const renderer = new FakeRenderer();
     if (opts.priceStyle) renderer.priceStyleFeature = opts.priceStyle;
     const chart = new Vela(EL, { symbol: 'AAA', timeframe: '60', bars: opts.bars ?? 100, live: opts.live ?? true, volume: false }, { renderer, engines: opts.engine ? [opts.engine] : [], dataFeed: feed });
@@ -777,6 +777,23 @@ describe('chart.replay tick replay (setTicks)', () => {
         expect(steps).toEqual([from + HOUR]);
         expect(chart.replay.step()).toBe(true); // the next one comes whole
         expect(renderer.bars[renderer.bars.length - 1]!.close).toBe(151);
+    });
+
+    it('the forming candle keeps the trading day of the bar it replays', async () => {
+        const DAY = 86_400_000;
+        // Each bar booked on the day after its calendar day, as an evening session is.
+        const { chart, renderer } = make({ stamp: (bar) => ({ ...bar, tradingDay: Math.floor(bar.time / DAY) * DAY + DAY }) });
+        await chart.ready();
+        const from = renderer.bars[49]!.time;
+        await chart.replay.start({ from });
+        chart.replay.setTicks(threeTicks);
+        const last = (): OHLCV => renderer.bars[renderer.bars.length - 1]!;
+        const booked = Math.floor((from + HOUR) / DAY) * DAY + DAY;
+
+        chart.replay.stepUpdate(); // the bar opens at its first tick
+        expect(last()).toMatchObject({ time: from + HOUR, close: 150.5, tradingDay: booked });
+        chart.replay.stepUpdate();
+        expect(last()).toMatchObject({ time: from + HOUR, close: 149.5, tradingDay: booked });
     });
 
     it('stepUpdate() reveals one tick at a time, opening the next bar at its first', async () => {

@@ -8,4 +8,11 @@ export interface OHLCV {
     low: number;
     close: number;
     volume?: number;
+    /**
+     * The trading day the bar belongs to, as 00:00 UTC of that date (Pine `time_tradingday`).
+     * A session that opens the evening before carries the next day's date, and a session the
+     * exchange books on a later date (a holiday's short session) carries that date. Absent when
+     * the data does not say.
+     */
+    tradingDay?: Millis;
 }

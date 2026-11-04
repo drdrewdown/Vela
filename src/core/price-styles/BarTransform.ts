@@ -6,7 +6,8 @@ import { chartType, tickerModifierIds } from '../../chart-types/registry';
  * stream (Heikin Ashi is the first). The orchestrator applies it at its single outbound
  * bar seam, so the renderer, the scripting engines, and the native indicators all see
  * one consistent VIEW while the raw series stays the untouched source of truth (the
- * `'bar'` event and `chart.data` stay on the raw plane).
+ * `'bar'` event and `chart.data` stay on the raw plane). A view bar stands for its raw
+ * bar: it keeps its `time`, and its `tradingDay` when it has one.
  *
  * Deliberately NOT a contract for styles that change the bar count or time axis
  * (Renko, Kagi, Point & Figure) — those need a different seam.
