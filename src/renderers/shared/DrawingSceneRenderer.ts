@@ -76,11 +76,75 @@ const MARKER_YLOC: Record<MarkerPoint['position'], LabelYLoc> = { aboveBar: 'abo
  */
 const markerLabelCache = new WeakMap<readonly MarkerPoint[], { seriesId: string; paneId: string; overlay: boolean; labels: DrawingLabel[] }>();
 
-/** Inclusive epoch-ms window; a drawing set built with one carries only the marker labels
- *  inside it (Pine labels are few and untouched). */
+/** Inclusive epoch-ms window; a drawing set built with one carries only the marker labels and
+ *  the time-anchored labels inside it. */
 export interface TimeWindow {
     from: number;
     to: number;
+}
+
+/** How far past the canvas edges, in CSS px, a label's anchor may sit and still be painted (its
+ *  text can reach into view). A drawing window must cover at least this much. */
+export const LABEL_CULL_PX = 50;
+
+/**
+ * A label list's time-anchored labels, ordered by time so a viewport window is a binary search.
+ * Labels a window cannot judge by their anchor — bar-index anchors, labels riding a segment,
+ * pinned price chips — are kept in every window. Memoised on the list, which a patch replaces.
+ */
+interface LabelTimeIndex {
+    length: number;
+    times: Float64Array;
+    order: Int32Array;
+    always: Int32Array;
+}
+
+const labelTimeIndexCache = new WeakMap<readonly DrawingLabel[], LabelTimeIndex>();
+
+function labelTimeIndex(labels: readonly DrawingLabel[]): LabelTimeIndex {
+    const hit = labelTimeIndexCache.get(labels);
+    if (hit && hit.length === labels.length) return hit;
+    const anchored: number[] = [];
+    const always: number[] = [];
+    labels.forEach((l, i) => {
+        const pinned = l.style === 'label_left' && l.yloc === 'price';
+        (l.xloc === 'bar_time' && !l.track && !pinned ? anchored : always).push(i);
+    });
+    anchored.sort((a, b) => labels[a]!.x - labels[b]!.x || a - b);
+    const index: LabelTimeIndex = {
+        length: labels.length,
+        times: Float64Array.from(anchored, (i) => labels[i]!.x),
+        order: Int32Array.from(anchored),
+        always: Int32Array.from(always),
+    };
+    labelTimeIndexCache.set(labels, index);
+    return index;
+}
+
+/** First index with `times[i] >= t` in a sorted array. */
+function lowerBoundTime(times: Float64Array, t: number): number {
+    let lo = 0;
+    let hi = times.length;
+    while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (times[mid]! < t) lo = mid + 1;
+        else hi = mid;
+    }
+    return lo;
+}
+
+/** The labels a viewport window can show, in their original (paint) order. */
+export function windowLabels(labels: readonly DrawingLabel[], window?: TimeWindow): readonly DrawingLabel[] {
+    if (!window || labels.length === 0) return labels;
+    const index = labelTimeIndex(labels);
+    const lo = lowerBoundTime(index.times, window.from);
+    const hi = lowerBoundTime(index.times, window.to + 1);
+    if (hi - lo === index.times.length) return labels;
+    const pick = new Int32Array(index.always.length + hi - lo);
+    pick.set(index.always);
+    pick.set(index.order.subarray(lo, hi), index.always.length);
+    pick.sort();
+    return Array.from(pick, (i) => labels[i]!);
 }
 
 /** First index with `labels[i].x >= t` in a time-sorted label array. */
@@ -160,7 +224,7 @@ export function modelDrawingSet(m: DrawingSetSource, overlay: boolean, window?: 
     return {
         lines: (m.lines ?? []).filter(want),
         boxes: (m.boxes ?? []).filter(want),
-        labels: [...(m.labels ?? []), ...markerLabels(m.series, '', window)].filter(want),
+        labels: [...windowLabels(m.labels ?? [], window), ...markerLabels(m.series, '', window)].filter(want),
         polylines: (m.polylines ?? []).filter(want),
         linefills: (m.linefills ?? []).filter(want),
     };
@@ -640,7 +704,7 @@ export class DrawingSceneRenderer {
             // thousands of bar-anchored labels (marker studies) must pay only for the ones
             // in view. Pinned price chips are exempt — they re-anchor to the margin below.
             const pinned = lb.style === "label_left" && lb.yloc === "price";
-            if (!pinned && (px < -50 || px > W + 50)) continue;
+            if (!pinned && (px < -LABEL_CULL_PX || px > W + LABEL_CULL_PX)) continue;
             let py;
             if (lb.yloc === "price") {
                 py = yOf(lb.y);

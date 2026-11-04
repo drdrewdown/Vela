@@ -73,7 +73,7 @@ import { AXIS_MASTER_W, AXIS_MERGED_W, rightGutterPx } from './chrome/axisLayout
 import { CrosshairRenderer } from './chrome/CrosshairRenderer';
 import { SettingsDialog } from './chrome/SettingsDialog';
 import { UserDrawingController } from './drawings/UserDrawingController';
-import { IndicatorDrawingSlices, mergeSlices } from './drawings/IndicatorDrawingSlices';
+import { IndicatorDrawingSlices, drawingTimeWindow, mergeSlices } from './drawings/IndicatorDrawingSlices';
 import { createProjector } from './drawings/Projector';
 import type { Projector, SnapMode } from '../../core/drawings';
 import type { IDrawingsRendererPort } from '../../core/drawings';
@@ -4366,7 +4366,7 @@ export class NativeRenderer implements IChartRenderer {
     /** The visible logical range as an epoch-ms window (two bars of slack) — what the marker
      *  labels of a frame are sliced to. */
     private drawingWindow(vr: { from: number; to: number }): { from: number; to: number } {
-        return { from: this.coords.logicalToTime(vr.from - 2), to: this.coords.logicalToTime(vr.to + 2) };
+        return drawingTimeWindow(this.coords, vr);
     }
 
     private firstVisibleValue(models: IndicatorModel[], i0: number): number {

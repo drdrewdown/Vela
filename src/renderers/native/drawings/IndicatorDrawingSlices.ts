@@ -6,11 +6,25 @@ import {
     DrawingSceneRenderer,
     modelDrawingSet,
     drawingSetEmpty,
+    LABEL_CULL_PX,
     type DrawingSet,
     type LabelTipRegion,
+    type TimeWindow,
 } from '../../shared/DrawingSceneRenderer';
 import { paintTable } from '../../shared/TableCanvasRenderer';
 import { beginPlotFrame } from '../core/plotDirection';
+
+/**
+ * The time window a frame's drawing set is cut to: every anchor whose x the label painter keeps —
+ * the canvas from {@link LABEL_CULL_PX} left of its left edge to that far past the plot's right
+ * edge (the right edge sits a scale gutter in when the scale docks left) — and never less than
+ * the visible range two bars out. One bar of slack each side absorbs the time↔logical rounding.
+ */
+export function drawingTimeWindow(coords: CoordinateSystem, visible = coords.visibleLogicalRange()): TimeWindow {
+    const from = Math.min(visible.from - 2, coords.xToLogical(-LABEL_CULL_PX) - 1);
+    const to = Math.max(visible.to + 2, coords.xToLogical(coords.leftOffsetPx + coords.width + LABEL_CULL_PX) + 1);
+    return { from: coords.logicalToTime(from), to: coords.logicalToTime(to) };
+}
 
 /**
  * The slice key for an indicator's drawings: the first series boundary STRICTLY above
@@ -81,8 +95,7 @@ export class IndicatorDrawingSlices {
             if (bucket) bucket.entries.push(entry);
             else buckets.set(key, { paneId, beforeZ, entries: [entry] });
         };
-        const vl = coords.visibleLogicalRange();
-        const win = { from: coords.logicalToTime(vl.from - 2), to: coords.logicalToTime(vl.to + 2) };
+        const win = drawingTimeWindow(coords);
         for (const pane of scene.orderedPanes()) {
             if (pane.collapsed) continue;
             const boundaries = scene.seriesBoundaries(pane.id);

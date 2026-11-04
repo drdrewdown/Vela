@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { DrawingSceneRenderer, modelDrawingSet } from '../src/renderers/shared/DrawingSceneRenderer';
+import { DrawingSceneRenderer, LABEL_CULL_PX, modelDrawingSet } from '../src/renderers/shared/DrawingSceneRenderer';
+import { CoordinateSystem } from '../src/renderers/native/core/CoordinateSystem';
+import { drawingTimeWindow } from '../src/renderers/native/drawings/IndicatorDrawingSlices';
 import { modelToValuePatch } from '../src/core/engine/EngineOrchestrator';
 import { applyPatch } from '../src/renderers/native/NativeRenderer';
 import type { IndicatorModel } from '../src/core/model/indicator';
 import type { MarkerSeries, SeriesSpec } from '../src/core/model/series';
+import type { DrawingLabel } from '../src/core/model/drawings';
 import type { VelaTheme } from '../src/core/options';
 
 // A `kind: 'markers'` series is painted by mapping each marker onto a point-shape label —
@@ -84,13 +87,67 @@ describe('markers series → labels (modelDrawingSet)', () => {
         expect(c[0]).toEqual(a[0]);
     });
 
-    it('a time window slices the marker labels by binary search; Pine labels are untouched', () => {
+    it('a time window slices the marker labels by binary search, and the time-anchored Pine labels with them', () => {
         const m = model([markers()]);
-        m.labels = [{ id: 'pine', paneId: '', xloc: 'bar_time', x: T0 - 999_999, y: 1, yloc: 'price', style: 'label_up', size: 'normal', textAlign: 'center', fontFamily: 'default' }];
+        m.labels = [
+            { id: 'pine', paneId: '', xloc: 'bar_time', x: T0 - 999_999, y: 1, yloc: 'price', style: 'label_up', size: 'normal', textAlign: 'center', fontFamily: 'default' },
+            { id: 'pine-in', paneId: '', xloc: 'bar_time', x: T0 + 60_000, y: 1, yloc: 'price', style: 'label_up', size: 'normal', textAlign: 'center', fontFamily: 'default' },
+        ];
         const mid = modelDrawingSet(m, false, { from: T0 + 30_000, to: T0 + 90_000 }).labels;
-        expect(mid.map((l) => l.id)).toEqual(['pine', `m1:${T0 + 60_000}:1`]);
-        expect(modelDrawingSet(m, false, { from: T0 + 500_000, to: T0 + 900_000 }).labels.map((l) => l.id)).toEqual(['pine']);
-        expect(modelDrawingSet(m, false).labels).toHaveLength(4);
+        expect(mid.map((l) => l.id)).toEqual(['pine-in', `m1:${T0 + 60_000}:1`]);
+        expect(modelDrawingSet(m, false, { from: T0 + 500_000, to: T0 + 900_000 }).labels).toEqual([]);
+        expect(modelDrawingSet(m, false).labels).toHaveLength(5);
+    });
+
+    it('keeps the Pine labels a window cannot judge by their anchor, in their paint order', () => {
+        const label = (id: string, x: number, over: Partial<DrawingLabel> = {}): DrawingLabel => ({ id, paneId: '', xloc: 'bar_time', x, y: 1, yloc: 'price', style: 'label_up', size: 'normal', textAlign: 'center', fontFamily: 'default', ...over });
+        const m = model([]);
+        m.labels = [
+            label('late', T0 + 70_000),
+            label('chip', T0 - 999_999, { style: 'label_left' }), // a pinned price chip re-anchors to the margin
+            label('index', 3, { xloc: 'bar_index' }),
+            label('early', T0 + 40_000),
+            label('rider', T0 - 999_999, { track: { x1: T0 - 999_999, x2: T0 + 999_999 } }), // rides a segment's visible part
+            label('gone', T0 + 999_999),
+        ];
+        expect(modelDrawingSet(m, false, { from: T0 + 30_000, to: T0 + 90_000 }).labels.map((l) => l.id)).toEqual(['late', 'chip', 'index', 'early', 'rider']);
+    });
+
+    it('a drawing window reaches every anchor the label painter keeps, the scale docked either side', () => {
+        const times = Array.from({ length: 400 }, (_, i) => T0 + i * 60_000);
+        for (const gutter of [0, 74]) {
+            for (const barSpacing of [1, 3, 7, 24, 80]) {
+                const coords = new CoordinateSystem();
+                coords.setSize(735, 400, 1, gutter);
+                coords.setBars(times);
+                coords.setViewport({ barSpacing, rightOffset: 5 });
+                const w = drawingTimeWindow(coords);
+                // the painter keeps an anchor whose canvas x lies within LABEL_CULL_PX of the canvas,
+                // which spans the gutter (left-docked) and the plot
+                const canvasW = gutter + coords.width;
+                for (let i = 0; i < times.length; i++) {
+                    const x = coords.logicalToX(i);
+                    if (x < -LABEL_CULL_PX || x > canvasW + LABEL_CULL_PX) continue;
+                    expect(times[i]! >= w.from && times[i]! <= w.to, `gutter ${gutter}, spacing ${barSpacing}, bar ${i} at x ${x.toFixed(1)}`).toBe(true);
+                }
+            }
+        }
+    });
+
+    it('builds the time index once per label list, not once per frame', () => {
+        const m = model([]);
+        m.labels = Array.from({ length: 4000 }, (_, i) => ({ id: `l${i}`, paneId: '', xloc: 'bar_time' as const, x: T0 + i * 60_000, y: 1, yloc: 'price' as const, style: 'label_up' as const, size: 'normal' as const, textAlign: 'center' as const, fontFamily: 'default' }));
+        const w = { from: T0 + 100 * 60_000, to: T0 + 199 * 60_000 };
+        expect(modelDrawingSet(m, false, w).labels).toHaveLength(100);
+        const sort = Array.prototype.sort;
+        let sorts = 0;
+        Array.prototype.sort = function (this: unknown[], ...a: Parameters<typeof sort>) { sorts++; return sort.apply(this, a); } as typeof sort;
+        try {
+            for (let k = 0; k < 10; k++) modelDrawingSet(m, false, w);
+        } finally {
+            Array.prototype.sort = sort;
+        }
+        expect(sorts).toBe(0);
     });
 
     it('an unsorted markers series is sorted once so the window search stays valid', () => {
