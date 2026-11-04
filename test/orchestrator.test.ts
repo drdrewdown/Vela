@@ -30,7 +30,7 @@ import { registerNativeIndicator, unregisterNativeIndicator } from '../src/core/
 import { heikinAshiFull } from '../src/core/price-styles/heikin-ashi';
 import { registerChartType, unregisterChartType, type SeriesDataEngineHost } from '../src/chart-types/registry';
 import type { BarTransform } from '../src/core/price-styles/BarTransform';
-import type { NativeIndicator, NativeIndicatorContext, NativeIndicatorDescriptor } from '../src/core/native-indicators/NativeIndicator';
+import type { BarsChange, NativeIndicator, NativeIndicatorContext, NativeIndicatorDescriptor } from '../src/core/native-indicators/NativeIndicator';
 import type { Pane } from '../src/core/model/scene';
 import type { DrawingLine } from '../src/core/model/drawings';
 import type { IndicatorModel } from '../src/core/model/indicator';
@@ -348,10 +348,11 @@ class MockEngine implements ScriptingEngine {
 /** A test native indicator: records its lifecycle hook calls + emits one line series from the bars. */
 class TestNativeIndicator implements NativeIndicator {
     calls = { start: 0, onBars: 0, onViewport: 0, setInputs: 0, suspend: 0, resume: 0, stop: 0 };
+    changes: Array<BarsChange | undefined> = [];
     private ctx: NativeIndicatorContext | null = null;
     private suspended = false;
     start(ctx: NativeIndicatorContext): void { this.calls.start += 1; this.ctx = ctx; this.emit(); }
-    onBars(): void { this.calls.onBars += 1; this.emit(); }
+    onBars(change?: BarsChange): void { this.calls.onBars += 1; this.changes.push(change); this.emit(); }
     onViewport(): void { this.calls.onViewport += 1; this.emit(); }
     setInputs(): void { this.calls.setInputs += 1; if (!this.suspended) this.emit(); }
     suspend(): void { this.calls.suspend += 1; this.suspended = true; }
@@ -997,6 +998,50 @@ describe('EngineOrchestrator', () => {
             feed.push!(mkBar(lastT + 5 * HOUR, 1000));
             await flush();
             expect(lastNative.calls.onBars - base).toBe(2);
+        } finally {
+            unregisterNativeIndicator('test-native');
+        }
+    });
+
+    it('tells a native what changed: a forming-bar tick, then a new bar', async () => {
+        registerNativeIndicator(testNativeDescriptor);
+        try {
+            const HOUR = 3_600_000;
+            const feed = new GapFeed(10);
+            const chart = new Vela({} as unknown as HTMLElement, { live: true }, { renderer: new FakeRenderer(), engines: [], dataFeed: feed });
+            chart.addNativeIndicator('test-native');
+            await chart.ready();
+            await flush();
+            const lastT = 1_700_000_000_000 + 9 * HOUR;
+            lastNative.changes = [];
+
+            feed.push!(mkBar(lastT, 101)); // the forming bar refined
+            await flush();
+            feed.push!(mkBar(lastT + HOUR)); // the next bar opens
+            await flush();
+            expect(lastNative.changes).toEqual([{ cause: 'tick' }, { cause: 'bar' }]);
+        } finally {
+            unregisterNativeIndicator('test-native');
+        }
+    });
+
+    it('tells a native a heal that opened bars is a new bar, even when its last tick refined the forming one', async () => {
+        registerNativeIndicator(testNativeDescriptor);
+        try {
+            const HOUR = 3_600_000;
+            const feed = new GapFeed(10);
+            const chart = new Vela({} as unknown as HTMLElement, { live: true }, { renderer: new FakeRenderer(), engines: [], dataFeed: feed });
+            chart.addNativeIndicator('test-native');
+            await chart.ready();
+            await flush();
+            const lastT = 1_700_000_000_000 + 9 * HOUR;
+            lastNative.changes = [];
+
+            // 4 missed bars + the forming one come back from the backfill; the gap tick is the forming bar
+            feed.rangeResult = [0, 1, 2, 3, 4, 5].map((k) => mkBar(lastT + k * HOUR));
+            feed.push!(mkBar(lastT + 5 * HOUR, 999));
+            await flush();
+            expect(lastNative.changes).toEqual([{ cause: 'bar' }]);
         } finally {
             unregisterNativeIndicator('test-native');
         }

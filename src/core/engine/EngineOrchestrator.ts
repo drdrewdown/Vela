@@ -21,6 +21,7 @@ import {
     nativeIndicatorEntry,
     nativeIndicatorEntries,
     nativeInstanceChannel,
+    type BarsChange,
     type NativeIndicatorContext,
     type NativeIndicatorInfo,
     type NativeIndicatorOutput,
@@ -1616,7 +1617,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         this.reexecuteIndicators();
         if (this.switchingMarket) return; // the restart after the load computes over the new view anyway
         for (const record of this.registry.all()) {
-            if (record.native?.started && record.renderHandle && !record.hidden) this.pokeNative(record);
+            if (record.native?.started && record.renderHandle && !record.hidden) this.pokeNative(record, 'history');
         }
     }
 
@@ -1756,13 +1757,13 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         if (this.switchingMarket) return; // old sessions must not run over the incoming market's bars
         // A backfill chunk (or the run released by its completion) is still the script's
         // FIRST look at the history, whichever bar arrived last.
-        const cause: ScriptRunCause = reason ? 'history' : this.barCause;
+        const cause: BarsChange['cause'] = reason ? 'history' : this.barCause;
         for (const record of this.registry.all()) {
             if (!record.renderHandle || record.hidden) continue;
             if (record.session) {
                 record.pendingCause = cause;
                 record.session.notifyBars(reason);
-            } else if (record.native) this.pokeNative(record);
+            } else if (record.native) this.pokeNative(record, cause);
         }
         if (this.activeEngineStyle) this.typeEngines.get(this.activeEngineStyle)?.onBars?.();
     }
@@ -1773,10 +1774,10 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      * meanwhile — and its output stays on its bars through the anchor its emit carried.
      * Once the history is complete, a held one starts and a running one re-runs.
      */
-    private pokeNative(record: IndicatorRecord): void {
+    private pokeNative(record: IndicatorRecord, cause: BarsChange['cause']): void {
         const native = record.native!;
         if (!native.descriptor.waitsForHistory) {
-            native.instance.onBars();
+            native.instance.onBars({ cause });
             return;
         }
         if (this.historyState === 'backfill') return;
@@ -1786,7 +1787,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
             if (handle) void this.startNativeIndicator(record.id, handle);
             return;
         }
-        if (native.started) native.instance.onBars();
+        if (native.started) native.instance.onBars({ cause });
     }
 
     /** Start the natives still held for a history that has completed without poking them
@@ -1794,7 +1795,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
     private releaseHeldNatives(): void {
         if (this.historyState === 'backfill') return;
         for (const record of this.registry.all()) {
-            if (record.native?.heldForHistory && !record.hidden) this.pokeNative(record);
+            if (record.native?.heldForHistory && !record.hidden) this.pokeNative(record, 'history');
         }
     }
 
@@ -1816,6 +1817,7 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      */
     private async healGap(fromMs: number): Promise<void> {
         const gen = this.generation;
+        const barsBefore = this.rawBars.length;
         this.healing = true;
         this.lastHealAt = Date.now();
         let timer: ReturnType<typeof setTimeout> | null = null;
@@ -1839,6 +1841,9 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                 const pending = this.healBuffer;
                 this.healBuffer = [];
                 for (const b of pending) this.applyBar(b, false);
+                // A heal that opened bars is a new bar however its last tick landed: the bars before
+                // the forming one are final now, and that is what the one notification must say.
+                if (this.rawBars.length > barsBefore) this.barCause = 'bar';
                 // ONE session notification for the whole heal: bars applied per-bar above (renderer +
                 // 'bar' events keep their per-bar granularity), but the engines re-execute just once.
                 this.notifySessionsBars(this.historyState === 'backfill' ? 'backfill' : undefined);

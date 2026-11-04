@@ -4,7 +4,7 @@ import type { LineLikeKind, LineStyle, MarkerPoint, SeriesDisplay, SeriesPoint, 
 import type { Fill, FillGradientStop, PriceLine } from '../../model/scene';
 import type { DrawingPolyline } from '../../model/drawings';
 import { stableSeriesId } from '../../model/identity';
-import type { NativeIndicator, NativeIndicatorContext, NativeIndicatorDescriptor } from '../NativeIndicator';
+import type { BarsChange, NativeIndicator, NativeIndicatorContext, NativeIndicatorDescriptor } from '../NativeIndicator';
 import type { MessageLike } from '../../i18n/types';
 import { sourceText } from '../../i18n/text';
 import { localizeInput, messageOnly, type LocalizableInput } from '../localize';
@@ -90,6 +90,13 @@ export interface ClassicIndicatorSpec {
     /** true = draws over the price candles; false = its own pane below. */
     overlay: boolean;
     inputs: ClassicInput[];
+    /**
+     * `true` when no output reads the forming (last) bar's prices: every value comes from bars
+     * that are already final, as a pivot ladder comes from the previous period. A live tick that
+     * only refines the forming bar cannot change such an output, so the adapter keeps it; a new
+     * bar, history landing and an input edit still recompute.
+     */
+    ignoresFormingBar?: boolean;
     compute(bars: readonly OHLCV[], inputs: Record<string, InputValue>): ClassicOutput;
 }
 
@@ -133,7 +140,8 @@ class ClassicIndicator implements NativeIndicator {
         this.recompute();
     }
 
-    onBars(): void {
+    onBars(change?: BarsChange): void {
+        if (change?.cause === 'tick' && this.spec.ignoresFormingBar) return;
         this.recompute();
     }
 

@@ -1,4 +1,5 @@
 export type {
+    BarsChange,
     NativeIndicator,
     NativeIndicatorContext,
     NativeIndicatorDescriptor,

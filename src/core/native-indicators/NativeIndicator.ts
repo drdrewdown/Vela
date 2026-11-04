@@ -6,6 +6,7 @@ import type { DrawingLine, DrawingBox, DrawingLabel, DrawingPolyline, DrawingLin
 import type { InputSchema, InputValue } from '../model/inputs';
 import type { VisibleRange, IndicatorStatus } from '../ports/IChartRenderer';
 import type { DataControl } from '../DataControl';
+import type { ScriptRunCause } from '../script-run';
 import type { MessageLike, Translator } from '../i18n/types';
 import { textOf } from '../i18n/text';
 
@@ -76,6 +77,13 @@ export interface NativeIndicatorContext {
     setStatus(status: IndicatorStatus): void;
 }
 
+/** What changed when a native's bars changed (see {@link NativeIndicator.onBars}). */
+export interface BarsChange {
+    /** `'tick'`: only the forming bar was refined. `'bar'`: a new bar opened, so the one before
+     *  it is final. `'history'`: older history landed, or the candles were re-derived. */
+    readonly cause: Extract<ScriptRunCause, 'history' | 'tick' | 'bar'>;
+}
+
 /**
  * A core-computed (non-Pine) indicator instance — the compute + lifecycle behind one on-chart
  * native indicator. The orchestrator owns one per instance and drives it through these hooks; the
@@ -86,8 +94,9 @@ export interface NativeIndicator {
     /** Begin: compute + emit the first output. */
     start(ctx: NativeIndicatorContext, inputs: Record<string, InputValue>): void;
     /** The bars changed — a live tick, older history landing, or the candles re-derived
-     *  by a price style — recompute + emit. */
-    onBars(): void;
+     *  by a price style — recompute + emit. `change` says which, for a native that can skip
+     *  or shorten the work (an output that never reads the forming bar ignores a tick). */
+    onBars(change?: BarsChange): void;
     /** The viewport changed (scroll/zoom) — for range-aware natives (see `reactsToViewport`). */
     onViewport(range: VisibleRange): void;
     /** Settings changed — recompute + emit. */

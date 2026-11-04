@@ -317,6 +317,34 @@ describe('classic descriptor adapter', () => {
         return isLineLikeSeries(series!) ? series!.points : [];
     }
 
+    it('keeps the output of a classic that never reads the forming bar on a live tick', () => {
+        const t0 = Date.UTC(2026, 8, 14);
+        // three days of hourly bars: the pivots have a previous period to read
+        const bars: OHLCV[] = Array.from({ length: 72 }, (_, i) => ({ time: t0 + i * 3_600_000, open: 100 + i, high: 102 + i, low: 98 + i, close: 101 + i, volume: 10 }));
+        const emitsOn = (type: string) => {
+            const desc = classicDescriptor(classicSpecs.find((s) => s.type === type)!);
+            const instance = desc.create();
+            let emits = 0;
+            const ctx: NativeIndicatorContext = {
+                id: 'native-test', chartId: 'chart-1', symbol: 'TEST', timeframe: '60', live: true, bars: () => bars, data: undefined as never,
+                emit: () => { emits++; }, pushData: () => {}, setStatus: () => {},
+            };
+            instance.start(ctx, { ...desc.defaultInputs(), anchor: 'Daily' });
+            const started = emits;
+            bars[bars.length - 1] = { ...bars[bars.length - 1]!, high: 500, close: 450 };
+            instance.onBars({ cause: 'tick' });
+            const afterTick = emits - started;
+            bars.push({ time: bars[bars.length - 1]!.time + 3_600_000, open: 450, high: 451, low: 449, close: 450, volume: 10 });
+            instance.onBars({ cause: 'bar' });
+            const afterBar = emits - started - afterTick;
+            instance.stop();
+            bars.length = 72;
+            return { afterTick, afterBar };
+        };
+        expect(emitsOn('pivot-points')).toEqual({ afterTick: 0, afterBar: 1 });
+        expect(emitsOn('sma')).toEqual({ afterTick: 1, afterBar: 1 });
+    });
+
     it('converts warm-up NaNs to whitespace points and wires bands to plot ids', () => {
         const spec: ClassicIndicatorSpec = {
             type: 'test-classic',

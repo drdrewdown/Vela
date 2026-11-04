@@ -203,6 +203,9 @@ const pivotPoints: ClassicIndicatorSpec = {
     title: msg('indicator.pivotPoints.title', 'Pivot Points Standard'),
     shortTitle: msg('indicator.pivotPoints.shortTitle', 'Pivots'),
     overlay: true,
+    // A period's levels come from the period before it (Woodie's open is the period's first bar,
+    // whose own levels are a break): the forming bar is never read.
+    ignoresFormingBar: true,
     inputs: [
         optionInput('kind', msg('indicator.pivotPoints.kind', 'Type'), PIVOT_TRADITIONAL, [PIVOT_TRADITIONAL, PIVOT_FIBONACCI, PIVOT_CAMARILLA, PIVOT_WOODIE], withValues(msg('indicator.pivotPoints.kind.tooltip', 'Formula used to calculate the levels. Traditional is the classic floor-trader method; Fibonacci projects {level1, number}/{level2, number}/{level3, number}% of the prior range around the pivot; Camarilla scales the prior range around the prior close; Woodie gives extra weight to the period open.'), { level1: 38.2, level2: 61.8, level3: 100 })),
         optionInput('anchor', msg('indicator.pivotPoints.anchor', 'Pivots Timeframe'), PIVOT_AUTO, [PIVOT_AUTO, 'Daily', 'Weekly', 'Monthly', 'Yearly'], msg('indicator.pivotPoints.anchor.tooltip', "Period the pivots are anchored to. Auto follows the chart's timeframe: daily pivots up to 15-minute bars, weekly on other intraday bars, monthly on daily bars, yearly above.")),

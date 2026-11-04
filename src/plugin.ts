@@ -93,6 +93,7 @@ export {
     getNativeIndicator,
     nativeIndicatorTypes,
     type NativeIndicator,
+    type BarsChange,
     type NativeIndicatorDescriptor,
     type NativeIndicatorContext,
     type NativeIndicatorOutput,
