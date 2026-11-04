@@ -481,6 +481,44 @@ describe('classic descriptor adapter', () => {
         expect(out.fills![0]!.color).toBe('#787b860d');
     });
 
+    /** One flat-ranged hourly bar per hour in `hours` of the UTC date `day` (high, low and close as given). */
+    function hourlyBars(day: string, hours: readonly number[], high: number, low: number, close: number): OHLCV[] {
+        return hours.map((h) => ({ time: Date.parse(`${day}T${String(h).padStart(2, '0')}:00:00Z`), open: close, high, low, close, volume: 1 }));
+    }
+
+    /** The pivot (P) value on each bar, null on a break or before the first full period. */
+    function pivotsOf(bars: OHLCV[], anchor: string): Array<number | null> {
+        const spec = classicSpecs.find((s) => s.type === 'pivot-points')!;
+        return pointsOf(runOnce(spec, bars, { anchor }).series![0]).map((p) => p.value);
+    }
+
+    it('reads Monday\'s daily pivots from Friday when the tape has no weekend bars', () => {
+        const hours = [14, 15, 16, 17, 18, 19, 20];
+        const friday = hourlyBars('2026-10-30', hours, 110, 90, 105);
+        const monday = hourlyBars('2026-11-02', hours, 120, 100, 110);
+        const pivots = pivotsOf([...friday, ...monday], 'Daily');
+        // The period's first bar is a break; every later Monday bar reads Friday's (110 + 90 + 105) / 3.
+        expect(pivots[hours.length]).toBeNull();
+        for (const p of pivots.slice(hours.length + 1)) expect(p).toBeCloseTo(305 / 3, 10);
+    });
+
+    it('reads the day before a holiday for the session after it', () => {
+        const hours = [14, 15, 16];
+        const eve = hourlyBars('2025-12-24', hours, 110, 90, 105);
+        const after = hourlyBars('2025-12-26', hours, 120, 100, 110);
+        const pivots = pivotsOf([...eve, ...after], 'Daily');
+        expect(pivots.slice(hours.length)).toEqual([null, 305 / 3, 305 / 3]);
+    });
+
+    it('reads the last period with data when a whole period is missing from the tape', () => {
+        // A decision, not an accident: a week the data never served reads the week before it,
+        // as the previous higher-timeframe bar would, rather than leaving the levels blank.
+        const first = hourlyBars('2026-10-05', [14, 15], 110, 90, 105);
+        const third = hourlyBars('2026-10-19', [14, 15, 16], 120, 100, 110);
+        const pivots = pivotsOf([...first, ...third], 'Weekly');
+        expect(pivots.slice(first.length)).toEqual([null, 305 / 3, 305 / 3]);
+    });
+
     it('reads VWAP source through the shared source vocabulary', () => {
         const spec = classicSpecs.find((s) => s.type === 'vwap')!;
         const source = spec.inputs.find((i) => i.key === 'source')!;

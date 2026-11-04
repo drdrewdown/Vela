@@ -219,14 +219,22 @@ const pivotPoints: ClassicIndicatorSpec = {
         const auto: Anchor = interval <= 15 * 60000 ? 'Session' : interval < DAY_MS ? 'Week' : interval <= DAY_MS ? 'Month' : 'Year';
         const anchor: Anchor = requested === 'Daily' ? 'Session' : requested === 'Weekly' ? 'Week' : requested === 'Monthly' ? 'Month' : requested === 'Yearly' ? 'Year' : auto;
         const kind = str(inputs, 'kind', PIVOT_TRADITIONAL);
-        // Aggregate each period's OHLC; a period's levels come from the PREVIOUS one.
+        // Aggregate each period's OHLC; a period's levels come from the PREVIOUS one: the latest
+        // earlier period that has bars. A tape with no weekend bars reads Friday on Monday, a
+        // holiday is skipped, and a period missing from the data reads the last one before it.
         interface Agg { open: number; high: number; low: number; close: number }
         const aggs = new Map<number, Agg>();
+        const previous = new Map<number, Agg>();
+        let last: Agg | undefined;
         for (const b of bars) {
             const key = periodKey(anchor, b.time);
             const a = aggs.get(key);
-            if (!a) aggs.set(key, { open: b.open, high: b.high, low: b.low, close: b.close });
-            else {
+            if (!a) {
+                const fresh = { open: b.open, high: b.high, low: b.low, close: b.close };
+                aggs.set(key, fresh);
+                if (last) previous.set(key, last);
+                last = fresh;
+            } else {
                 a.high = Math.max(a.high, b.high);
                 a.low = Math.min(a.low, b.low);
                 a.close = b.close;
@@ -242,7 +250,7 @@ const pivotPoints: ClassicIndicatorSpec = {
             lastKey = key;
             // A break on the period's first bar keeps each period's ladder a separate segment.
             if (fresh) continue;
-            const prev = aggs.get(key - 1);
+            const prev = previous.get(key);
             const curr = aggs.get(key);
             if (!prev || !curr) continue;
             const range = prev.high - prev.low;
