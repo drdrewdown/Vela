@@ -1812,7 +1812,6 @@
     "indicator.vpvr.widthPct": "너비 %",
     "indicator.vpvr.widthPct.tooltip": "가장 큰 행이 차지하는 패널 너비 비율",
     "indicator.vwap.anchor": "기준 기간",
-    "indicator.vwap.anchor.tooltip": "평균의 기준이 되는 기간이에요. VWAP과 밴드는 새 세션, 주, 월, 분기, 연도의 첫 봉에서 초기화돼요(UTC).",
     "indicator.vwap.band": "밴드 #{n}",
     "indicator.vwap.band1.tooltip": "첫 번째 밴드 쌍을 표시해요.",
     "indicator.vwap.band2.tooltip": "두 번째 밴드 쌍을 표시해요.",

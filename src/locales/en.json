@@ -1829,7 +1829,7 @@
     "indicator.vpvr.widthPct": "Width %",
     "indicator.vpvr.widthPct.tooltip": "Panel width the largest row occupies.",
     "indicator.vwap.anchor": "Anchor Period",
-    "indicator.vwap.anchor.tooltip": "Period anchoring the average. VWAP and its bands reset on the first bar of each new session, week, month, quarter or year (UTC).",
+    "indicator.vwap.anchor.tooltip": "Period anchoring the average. VWAP and its bands reset on the first bar of each new session, week, month, quarter or year of the bar's trading day, or of the UTC date it opens on when the data gives no trading day.",
     "indicator.vwap.band": "Band #{n}",
     "indicator.vwap.band1.tooltip": "Show the first band pair.",
     "indicator.vwap.band2.tooltip": "Show the second band pair.",

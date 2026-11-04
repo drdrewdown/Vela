@@ -1812,7 +1812,6 @@
     "indicator.vpvr.widthPct": "Độ rộng %",
     "indicator.vpvr.widthPct.tooltip": "Phần độ rộng của khung mà hàng lớn nhất chiếm",
     "indicator.vwap.anchor": "Chu kỳ neo",
-    "indicator.vwap.anchor.tooltip": "Chu kỳ làm mốc cho đường trung bình. VWAP và các dải của nó được đặt lại tại nến đầu tiên của mỗi phiên, tuần, tháng, quý hoặc năm mới (UTC).",
     "indicator.vwap.band": "Dải #{n}",
     "indicator.vwap.band1.tooltip": "Hiện cặp dải thứ nhất.",
     "indicator.vwap.band2.tooltip": "Hiện cặp dải thứ hai.",

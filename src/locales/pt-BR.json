@@ -1812,7 +1812,6 @@
     "indicator.vpvr.widthPct": "Largura %",
     "indicator.vpvr.widthPct.tooltip": "Largura do painel ocupada pela maior linha",
     "indicator.vwap.anchor": "Período de ancoragem",
-    "indicator.vwap.anchor.tooltip": "Período que ancora a média. A VWAP e suas bandas reiniciam na primeira barra de cada nova sessão, semana, mês, trimestre ou ano (UTC).",
     "indicator.vwap.band": "Banda #{n}",
     "indicator.vwap.band1.tooltip": "Mostra o primeiro par de bandas.",
     "indicator.vwap.band2.tooltip": "Mostra o segundo par de bandas.",

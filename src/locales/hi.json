@@ -1812,7 +1812,6 @@
     "indicator.vpvr.widthPct": "चौड़ाई %",
     "indicator.vpvr.widthPct.tooltip": "सबसे बड़ी पंक्ति पैनल की कितनी चौड़ाई लेती है",
     "indicator.vwap.anchor": "एंकर पीरियड",
-    "indicator.vwap.anchor.tooltip": "एवरेज को एंकर करने वाला पीरियड। VWAP और उसके बैंड हर नए सेशन, हफ़्ते, महीने, तिमाही या साल (UTC) के पहले बार पर रीसेट होते हैं।",
     "indicator.vwap.band": "बैंड #{n}",
     "indicator.vwap.band1.tooltip": "पहली बैंड जोड़ी दिखाएं।",
     "indicator.vwap.band2.tooltip": "दूसरी बैंड जोड़ी दिखाएं।",

@@ -12,7 +12,8 @@ export interface OHLCV {
      * The trading day the bar belongs to, as 00:00 UTC of that date (Pine `time_tradingday`).
      * A session that opens the evening before carries the next day's date, and a session the
      * exchange books on a later date (a holiday's short session) carries that date. Absent when
-     * the data does not say.
+     * the data does not say. Period-anchored studies (VWAP, Pivot Points) read their sessions,
+     * weeks, months, quarters and years from it, and from the UTC date of `time` without it.
      */
     tradingDay?: Millis;
 }

@@ -1812,7 +1812,6 @@
     "indicator.vpvr.widthPct": "רוחב %",
     "indicator.vpvr.widthPct.tooltip": "החלק מרוחב החלונית שתופסת השורה הגדולה ביותר",
     "indicator.vwap.anchor": "תקופת עיגון",
-    "indicator.vwap.anchor.tooltip": "התקופה שאליה מעוגן הממוצע. ה-VWAP והרצועות שלו מתאפסים בנר הראשון של כל סשן, שבוע, חודש, רבעון או שנה חדשים (UTC).",
     "indicator.vwap.band": "רצועה #{n}",
     "indicator.vwap.band1.tooltip": "הצגת זוג הרצועות הראשון.",
     "indicator.vwap.band2.tooltip": "הצגת זוג הרצועות השני.",

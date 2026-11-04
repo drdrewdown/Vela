@@ -1812,7 +1812,6 @@
     "indicator.vpvr.widthPct": "Lebar %",
     "indicator.vpvr.widthPct.tooltip": "Lebar panel yang diisi oleh baris terbesar",
     "indicator.vwap.anchor": "Tempoh Sauh",
-    "indicator.vwap.anchor.tooltip": "Tempoh yang menjadi sauh purata. VWAP dan jalurnya ditetapkan semula pada bar pertama setiap sesi, minggu, bulan, suku tahun atau tahun baharu (UTC).",
     "indicator.vwap.band": "Jalur #{n}",
     "indicator.vwap.band1.tooltip": "Tunjukkan pasangan jalur pertama.",
     "indicator.vwap.band2.tooltip": "Tunjukkan pasangan jalur kedua.",

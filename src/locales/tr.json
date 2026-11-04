@@ -1812,7 +1812,6 @@
     "indicator.vpvr.widthPct": "Genişlik %",
     "indicator.vpvr.widthPct.tooltip": "En büyük satırın kapladığı panel genişliği",
     "indicator.vwap.anchor": "Sabitleme periyodu",
-    "indicator.vwap.anchor.tooltip": "Ortalamanın sabitlendiği periyot. VWAP ve bantları her yeni seansın, haftanın, ayın, çeyreğin veya yılın ilk mumunda sıfırlanır (UTC).",
     "indicator.vwap.band": "Bant #{n}",
     "indicator.vwap.band1.tooltip": "Birinci bant çiftini gösterir.",
     "indicator.vwap.band2.tooltip": "İkinci bant çiftini gösterir.",

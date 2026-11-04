@@ -1812,7 +1812,6 @@
     "indicator.vpvr.widthPct": "Largeur (%)",
     "indicator.vpvr.widthPct.tooltip": "Largeur du panneau occupée par la plus grande rangée",
     "indicator.vwap.anchor": "Période d’ancrage",
-    "indicator.vwap.anchor.tooltip": "Période qui ancre la moyenne. Le VWAP et ses bandes se réinitialisent à la première barre de chaque nouvelle séance, semaine, mois, trimestre ou année (UTC).",
     "indicator.vwap.band": "Bande #{n}",
     "indicator.vwap.band1.tooltip": "Affiche la première paire de bandes.",
     "indicator.vwap.band2.tooltip": "Affiche la deuxième paire de bandes.",

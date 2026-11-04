@@ -1812,7 +1812,6 @@
     "indicator.vpvr.widthPct": "ความกว้าง %",
     "indicator.vpvr.widthPct.tooltip": "สัดส่วนความกว้างของแผงที่แถวที่ใหญ่ที่สุดครอบครอง",
     "indicator.vwap.anchor": "ช่วงยึด",
-    "indicator.vwap.anchor.tooltip": "ช่วงเวลาที่ใช้ยึดค่าเฉลี่ย VWAP และแบนด์จะรีเซ็ตที่แท่งแรกของแต่ละช่วงการซื้อขาย สัปดาห์ เดือน ไตรมาส หรือปีใหม่ (UTC)",
     "indicator.vwap.band": "แบนด์ #{n}",
     "indicator.vwap.band1.tooltip": "แสดงแบนด์คู่แรก",
     "indicator.vwap.band2.tooltip": "แสดงแบนด์คู่ที่สอง",

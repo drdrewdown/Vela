@@ -14,7 +14,7 @@ const DAY_MS = 86400000;
 
 type Anchor = 'Session' | 'Week' | 'Month' | 'Quarter' | 'Year';
 
-/** UTC period key for an anchor (epoch day 0 was a Thursday; weeks start Monday). */
+/** Period key for an anchor, from the UTC date of `time` (epoch day 0 was a Thursday; weeks start Monday). */
 function periodKey(anchor: Anchor, time: number): number {
     if (anchor === 'Week') return Math.floor((Math.floor(time / DAY_MS) + 3) / 7);
     if (anchor === 'Month' || anchor === 'Quarter' || anchor === 'Year') {
@@ -24,6 +24,15 @@ function periodKey(anchor: Anchor, time: number): number {
         return d.getUTCFullYear() * 12 + d.getUTCMonth();
     }
     return Math.floor(time / DAY_MS);
+}
+
+/**
+ * The time a bar's periods are read from: its trading day when the data gives one, so a
+ * session that opens the evening before, or a holiday session booked on a later date, falls
+ * in the session, week, month, quarter and year of that day. Without one, its open time.
+ */
+function dayOf(bar: OHLCV): number {
+    return bar.tradingDay ?? bar.time;
 }
 
 /** Median spacing between bars, in ms — the classics' only handle on the chart's timeframe. */
@@ -116,7 +125,7 @@ const vwap: ClassicIndicatorSpec = {
     shortTitle: msg('indicator.vwap.shortTitle', 'VWAP'),
     overlay: true,
     inputs: [
-        optionInput('anchor', msg('indicator.vwap.anchor', 'Anchor Period'), 'Session', VWAP_ANCHORS, msg('indicator.vwap.anchor.tooltip', 'Period anchoring the average. VWAP and its bands reset on the first bar of each new session, week, month, quarter or year (UTC).')),
+        optionInput('anchor', msg('indicator.vwap.anchor', 'Anchor Period'), 'Session', VWAP_ANCHORS, msg('indicator.vwap.anchor.tooltip', "Period anchoring the average. VWAP and its bands reset on the first bar of each new session, week, month, quarter or year of the bar's trading day, or of the UTC date it opens on when the data gives no trading day.")),
         sourceInput('HLC3', 'source', msg('indicator.vwap.source', 'Source'), msg('indicator.vwap.source.tooltip', 'Price used in the volume weighted average. Typical price (HLC3) is the classic choice.')),
         optionInput('bandsMode', msg('indicator.vwap.bandsMode', 'Bands Mode'), BANDS_STDEV, [BANDS_STDEV, BANDS_PERCENT], msg('indicator.vwap.bandsMode.tooltip', 'Bands offset method: multiples of the volume weighted standard deviation of price around VWAP, or a percentage of the VWAP value.')),
         ...VWAP_BANDS.flatMap((b, i) => [
@@ -147,7 +156,7 @@ const vwap: ClassicIndicatorSpec = {
         let cumV = 0;
         for (let i = 0; i < n && !hidden; i++) {
             const b = bars[i]!;
-            const key = periodKey(anchor, b.time);
+            const key = periodKey(anchor, dayOf(b));
             if (key !== period) {
                 period = key;
                 cumPV = 0;
@@ -227,7 +236,7 @@ const pivotPoints: ClassicIndicatorSpec = {
         const previous = new Map<number, Agg>();
         let last: Agg | undefined;
         for (const b of bars) {
-            const key = periodKey(anchor, b.time);
+            const key = periodKey(anchor, dayOf(b));
             const a = aggs.get(key);
             if (!a) {
                 const fresh = { open: b.open, high: b.high, low: b.low, close: b.close };
@@ -245,7 +254,7 @@ const pivotPoints: ClassicIndicatorSpec = {
         const levels = { p: mk(), r1: mk(), s1: mk(), r2: mk(), s2: mk(), r3: mk(), s3: mk(), r4: mk(), s4: mk() };
         let lastKey = Number.NaN;
         for (let i = 0; i < n; i++) {
-            const key = periodKey(anchor, bars[i]!.time);
+            const key = periodKey(anchor, dayOf(bars[i]!));
             const fresh = key !== lastKey;
             lastKey = key;
             // A break on the period's first bar keeps each period's ladder a separate segment.

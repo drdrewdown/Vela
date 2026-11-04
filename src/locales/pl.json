@@ -1812,7 +1812,6 @@
     "indicator.vpvr.widthPct": "Szerokość %",
     "indicator.vpvr.widthPct.tooltip": "Część szerokości panelu zajmowana przez największy wiersz",
     "indicator.vwap.anchor": "Okres zakotwiczenia",
-    "indicator.vwap.anchor.tooltip": "Okres, do którego zakotwiczona jest średnia. VWAP i jego pasma resetują się na pierwszej świecy każdej nowej sesji, tygodnia, miesiąca, kwartału lub roku (UTC).",
     "indicator.vwap.band": "Pasmo nr {n}",
     "indicator.vwap.band1.tooltip": "Pokaż pierwszą parę pasm.",
     "indicator.vwap.band2.tooltip": "Pokaż drugą parę pasm.",

@@ -1812,7 +1812,6 @@
     "indicator.vpvr.widthPct": "Lebar %",
     "indicator.vpvr.widthPct.tooltip": "Lebar panel yang ditempati baris terbesar",
     "indicator.vwap.anchor": "Periode jangkar",
-    "indicator.vwap.anchor.tooltip": "Periode yang menjadi jangkar rata-rata. VWAP dan band-nya diatur ulang pada bar pertama setiap sesi, minggu, bulan, kuartal, atau tahun baru (UTC).",
     "indicator.vwap.band": "Band #{n}",
     "indicator.vwap.band1.tooltip": "Tampilkan pasangan band pertama.",
     "indicator.vwap.band2.tooltip": "Tampilkan pasangan band kedua.",

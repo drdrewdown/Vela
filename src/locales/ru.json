@@ -1812,7 +1812,6 @@
     "indicator.vpvr.widthPct": "Ширина, %",
     "indicator.vpvr.widthPct.tooltip": "Доля ширины панели, которую занимает самая длинная строка",
     "indicator.vwap.anchor": "Период привязки",
-    "indicator.vwap.anchor.tooltip": "Период, к которому привязана средняя. VWAP и его полосы сбрасываются на первом баре каждой новой сессии, недели, месяца, квартала или года (UTC).",
     "indicator.vwap.band": "Полоса {n}",
     "indicator.vwap.band1.tooltip": "Показывать первую пару полос.",
     "indicator.vwap.band2.tooltip": "Показывать вторую пару полос.",

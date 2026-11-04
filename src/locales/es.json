@@ -1812,7 +1812,6 @@
     "indicator.vpvr.widthPct": "Ancho %",
     "indicator.vpvr.widthPct.tooltip": "Ancho del panel que ocupa la fila más grande",
     "indicator.vwap.anchor": "Período de anclaje",
-    "indicator.vwap.anchor.tooltip": "Período al que se ancla la media. El VWAP y sus bandas se reinician en la primera barra de cada nueva sesión, semana, mes, trimestre o año (UTC).",
     "indicator.vwap.band": "Banda {n}",
     "indicator.vwap.band1.tooltip": "Muestra el primer par de bandas.",
     "indicator.vwap.band2.tooltip": "Muestra el segundo par de bandas.",

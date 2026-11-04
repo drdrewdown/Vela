@@ -1812,7 +1812,6 @@
     "indicator.vpvr.widthPct": "幅（%）",
     "indicator.vpvr.widthPct.tooltip": "表示領域の幅に対して、最も大きい行が占める割合",
     "indicator.vwap.anchor": "アンカー期間",
-    "indicator.vwap.anchor.tooltip": "平均の起点となる期間です。VWAPとそのバンドは、新しいセッション、週、月、四半期、年（UTC）の最初の足でリセットされます。",
     "indicator.vwap.band": "バンド#{n}",
     "indicator.vwap.band1.tooltip": "1組目のバンドを表示します。",
     "indicator.vwap.band2.tooltip": "2組目のバンドを表示します。",

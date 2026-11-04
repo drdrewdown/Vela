@@ -1812,7 +1812,6 @@
     "indicator.vpvr.widthPct": "宽度 %",
     "indicator.vpvr.widthPct.tooltip": "成交量最多的一行占窗格宽度的比例",
     "indicator.vwap.anchor": "锚定周期",
-    "indicator.vwap.anchor.tooltip": "均价的锚定周期。VWAP 及其通道在每个新交易时段、周、月、季度或年（UTC）的第一根K线处重置。",
     "indicator.vwap.band": "通道 #{n}",
     "indicator.vwap.band1.tooltip": "显示第一组通道。",
     "indicator.vwap.band2.tooltip": "显示第二组通道。",

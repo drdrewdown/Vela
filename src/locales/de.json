@@ -1812,7 +1812,6 @@
     "indicator.vpvr.widthPct": "Breite %",
     "indicator.vpvr.widthPct.tooltip": "Anteil der Bereichsbreite, den die größte Zeile einnimmt",
     "indicator.vwap.anchor": "Ankerperiode",
-    "indicator.vwap.anchor.tooltip": "Periode, an der der Durchschnitt verankert ist. VWAP und seine Bänder werden an der ersten Kerze jeder neuen Handelssitzung oder Woche bzw. jedes neuen Monats, Quartals oder Jahres (UTC) zurückgesetzt.",
     "indicator.vwap.band": "Band #{n}",
     "indicator.vwap.band1.tooltip": "Zeigt das erste Bandpaar an.",
     "indicator.vwap.band2.tooltip": "Zeigt das zweite Bandpaar an.",

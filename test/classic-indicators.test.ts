@@ -519,6 +519,79 @@ describe('classic descriptor adapter', () => {
         expect(pivots.slice(first.length)).toEqual([null, 305 / 3, 305 / 3]);
     });
 
+    /** A bar opening at `at` (an ISO time with its offset), booked on the trading day `tradingDate`. */
+    function sessionBar(at: string, tradingDate: string, close: number, high = close, low = close): OHLCV {
+        return { time: Date.parse(at), open: close, high, low, close, volume: 1, tradingDay: Date.parse(`${tradingDate}T00:00:00Z`) };
+    }
+
+    /** VWAP of the closes on each bar. These bars sit hours to days apart, so the daily-and-above guard is lifted. */
+    function vwapOf(bars: OHLCV[], anchor: string): Array<number | null> {
+        const spec = classicSpecs.find((s) => s.type === 'vwap')!;
+        return pointsOf(runOnce(spec, bars, { anchor, source: 'Close', hideDwm: false }).series![0]).map((p) => p.value);
+    }
+
+    it('anchors VWAP to the trading day: the evening open belongs to the next day, its session and its week', () => {
+        const bars = [
+            sessionBar('2026-10-30T16:59:00-04:00', '2026-10-30', 5),
+            sessionBar('2026-11-01T18:00:00-05:00', '2026-11-02', 10), // Sunday's open is Monday's session
+            sessionBar('2026-11-02T09:30:00-05:00', '2026-11-02', 20),
+            sessionBar('2026-11-02T17:59:00-05:00', '2026-11-02', 30),
+            sessionBar('2026-11-02T18:00:00-05:00', '2026-11-03', 40),
+        ];
+        expect(vwapOf(bars, 'Session')).toEqual([5, 10, 15, 20, 40]);
+        expect(vwapOf(bars, 'Week')).toEqual([5, 10, 15, 20, 25]);
+    });
+
+    it('reads the month of the trading day, not of the calendar day the bar opens on', () => {
+        const bars = [
+            sessionBar('2025-11-28T12:00:00-05:00', '2025-11-28', 10),
+            sessionBar('2025-11-30T18:00:00-05:00', '2025-12-01', 20), // Sunday 30 November opens December
+            sessionBar('2025-12-01T09:30:00-05:00', '2025-12-01', 30),
+        ];
+        expect(vwapOf(bars, 'Month')).toEqual([10, 20, 25]);
+    });
+
+    it('keeps a holiday session booked on a later date in one session (Labor Day 2026)', () => {
+        // Sunday 18:00 to Tuesday 16:00 is one trading day, 8 September; Monday the 7th has no session of its own.
+        const bars = [
+            sessionBar('2026-09-04T15:00:00-04:00', '2026-09-04', 5),
+            sessionBar('2026-09-06T18:00:00-04:00', '2026-09-08', 10),
+            sessionBar('2026-09-07T12:00:00-04:00', '2026-09-08', 20),
+            sessionBar('2026-09-08T09:30:00-04:00', '2026-09-08', 30),
+            sessionBar('2026-09-08T16:00:00-04:00', '2026-09-08', 40),
+            sessionBar('2026-09-08T18:00:00-04:00', '2026-09-09', 50),
+        ];
+        expect(vwapOf(bars, 'Session')).toEqual([5, 10, 15, 20, 25, 50]);
+
+        const friday = [sessionBar('2026-09-03T18:00:00-04:00', '2026-09-04', 105, 110, 90), sessionBar('2026-09-04T12:00:00-04:00', '2026-09-04', 105, 110, 90)];
+        const laborDay = bars.slice(1, 5).map((b) => ({ ...b, high: 120, low: 100, close: 110 }));
+        expect(pivotsOf([...friday, ...laborDay], 'Daily').slice(friday.length)).toEqual([null, 305 / 3, 305 / 3, 305 / 3]);
+    });
+
+    it('puts a Friday holiday session booked on the next Monday in that Monday\'s week (Juneteenth 2026)', () => {
+        // Thursday 18 June 18:00 to Monday 22 June 16:00 is one trading day, 22 June.
+        const bars = [
+            sessionBar('2026-06-17T12:00:00-04:00', '2026-06-17', 5),
+            sessionBar('2026-06-18T18:00:00-04:00', '2026-06-22', 10),
+            sessionBar('2026-06-19T10:00:00-04:00', '2026-06-22', 20),
+            sessionBar('2026-06-22T09:30:00-04:00', '2026-06-22', 30),
+            sessionBar('2026-06-22T16:00:00-04:00', '2026-06-22', 40),
+        ];
+        expect(vwapOf(bars, 'Week')).toEqual([5, 10, 15, 20, 25]);
+        expect(vwapOf(bars, 'Session')).toEqual([5, 10, 15, 20, 25]);
+    });
+
+    it('starts the pivots of a new trading day without reading its forming first bar', () => {
+        const friday = [sessionBar('2026-10-29T18:00:00-04:00', '2026-10-30', 105, 110, 90), sessionBar('2026-10-30T12:00:00-04:00', '2026-10-30', 105, 110, 90)];
+        const open = sessionBar('2026-11-01T18:00:00-05:00', '2026-11-02', 100);
+        // The newest bar opens Monday's trading day: a break, whatever its prices do.
+        expect(pivotsOf([...friday, open], 'Daily')).toEqual([null, null, null]);
+        expect(pivotsOf([...friday, { ...open, high: 500, close: 450 }], 'Daily')).toEqual([null, null, null]);
+        // The next bar of that trading day (19:00 New York is already Monday in UTC) reads Friday.
+        const next = sessionBar('2026-11-01T19:00:00-05:00', '2026-11-02', 100);
+        expect(pivotsOf([...friday, open, next], 'Daily')).toEqual([null, null, null, 305 / 3]);
+    });
+
     it('reads VWAP source through the shared source vocabulary', () => {
         const spec = classicSpecs.find((s) => s.type === 'vwap')!;
         const source = spec.inputs.find((i) => i.key === 'source')!;

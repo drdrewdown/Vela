@@ -1812,7 +1812,6 @@
     "indicator.vpvr.widthPct": "寬度 %",
     "indicator.vpvr.widthPct.tooltip": "最大的列所佔的窗格寬度",
     "indicator.vwap.anchor": "錨定期間",
-    "indicator.vwap.anchor.tooltip": "錨定均價的期間。VWAP 及其通道會在每個新交易時段、週、月、季或年的第一根K棒重設（UTC）。",
     "indicator.vwap.band": "通道 #{n}",
     "indicator.vwap.band1.tooltip": "顯示第一組通道。",
     "indicator.vwap.band2.tooltip": "顯示第二組通道。",

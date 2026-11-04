@@ -1812,7 +1812,6 @@
     "indicator.vpvr.widthPct": "العرض %",
     "indicator.vpvr.widthPct.tooltip": "نسبة عرض اللوحة التي يشغلها أكبر صف",
     "indicator.vwap.anchor": "فترة الارتكاز",
-    "indicator.vwap.anchor.tooltip": "الفترة التي يرتكز عليها المتوسط. يُعاد ضبط VWAP ونطاقاته عند أول شمعة من كل جلسة أو أسبوع أو شهر أو ربع سنة أو سنة جديدة (UTC).",
     "indicator.vwap.band": "النطاق #{n}",
     "indicator.vwap.band1.tooltip": "إظهار زوج النطاقات الأول.",
     "indicator.vwap.band2.tooltip": "إظهار زوج النطاقات الثاني.",
