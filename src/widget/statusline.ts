@@ -287,6 +287,11 @@ export interface StatuslineMenuHooks {
 export class Statusline {
     readonly el: HTMLElement;
     private readonly ohlcEl: HTMLElement;
+    /** The readout cells' value elements, their labels joined, and the ink they wear — a
+     *  tick rewrites these in place while the labels hold. */
+    private ohlcValues: HTMLElement[] = [];
+    private ohlcCellsKey: string | null = null;
+    private ohlcInk = '';
     private readonly volumeEl: HTMLElement;
     private readonly changeEl: HTMLElement;
     private readonly symbolEl: HTMLElement;
@@ -723,6 +728,7 @@ export class Statusline {
         const bar = this.hoverBar ?? this.lastBar;
         if (!bar) {
             this.ohlcEl.replaceChildren();
+            this.ohlcCellsKey = null;
             this.volumeEl.replaceChildren();
             this.changeEl.textContent = '';
             return;
@@ -755,7 +761,23 @@ export class Statusline {
         // readout is that value — the close — at every level. The minimal level keeps the
         // percent delta alone. The volume is a full-level value: it is shed with O/H/L.
         const { level } = this.layout;
-        this.ohlcEl.replaceChildren(...readoutCells(level, this.readout, this.i18n).map((c) => cell(c.label, bar[c.key])));
+        // A live tick changes the values, not the cells: keep the cells while their labels
+        // hold and rewrite only what changed, so a tick costs no DOM rebuild.
+        const cells = readoutCells(level, this.readout, this.i18n);
+        const cellsKey = cells.map((c) => c.label).join('\u0000');
+        if (cellsKey !== this.ohlcCellsKey || this.ohlcValues.length !== cells.length) {
+            this.ohlcEl.replaceChildren(...cells.map((c) => cell(c.label, bar[c.key])));
+            this.ohlcValues = Array.from(this.ohlcEl.querySelectorAll('b'));
+            this.ohlcCellsKey = cellsKey;
+        } else {
+            cells.forEach((c, i) => {
+                const b = this.ohlcValues[i]!;
+                const text = price(bar[c.key]);
+                if (b.textContent !== text) b.textContent = text;
+                if (this.ohlcInk !== ink) b.style.color = ink;
+            });
+        }
+        this.ohlcInk = ink;
         // A bar without volume (a feed that carries none) leaves the segment empty rather than
         // printing a zero the trader would read as a real print.
         if (level === 'full' && bar.volume != null && Number.isFinite(bar.volume)) {

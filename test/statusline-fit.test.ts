@@ -55,6 +55,22 @@ describe('Statusline fit', () => {
         line.destroy();
     });
 
+    it('keeps the readout cells on a tick and rewrites their values in place', () => {
+        const { line, hover, close } = make();
+        hover({ open: 61234.5, high: 61300.25, low: 61200, close: 61250.75 });
+        const cells = Array.from(line.el.querySelectorAll('.vela-sl-ohlc b'));
+        hover({ open: 61234.5, high: 61301.25, low: 61200, close: 61251.75 });
+        expect(Array.from(line.el.querySelectorAll('.vela-sl-ohlc b'))).toEqual(cells);
+        expect(cells.every((b, i) => b === line.el.querySelectorAll('.vela-sl-ohlc b')[i])).toBe(true);
+        expect(close()).toBe('61,251.75');
+        const upInk = (cells[0] as HTMLElement).style.color;
+        hover({ open: 61234.5, high: 61301.25, low: 61100, close: 61150 }); // a down bar re-inks every value
+        const downInk = (line.el.querySelector('.vela-sl-change') as HTMLElement).style.color;
+        expect(downInk).not.toBe(upInk);
+        expect(cells.map((b) => (b as HTMLElement).style.color)).toEqual(cells.map(() => downInk));
+        line.destroy();
+    });
+
     it('re-fits when a value gains a digit', () => {
         const { line, hover, measures, close } = make();
         hover({ open: 9.5, high: 9.99, low: 9.4, close: 9.9 });
