@@ -2,7 +2,7 @@
 // zero-offset baseline), so anything that compares a bar's time with "now" has to read
 // "now" on that same clock. The countdown-to-bar-close chip compared bar opens in series
 // time against `Date.now()` in UTC: every bar looked hours old and the chip never showed.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { seriesNow, tzOffsetMs } from '../src/renderers/native/chrome/tz';
 import { countdownText } from '../src/renderers/native/chrome/countdown';
 
@@ -15,6 +15,22 @@ describe('seriesNow — a UTC instant on the series clock', () => {
         expect(seriesNow(summer)).toBe(summer - 4 * H);
         const winter = Date.UTC(2026, 0, 15, 4, 41, 0); // 2026-01-15 04:41Z = 23:41 New York (EST)
         expect(seriesNow(winter)).toBe(winter - 5 * H);
+    });
+
+    it('keeps the milliseconds of the instant', () => {
+        const summer = Date.UTC(2026, 8, 16, 4, 41, 7) + 345;
+        expect(seriesNow(summer)).toBe(summer - 4 * H);
+    });
+
+    it('builds no date formatter per call — the countdown chip asks on every frame', () => {
+        seriesNow(Date.UTC(2026, 8, 16));
+        const made = vi.spyOn(Intl, 'DateTimeFormat');
+        try {
+            for (let k = 0; k < 50; k++) seriesNow(Date.UTC(2026, 8, 16, 4, 41, k));
+            expect(made).not.toHaveBeenCalled();
+        } finally {
+            made.mockRestore();
+        }
     });
 
     it('keeps the baseline: the series zone reads as offset zero on the axis', () => {

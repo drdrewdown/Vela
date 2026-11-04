@@ -44,15 +44,10 @@ export function seriesInstant(ms: number): number {
  * close — must read "now" the same way; against plain UTC every bar looks hours old.
  */
 export function seriesNow(nowUtc: number = Date.now()): number {
-    try {
-        const dtf = new Intl.DateTimeFormat('en-US', { timeZone: SERIES_ZONE, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        const parts = dtf.formatToParts(new Date(nowUtc));
-        const get = (t: string): number => Number(parts.find((p) => p.type === t)?.value);
-        const wall = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'));
-        return wall + (nowUtc % 1000);
-    } catch {
-        return nowUtc;
-    }
+    // The countdown chip asks on every frame: read the offset through the cached zone parser,
+    // at the whole second (the parser reads seconds), and keep the milliseconds.
+    const sub = nowUtc % 1000;
+    return nowUtc + zoneOffsetMs(nowUtc - sub, SERIES_ZONE);
 }
 
 /** A `Date` whose `getUTC*` accessors read the wall-clock time in `timeZone`. */
