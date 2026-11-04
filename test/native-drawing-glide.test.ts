@@ -41,6 +41,24 @@ describe('DrawingGlide', () => {
         expect(shown.bottom).toBe(100);
     });
 
+    it('counts each in-place change of a model\'s painted drawings, and none once settled', () => {
+        const g = new DrawingGlide();
+        g.retarget(model([box(110, 100, 20)]), 90);
+        expect(g.revision('ind')).toBe(0);
+        g.retarget(model([box(120, 100, 21)]), 90);
+        let seen = g.revision('ind');
+        expect(seen).toBeGreaterThan(0); // the copy painted at the old price
+        while (g.step(16, 90)) {
+            expect(g.revision('ind')).toBeGreaterThan(seen);
+            seen = g.revision('ind');
+        }
+        const settled = g.revision('ind');
+        g.step(16, 90);
+        expect(g.revision('ind')).toBe(settled);
+        g.drop('ind');
+        expect(g.revision('ind')).toBe(0);
+    });
+
     it('lines and labels glide too, each on its own prices', () => {
         const g = new DrawingGlide();
         g.retarget(model([], [line(50)], [label(40)]), 90);

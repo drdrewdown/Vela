@@ -61,6 +61,9 @@ export interface DrawingSlice {
     beforeZ: number;
     /** Plot-sized, dpr-scaled canvas holding just this layer's drawings. */
     canvas: HTMLCanvasElement;
+    /** Changes whenever the canvas is repainted; a backend may keep its upload of the same canvas
+     *  at the same version. Absent: the canvas may have changed at any frame. */
+    version?: number;
 }
 
 /**

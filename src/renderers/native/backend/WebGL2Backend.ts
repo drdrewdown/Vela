@@ -5,7 +5,7 @@ import type { Fill, Background, PriceLine } from '../../../core/model/scene';
 import type { SeriesSpec, LineLikeSeries, CandleSeries, LineStyle, CandleBarColor } from '../../../core/model/series';
 import { isLineLikeSeries, seriesShownOn } from '../../../core/model/series';
 import type { CoordinateSystem } from '../core/CoordinateSystem';
-import type { SceneGraph, PaneNode } from '../core/SceneGraph';
+import type { SceneGraph, PaneNode, DrawingSlice } from '../core/SceneGraph';
 import { candleTier, wickWidth, candleGeometry, snapY, aggregateCandleColumns } from './candle-lod';
 import { BASELINE_TOP_LINE, BASELINE_BOTTOM_LINE, BASELINE_FILL_ALPHA, BASELINE_FILL_ALPHA_FAR, withAlpha as cssWithAlpha, effectiveCandlePaint } from '../core/chartConfig';
 import type { IRenderBackend } from './IRenderBackend';
@@ -138,6 +138,8 @@ export class WebGL2Backend implements IRenderBackend {
     /** One texture per user-drawing interleave layer, keyed by its (stable, reused) canvas;
      *  re-uploaded every data frame — the layer repaints with the scene. */
     private readonly sliceTex = new Map<HTMLCanvasElement, WebGLTexture>();
+    /** The slice version each texture holds: an unchanged slice is drawn without re-uploading. */
+    private readonly sliceTexVersion = new Map<HTMLCanvasElement, number>();
 
     private readonly onLost = (e: Event): void => {
         e.preventDefault(); // keep the context recoverable
@@ -192,6 +194,7 @@ export class WebGL2Backend implements IRenderBackend {
         this.texA = this.texB = null;
         this.fboW = this.fboH = 0;
         this.sliceTex.clear(); // context-lost handles are invalid; textures re-upload on demand
+        this.sliceTexVersion.clear();
         const vs = compile(gl, gl.VERTEX_SHADER, VERT_SRC);
         const fs = compile(gl, gl.FRAGMENT_SHADER, FRAG_SRC);
         const prog = gl.createProgram();
@@ -360,7 +363,7 @@ export class WebGL2Backend implements IRenderBackend {
             const drawSlicesUpTo = (z: number) => {
                 for (; si < slices.length && slices[si]!.beforeZ <= z; si += 1) {
                     flush();
-                    if (this.drawSliceTexture(gl, slices[si]!.canvas)) liveSlices.add(slices[si]!.canvas);
+                    if (this.drawSliceTexture(gl, slices[si]!)) liveSlices.add(slices[si]!.canvas);
                 }
             };
             b.alpha = 1;
@@ -427,6 +430,7 @@ export class WebGL2Backend implements IRenderBackend {
             if (!liveSlices.has(cv)) {
                 gl.deleteTexture(tex);
                 this.sliceTex.delete(cv);
+                this.sliceTexVersion.delete(cv);
             }
         }
         if (this.glow > 0 && !this.screenProgram && !this.ensureScreenPipeline()) this.glow = 0;
@@ -499,17 +503,20 @@ export class WebGL2Backend implements IRenderBackend {
         gl.bindVertexArray(null);
     }
 
-    /** Composite one user-drawing interleave layer: upload its canvas (premultiplied, y-flipped —
-     *  the framebuffer holds premultiplied pixels, see mount) and draw it as a fullscreen quad
+    /** Composite one drawing interleave layer: upload its canvas (premultiplied, y-flipped —
+     *  the framebuffer holds premultiplied pixels, see mount) unless the texture already holds
+     *  the slice's version, and draw it as a fullscreen quad
      *  through the screen pipeline. The pane scissor is already set, so it clips to the pane.
      *  Returns false when the screen pipeline can't compile — the layer is skipped, not fatal. */
-    private drawSliceTexture(gl: WebGL2RenderingContext, canvas: HTMLCanvasElement): boolean {
+    private drawSliceTexture(gl: WebGL2RenderingContext, slice: DrawingSlice): boolean {
         if (!this.ensureScreenPipeline() || !this.screenProgram) return false;
+        const { canvas, version } = slice;
         let tex = this.sliceTex.get(canvas) ?? null;
         if (!tex) {
             tex = gl.createTexture();
             if (!tex) return false;
             this.sliceTex.set(canvas, tex);
+            this.sliceTexVersion.delete(canvas);
             gl.bindTexture(gl.TEXTURE_2D, tex);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
@@ -518,11 +525,16 @@ export class WebGL2Backend implements IRenderBackend {
         }
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas); // fresh pixels — the layer repaints with the scene
-        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+        // a slice at the version this texture holds has the same pixels: no upload
+        if (version === undefined || this.sliceTexVersion.get(canvas) !== version) {
+            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+            gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+            gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+            if (version === undefined) this.sliceTexVersion.delete(canvas);
+            else this.sliceTexVersion.set(canvas, version);
+        }
         gl.useProgram(this.screenProgram);
         gl.bindVertexArray(this.quadVao);
         gl.uniform1i(this.uTex, 0);
@@ -570,6 +582,7 @@ export class WebGL2Backend implements IRenderBackend {
             if (this.quadVao) gl.deleteVertexArray(this.quadVao);
             for (const tex of this.sliceTex.values()) gl.deleteTexture(tex);
             this.sliceTex.clear();
+            this.sliceTexVersion.clear();
             this.deleteFbos(gl);
             // Release the CONTEXT itself, not just its resources: browsers cap live
             // WebGL contexts per page (~16) and reclaim destroyed ones LAZILY. Without

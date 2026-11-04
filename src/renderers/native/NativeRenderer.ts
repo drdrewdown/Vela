@@ -3718,7 +3718,7 @@ export class NativeRenderer implements IChartRenderer {
         // the user drawings whose z sits inside a pane's series stack — prepainted so the
         // backend can composite them mid-stack (under the candles, between indicators).
         this.scene.drawingSlices = mergeSlices(
-            this.indicatorSlices.prepare(this.scene, this.coords, this.theme, this.dataCanvas),
+            this.indicatorSlices.prepare(this.scene, this.coords, this.theme, this.dataCanvas, (id) => this.drawingGlide.revision(id)),
             this.userDrawings?.prepareSlices(this.scene.orderedPanes().map((p) => p.id)) ?? new Map(),
         );
         this.backdropRenderer.render(this.scene, this.coords, this.theme, gridAlpha); // L-2, under every layer canvas

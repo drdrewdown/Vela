@@ -1,6 +1,7 @@
 import type { VelaTheme } from '../../../core/options';
 import type { DrawingTable } from '../../../core/model/drawings';
-import type { CoordinateSystem } from '../core/CoordinateSystem';
+import type { IndicatorModel } from '../../../core/model/indicator';
+import type { CoordinateSystem, PriceScale } from '../core/CoordinateSystem';
 import type { SceneGraph, PaneNode, DrawingSlice } from '../core/SceneGraph';
 import {
     DrawingSceneRenderer,
@@ -13,6 +14,50 @@ import {
 } from '../../shared/DrawingSceneRenderer';
 import { paintTable } from '../../shared/TableCanvasRenderer';
 import { beginPlotFrame } from '../core/plotDirection';
+
+/** A small number per object for the life of the page — a frame's inputs keyed by identity. */
+const objectIds = new WeakMap<object, number>();
+let nextObjectId = 1;
+function idOf(o: object | null | undefined): number {
+    if (!o) return 0;
+    let id = objectIds.get(o);
+    if (id === undefined) {
+        id = nextObjectId++;
+        objectIds.set(o, id);
+    }
+    return id;
+}
+
+/** Everything a model contributes to a slice: its drawing lists and tables by identity (a patch
+ *  replaces them, never edits them), its markers, its glide revision, its index offset and the
+ *  scale it is painted against. */
+function modelInputs(m: IndicatorModel, overlay: boolean, scale: PriceScale, offset: number, revision: number): string {
+    let markers = '';
+    for (const s of m.series) if (s.kind === 'markers') markers += `${idOf(s.markers)},`;
+    return `${idOf(m)}${overlay ? 'o' : ''}:${idOf(m.lines)}:${idOf(m.boxes)}:${idOf(m.labels)}:${idOf(m.polylines)}:${idOf(m.linefills)}:${idOf(m.tables)}:${markers}:${revision}:${offset}:${scale.min}:${scale.max}:${scale.log ? 1 : 0}:${scale.invert ? 1 : 0}`;
+}
+
+/** Font loads finished since the page loaded. A paint can start a load itself (a face no element
+ *  has used yet), so a slice keyed on the count repaints once the face lands. */
+let fontLoads = 0;
+let watchingFonts = false;
+function fontGeneration(): number {
+    if (!watchingFonts && typeof document !== 'undefined' && document.fonts) {
+        watchingFonts = true;
+        document.fonts.addEventListener('loadingdone', () => {
+            fontLoads++;
+        });
+    }
+    return fontLoads;
+}
+
+/** A slice as last painted: the inputs it was painted from, its version and its tooltips. */
+interface SliceState {
+    canvas: HTMLCanvasElement;
+    inputs: string;
+    version: number;
+    tips: LabelTipRegion[];
+}
 
 /**
  * The time window a frame's drawing set is cut to: every anchor whose x the label painter keeps —
@@ -60,8 +105,10 @@ interface SliceEntry {
  */
 export class IndicatorDrawingSlices {
     private readonly drawScene = new DrawingSceneRenderer({ timeToLogical: () => 0, barAt: () => null, theme: {} as VelaTheme });
-    /** Slice canvas cache, keyed `paneId|beforeZ` — same lifecycle as the user-drawing cache. */
-    private readonly sliceCache = new Map<string, HTMLCanvasElement>();
+    /** Slice canvases and what they hold, keyed `paneId|beforeZ` — same lifecycle as the
+     *  user-drawing cache. A slice whose inputs are unchanged keeps its pixels and its version. */
+    private readonly sliceCache = new Map<string, SliceState>();
+    private nextVersion = 1;
     /** Tooltip hit-rects of every label drawn this frame, in plot coords (rebuilt per prepare). */
     private tips: LabelTipRegion[] = [];
 
@@ -69,8 +116,15 @@ export class IndicatorDrawingSlices {
      * Rebuild the per-indicator drawing slices for this data frame. `ref` is the data
      * canvas the slices must match pixel-for-pixel (the backend composites them 1:1).
      * Runs from the renderer's data paint, just before the backend composites the scene.
+     *
+     * The animator paints a data frame at every vsync while anything moves — the live
+     * candle's glide alone keeps it running — but a slice's pixels depend only on its
+     * models' drawings, the scales and bounds they paint against, the view, the newest
+     * bar (bar-anchored labels read it), the theme and the canvas. A slice whose inputs
+     * are unchanged is not repainted and keeps its version, so a backend need not
+     * re-upload it. `revisionOf` reports a model's in-place drawing edits (the price glide).
      */
-    prepare(scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, ref: HTMLCanvasElement): Map<string, DrawingSlice[]> {
+    prepare(scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, ref: HTMLCanvasElement, revisionOf: (modelId: string) => number = () => 0): Map<string, DrawingSlice[]> {
         this.tips = [];
         const out = /* @__PURE__ */ new Map();
         if (ref.width === 0 || ref.height === 0) {
@@ -89,6 +143,12 @@ export class IndicatorDrawingSlices {
         const dpr = coords.dpr;
         const dataW = coords.width;
         const buckets = /* @__PURE__ */ new Map();
+        const paneInputs = new Map<string, string[]>();
+        const note = (paneId: string, inputs: string) => {
+            const list = paneInputs.get(paneId);
+            if (list) list.push(inputs);
+            else paneInputs.set(paneId, [inputs]);
+        };
         const add = (paneId: string, beforeZ: number, entry: any) => {
             const key = `${paneId}|${beforeZ}`;
             const bucket = buckets.get(key);
@@ -107,6 +167,7 @@ export class IndicatorDrawingSlices {
                 const mp = sc === pane.scale ? pane : { ...pane, scale: sc };
                 const beforeZ = indicatorSliceKey(scene.zOf(m.id), boundaries);
                 add(pane.id, beforeZ, { set, tables, pane: mp, indexOffset: scene.offsetOf(m.id) });
+                note(pane.id, `${beforeZ}|${modelInputs(m, false, sc, scene.offsetOf(m.id), revisionOf(m.id))}`);
             }
             if (pane.kind === "price") {
                 for (const m of scene.indicators.values()) {
@@ -114,6 +175,7 @@ export class IndicatorDrawingSlices {
                     const tables = (m.tables ?? []).filter((t) => t.overlay === true);
                     if (drawingSetEmpty(set) && tables.length === 0) continue;
                     add(pane.id, Infinity, { set, tables, pane, indexOffset: scene.offsetOf(m.id) });
+                    note(pane.id, `Infinity|${modelInputs(m, true, pane.scale, scene.offsetOf(m.id), revisionOf(m.id))}`);
                 }
             }
         }
@@ -147,12 +209,36 @@ export class IndicatorDrawingSlices {
                 }
             }
         }
+        // What every slice of this frame shares: the canvas, the view, the theme, the label merge,
+        // the newest bar (a label anchored above or below a bar reads its range) and the fonts.
+        const vr = coords.visibleLogicalRange();
+        const last = scene.bars[scene.bars.length - 1];
+        const fonts = fontGeneration();
+        const frameInputs = `${ref.width}x${ref.height}|${dpr}|${dataW}|${coords.leftOffsetPx}|${vr.from}|${vr.to}|${idOf(theme)}|${scene.mergeChips ? 1 : 0}|${idOf(scene.bars)}:${scene.bars.length}:${last?.time}:${last?.high}:${last?.low}|${fonts}`;
         for (const [key, { paneId, beforeZ, entries }] of buckets) {
-            let canvas = this.sliceCache.get(key);
-            if (!canvas) {
-                canvas = document.createElement("canvas");
-                this.sliceCache.set(key, canvas);
+            // a pane's slices are keyed together: merged chips move labels between them
+            const pane = scene.panes.get(paneId);
+            const inputs = `${frameInputs}|${pane?.bounds.top}:${pane?.bounds.height}|${[...buckets.keys()].filter((k) => k.startsWith(`${paneId}|`)).join(',')}|${(paneInputs.get(paneId) ?? []).join(';')}`;
+            let state = this.sliceCache.get(key);
+            if (state && state.inputs === inputs && state.canvas.width === ref.width && state.canvas.height === ref.height) {
+                this.tips.push(...state.tips);
+                const slices = out.get(paneId) ?? [];
+                slices.push({ beforeZ, canvas: state.canvas, version: state.version });
+                out.set(paneId, slices);
+                continue;
             }
+            if (!state) {
+                const fresh: SliceState = { canvas: document.createElement('canvas'), inputs: '', version: 0, tips: [] };
+                // a lost 2D context comes back blank: the slice must repaint whatever its inputs say
+                const forget = () => {
+                    fresh.inputs = '';
+                };
+                fresh.canvas.addEventListener('contextlost', forget);
+                fresh.canvas.addEventListener('contextrestored', forget);
+                state = fresh;
+                this.sliceCache.set(key, state);
+            }
+            const canvas = state.canvas;
             if (canvas.width !== ref.width || canvas.height !== ref.height) {
                 canvas.width = ref.width;
                 canvas.height = ref.height;
@@ -161,9 +247,13 @@ export class IndicatorDrawingSlices {
             if (!ctx) continue;
             beginPlotFrame(ctx, dpr);
             ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+            const tipsFrom = this.tips.length;
             for (const e of entries) this.paintEntry(ctx, e, coords, dataW, theme);
+            state.inputs = inputs;
+            state.version = this.nextVersion++;
+            state.tips = this.tips.slice(tipsFrom);
             const slices = out.get(paneId) ?? [];
-            slices.push({ beforeZ, canvas });
+            slices.push({ beforeZ, canvas, version: state.version });
             out.set(paneId, slices);
         }
         for (const key of [...this.sliceCache.keys()]) if (!buckets.has(key)) this.sliceCache.delete(key);

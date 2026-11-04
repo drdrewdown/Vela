@@ -50,6 +50,18 @@ function settled(shown: readonly number[], target: readonly number[]): boolean {
  */
 export class DrawingGlide {
     private readonly entries = new Map<string, Map<string, Entry>>();
+    /** Per model, bumped whenever its painted drawings change in place (a retarget or a step). */
+    private readonly revisions = new Map<string, number>();
+
+    /** How many times a model's painted drawings have changed in place — a painter that keeps
+     *  last frame's pixels repaints when this moves. */
+    revision(modelId: string): number {
+        return this.revisions.get(modelId) ?? 0;
+    }
+
+    private bump(modelId: string): void {
+        this.revisions.set(modelId, this.revision(modelId) + 1);
+    }
 
     /**
      * Take a model's freshly patched drawings as the new targets. A glide drawing whose
@@ -84,21 +96,25 @@ export class DrawingGlide {
         take('label', model.labels);
         if (next.size > 0) this.entries.set(model.id, next);
         else this.entries.delete(model.id);
+        if (moving) this.bump(model.id);
         return moving;
     }
 
     /** Ease every in-flight drawing one frame toward its target. Returns true while any is moving. */
     step(dtMs: number, tauMs: number): boolean {
         let moving = false;
-        for (const byId of this.entries.values()) {
+        for (const [modelId, byId] of this.entries) {
+            let wrote = false;
             for (const e of byId.values()) {
                 const shown = pricesOf(e.kind, e.shown);
                 if (settled(shown, e.target)) continue;
                 const eased = shown.map((v, i) => easeToward(v, e.target[i]!, dtMs, tauMs));
                 const done = settled(eased, e.target);
                 writePrices(e.kind, e.shown, done ? e.target : eased);
+                wrote = true;
                 if (!done) moving = true;
             }
+            if (wrote) this.bump(modelId);
         }
         return moving;
     }
@@ -106,5 +122,6 @@ export class DrawingGlide {
     /** Forget an indicator's drawings (it was removed). */
     drop(modelId: string): void {
         this.entries.delete(modelId);
+        this.revisions.delete(modelId);
     }
 }
