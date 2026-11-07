@@ -7,6 +7,7 @@ import type {
     DrawingPolyline,
     DrawingLinefill,
     DrawingExtend,
+    DrawingGradientStop,
     BoxTextSize,
 } from '../../core/model/drawings';
 import type { SeriesSpec, MarkerPoint, MarkerSeries } from '../../core/model/series';
@@ -248,6 +249,20 @@ function fontSizePx(size: BoxTextSize): number {
     return size === 'auto' ? 12 : namedFontSize(size);
 }
 
+/** A vertical gradient from pixel row `y0` (offset 0) to `y1` (offset 1); offsets outside 0..1 clamp to the edges. */
+function verticalGradient(ctx: CanvasRenderingContext2D, y0: number, y1: number, stops: ReadonlyArray<DrawingGradientStop>): CanvasGradient {
+    const g = ctx.createLinearGradient(0, y0, 0, y1);
+    for (const s of stops) g.addColorStop(Math.max(0, Math.min(1, s.offset)), s.color);
+    return g;
+}
+
+/** The colour of the stop nearest a gradient's middle: what a box's default text is read against. */
+function middleStop(stops: ReadonlyArray<DrawingGradientStop>): string {
+    let best = stops[0]!;
+    for (const s of stops) if (Math.abs(s.offset - 0.5) < Math.abs(best.offset - 0.5)) best = s;
+    return best.color;
+}
+
 /**
  * Whether any painted part of a line — anchor segment plus its `extend`
  * projection — crosses the visible bar window `[lo, hi]` (logical x). A vertical
@@ -361,7 +376,7 @@ export class DrawingSceneRenderer {
             fold(ln.y2);
         }
         for (const bx of this.set.boxes) {
-            if (!bx.bgColor && !(bx.borderColor && bx.borderWidth > 0) && !bx.text) continue;
+            if (!bx.bgColor && !bx.bgGradient?.length && !(bx.borderColor && bx.borderWidth > 0) && !bx.text) continue;
             if (!visible(this.logicalOf(bx.xloc, bx.left), this.logicalOf(bx.xloc, bx.right), bx.extend)) continue;
             fold(bx.top);
             fold(bx.bottom);
@@ -505,10 +520,23 @@ export class DrawingSceneRenderer {
     private drawPolylines(ctx: CanvasRenderingContext2D, W: number, xOf: (l: number) => number, yOf: (p: number) => number | null): void {
         for (const pl of this.set.polylines) {
             const pts: Array<[number, number]> = [];
+            // the pixel rows of the path's highest and lowest prices, which anchor a gradient fill
+            let hiPrice = -Infinity;
+            let loPrice = Infinity;
+            let yHi = 0;
+            let yLo = 0;
             for (const p of pl.points) {
                 const y = yOf(p.price);
                 if (y === null) continue;
                 pts.push([xOf(this.logicalOf(p.xloc, p.x)), y]);
+                if (p.price > hiPrice) {
+                    hiPrice = p.price;
+                    yHi = y;
+                }
+                if (p.price < loPrice) {
+                    loPrice = p.price;
+                    yLo = y;
+                }
             }
             if (pts.length < 2) continue;
             let minX = Infinity;
@@ -525,7 +553,10 @@ export class DrawingSceneRenderer {
                 for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i]![0], pts[i]![1]);
             }
             if (pl.closed) ctx.closePath();
-            if (pl.fillColor) {
+            if (pl.fillGradient?.length) {
+                ctx.fillStyle = verticalGradient(ctx, yHi, yLo, pl.fillGradient);
+                ctx.fill();
+            } else if (pl.fillColor) {
                 ctx.fillStyle = pl.fillColor;
                 ctx.fill();
             }
@@ -589,7 +620,10 @@ export class DrawingSceneRenderer {
 
             if (right < 0 || left > W || bottom < 0 || top > H) continue;
 
-            if (bx.bgColor) {
+            if (bx.bgGradient?.length) {
+                ctx.fillStyle = verticalGradient(ctx, yt, yb, bx.bgGradient);
+                ctx.fillRect(left, top, w, h);
+            } else if (bx.bgColor) {
                 ctx.fillStyle = bx.bgColor;
                 ctx.fillRect(left, top, w, h);
             }
@@ -641,7 +675,7 @@ export class DrawingSceneRenderer {
             lines = bx.wrap ? this.wrapText(ctx, font, text, Math.max(1, w - pad * 2)) : text.split('\n');
         }
         ctx.font = `${variant}${size}px ${family}`;
-        ctx.fillStyle = bx.textColor ?? contrastColor(bx.bgColor);
+        ctx.fillStyle = bx.textColor ?? contrastColor(bx.bgGradient?.length ? middleStop(bx.bgGradient) : bx.bgColor);
 
         const lineH = size * 1.3;
         const blockH = lineH * lines.length;

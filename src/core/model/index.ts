@@ -30,6 +30,7 @@ export type {
     BoxFontFamily,
     DrawingLine,
     DrawingBox,
+    DrawingGradientStop,
     LabelStyle,
     LabelYLoc,
     DrawingLabel,

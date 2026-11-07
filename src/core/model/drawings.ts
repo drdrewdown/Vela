@@ -50,6 +50,13 @@ export interface DrawingLine {
     glide?: boolean;
 }
 
+/** One stop of a vertical gradient fill: `offset` is 0 at the shape's highest price and 1 at its
+ *  lowest, whichever way the price axis runs. */
+export interface DrawingGradientStop {
+    offset: number;
+    color: string;
+}
+
 /** A Pine `box.new(...)`. `left/right` follow `xloc`; `top/bottom` are prices. */
 export interface DrawingBox {
     /** Aether: hover text registered as a tooltip hit region over the box. */
@@ -64,6 +71,9 @@ export interface DrawingBox {
     extend: DrawingExtend;
     /** Fill color (may carry alpha). `undefined` → no fill (`na`). */
     bgColor?: string;
+    /** Vertical gradient fill, from the box's `top` price to its `bottom`. Replaces `bgColor` when set,
+     *  including as the fill the default text colour is read against. */
+    bgGradient?: ReadonlyArray<DrawingGradientStop>;
     /** Border color. `undefined` → no border (`na`). */
     borderColor?: string;
     borderWidth: number;
@@ -179,6 +189,9 @@ export interface DrawingPolyline {
     lineColor?: string;
     /** Fill color (closed paths). `undefined` → no fill. */
     fillColor?: string;
+    /** Vertical gradient fill (closed paths), from the path's highest price to its lowest. Replaces
+     *  `fillColor` when set. */
+    fillGradient?: ReadonlyArray<DrawingGradientStop>;
     lineWidth: number;
     lineStyle: LineStyle;
     /** Arrowheads at segment starts/ends (`line.style_arrow_*`). */
