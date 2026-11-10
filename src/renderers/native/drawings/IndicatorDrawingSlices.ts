@@ -284,7 +284,7 @@ export class IndicatorDrawingSlices {
         paneTips.push(...this.drawScene.labelTipRegions());
         // Tables paint over the model's other drawings — the pane-corner dashboard reads
         // above its own lines/labels, as the DOM overlay used to.
-        for (const t of e.tables) paintTable(ctx, t, { paneHeight: pane.bounds.height, plotWidth: dataW, theme }, paneTips);
+        for (const t of e.tables) paintTable(ctx, t, { paneHeight: pane.bounds.height, plotWidth: dataW, plotLeft: clipX, theme }, paneTips);
         ctx.restore();
         // Collect this entry's tooltip rects, shifted from pane space into plot space.
         for (const r of paneTips) {

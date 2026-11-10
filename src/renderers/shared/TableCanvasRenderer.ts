@@ -16,6 +16,8 @@ export interface TablePaintArgs {
     paneHeight: number;
     /** Plot-area width (excludes the right price-axis strip) — Pine cell widths are percents of it. */
     plotWidth: number;
+    /** Left x of the plot area — the width of a left-docked price scale, else 0 (the default). */
+    plotLeft?: number;
     theme: VelaTheme;
 }
 
@@ -196,10 +198,11 @@ function anchorOrigin(position: TablePosition, totalW: number, totalH: number, a
     if (position.startsWith('top')) y = MARGIN;
     else if (position.startsWith('bottom')) y = args.paneHeight - MARGIN - totalH;
     else y = args.paneHeight / 2 - totalH / 2;
+    const left = args.plotLeft ?? 0;
     let x: number;
-    if (position.endsWith('left')) x = MARGIN;
-    else if (position.endsWith('right')) x = args.plotWidth - MARGIN - totalW;
-    else x = args.plotWidth / 2 - totalW / 2;
+    if (position.endsWith('left')) x = left + MARGIN;
+    else if (position.endsWith('right')) x = left + args.plotWidth - MARGIN - totalW;
+    else x = left + args.plotWidth / 2 - totalW / 2;
     return { x, y };
 }
 
