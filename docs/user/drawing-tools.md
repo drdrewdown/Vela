@@ -258,7 +258,7 @@ Magnet, Measure, and Stay in drawing mode are toolbar *modes*, not placeable typ
 
 | Tool | Type key | What it does |
 |---|---|---|
-| Rectangle | `box` | An axis-aligned filled box. |
+| Rectangle | `box` | An axis-aligned filled box. Drag a corner handle to resize both sides, or the handle in the middle of a side to move that side alone. |
 | Arrow | `arrow` | A straight arrow between two points. |
 | Ellipse | `ellipse` | A data-space ellipse in a bounding box. |
 | Triangle | `triangle` | A three-point filled triangle. |
@@ -353,7 +353,7 @@ whether it falls in that pattern's ideal Fibonacci band.
 |---|---|---|
 | Date & Price Range | `datepricerange` | A box reporting the time span + price/% change it covers. |
 | Long/Short Position | `position` | An entry/stop/target box: click the entry, then drag in the profit direction (up for a long, down for a short). Shows risk:reward, percentages, the amount lost at the stop, and position size from your risk % and account balance (size is editable and back-solves the risk %). The settings panel has a long/short switch (mirrors the levels across the entry), exact level values in price or points, and per-label display toggles; zone colors and label styling sit on the quick bar. |
-| Magnifier | `magnifier` | A press-drag-release rectangle whose interior shows the same market at a **lower timeframe**, rendered in the chart's own price style *and colors* (candles, bars, line, area, Heikin Ashi; custom chart types fall back to candles) at true time/price positions. The timeframe chip on the rectangle's bottom-left corner is a dropdown — click it to switch — and the same pick leads the quick bar, beside the up/down color overrides and the border style; **Auto** subdivides the chart's timeframe, and both pickers offer only timeframes below the chart's own. The finer bars load in the background and follow live data; when the chart is already at the finest timeframe, or the area needs more bars than the tool will fetch, a notice inside the rectangle says so. Needs a market with a ranged data source (offline `data` arrays have nothing to fetch). |
+| Magnifier | `magnifier` | A press-drag-release rectangle whose interior shows the same market at a **lower timeframe**, rendered in the chart's own price style *and colors* (candles, bars, line, area, Heikin Ashi; line with markers and step line show as a line, columns as an area; custom chart types fall back to candles) at true time/price positions. The timeframe chip on the rectangle's bottom-left corner is a dropdown — click it to switch — and the same pick leads the quick bar, beside the up/down color overrides and the border style; **Auto** subdivides the chart's timeframe, and both pickers offer only timeframes below the chart's own. The finer bars load in the background and follow live data; when the chart is already at the finest timeframe, or the area needs more bars than the tool will fetch, a notice inside the rectangle says so. Needs a market with a ranged data source (offline `data` arrays have nothing to fetch). |
 
 ---
 
@@ -386,7 +386,7 @@ chart.drawings.lock(d.id);          // make it non-interactive
 chart.drawings.showToolbar(false);  // hide the toolbar (drawings still work from code)
 ```
 
-See the [`chart.drawings` reference](./api-reference.md#chartdrawings-control-surface) for the full
+See the [`chart.drawings` reference](./api-reference.md#chartdrawings--the-drawings-control-surface) for the full
 method list and which methods are gated by renderer support.
 
 ---
@@ -465,8 +465,9 @@ the next load.
 Interactive drawing requires a renderer that declares the `userDrawings` capability — the **native
 renderer** does; a minimal custom adapter may not. When unsupported,
 `chart.drawings.supported` is `false`, the interactive methods warn and no-op, **but** the
-core-owned methods (`add` of the model, `all`, `toJSON`/`fromJSON`, `undo`/`redo`) still work, so a
-document round-trips even without an on-chart toolbar.
+core-owned methods (`all`, `update`, `remove`, `toJSON`/`fromJSON`, `undo`/`redo`) still work, so a
+document round-trips even without an on-chart toolbar. Placing a drawing (`add`) is interactive and
+returns `null` there; restore drawings with `fromJSON` instead.
 
 > **Stability:** the drawing-tools API is young and may change before a 1.0 release. The persisted
 > `DrawingsDocument` is versioned and migrated forward.

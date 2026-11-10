@@ -8,6 +8,7 @@ import type {
     AxisLongPressEvent,
     InputChangeEvent,
     VisibleRange,
+    VisibleRangeOptions,
     IndicatorStatus,
     LegendActionView,
     LegendCalloutView,
@@ -35,7 +36,9 @@ import type { Pane } from '../../core/model/scene';
 import type { IndicatorModel, PaneAxisBand } from '../../core/model/indicator';
 import type { ScenePatch } from '../../core/model/patch';
 import type { InputValue, SymbolPickerFn } from '../../core/model/inputs';
-import type { RendererDisplayOptions, NativeBackend, PriceStyle, MoveTarget, ThemeName, IntroAnimation, IntroStyle, PriceAxisTicksFn } from '../../core/options';
+import type { RendererDisplayOptions, NativeBackend, PriceStyle, MoveTarget, ThemeId, IntroAnimation, IntroStyle, PriceAxisTicksFn } from '../../core/options';
+import type { SymbolFacts } from '../../core/ports/MarketDataFeed';
+import { priceStyleApplies, shownPriceStyle } from '../../chart-types/applicability';
 import {
     resolveEaseMs,
     resolveLiveBarEaseMs,
@@ -88,7 +91,7 @@ import { MARK_PULSE_MS } from './chrome/marks/paint';
 import type { MarkClickEvent, MarkGroup, TimelineMark } from '../../core/marks/types';
 import { rescaleAround, shiftScale } from './core/manualScale';
 import { resizeSplit, type PaneSplit } from './core/paneResize';
-import { type ChartConfig, CHART_CONFIG_VERSION, factoryResetConfig, mergeConfig, BASELINE_TOP_LINE, BASELINE_BOTTOM_LINE, BASELINE_FILL_ALPHA, BASELINE_FILL_ALPHA_FAR, withAlpha, priceStyleIds, basePaintingOf, candleOverrideFor, effectiveCandlePaint, sanitizeCrosshairOverride } from './core/chartConfig';
+import { type ChartConfig, CHART_CONFIG_VERSION, factoryResetConfig, followThemeColors, themeColorFollower, columnsColorFollower, columnsDefaultColors, mergeConfig, BASELINE_TOP_LINE, BASELINE_BOTTOM_LINE, BASELINE_FILL_ALPHA, BASELINE_FILL_ALPHA_FAR, withAlpha, priceStyleIds, basePaintingOf, candleOverrideFor, effectiveCandlePaint, sanitizeCrosshairOverride } from './core/chartConfig';
 import { BackdropRenderer } from './backdrop/BackdropRenderer';
 import { VolumeRenderer, VOLUME_PANE_FILL_FRAC } from './volume/VolumeRenderer';
 import { rendererLayers, foldBaseModulation, type RendererLayerArgs, type RendererLayerDefinition, type RendererLayerInstance, type BasePaintingModulation } from './layers';
@@ -99,7 +102,7 @@ import { rasterizeOverlay } from '../shared/dom-raster';
 import type { HostSettingsSection } from './chrome/SettingsDialog';
 import { settingsIdCatalog } from './chrome/settings-visibility';
 import { VpvrRenderer } from './vpvr/VpvrRenderer';
-import { DARK_THEME, LIGHT_THEME } from '../../core/theme';
+import { DARK_THEME, LIGHT_THEME, registeredThemeIdOf } from '../../core/theme';
 import { isDarkColor } from '../../core/color';
 import { iconAt } from '../../core/icons';
 import { BEARISH, BULLISH } from '../../core/palette';
@@ -193,6 +196,9 @@ export class NativeRenderer implements IChartRenderer {
     // Owned by the app theme alone (mount/setTheme) — config-level background/text edits
     // (settings dialog, persisted configs) recolor the plot AND the axis scales (see
     // axisSurface), but never the toolbar/dialog chrome.
+    /** The app theme as given, before the config's candle colors: what the settings
+     *  dialog's theme choice identifies. */
+    private appTheme: VelaTheme = DARK_THEME;
     private surfaceBackground = DARK_THEME.background;
     private surfaceTextColor = DARK_THEME.textColor;
     private wrapper!: HTMLDivElement; // outer root: holds the left toolbar gutter + the plot sub-container
@@ -409,9 +415,11 @@ export class NativeRenderer implements IChartRenderer {
     private readonly chartTypeSettingsCbs = new Set<(typeId: string, values: Record<string, unknown>) => void>();
     private readonly configChangedCbs = new Set<() => void>();
     /** The settings dialog's Canvas → Theme row raises the pick here; the host applies it. */
-    private readonly themeSelectCbs = new Set<(theme: ThemeName) => void>();
+    private readonly themeSelectCbs = new Set<(theme: ThemeId) => void>();
     /** First-run config snapshot — what "Reset defaults" restores. */
     private factoryConfig: ChartConfig | null = null;
+    /** The app theme {@link factoryConfig} was taken under: its candle colors are the snapshot's defaults. */
+    private factoryTheme: VelaTheme = DARK_THEME;
     private hostSettingsSections: HostSettingsSection[] = [];
     private readonly clickCbs = new Set<(e: ClickEvent) => void>();
     private readonly axisLongPressCbs = new Set<(e: AxisLongPressEvent) => void>();
@@ -421,6 +429,12 @@ export class NativeRenderer implements IChartRenderer {
     private readonly moveIndicatorCbs = new Set<(id: string, target: MoveTarget) => void>();
     private readonly priceStyleCbs = new Set<(style: PriceStyle) => void>();
     private readonly priceStyleWillChangeCbs = new Set<(from: PriceStyle, to: PriceStyle) => void>();
+    /** The CHOSEN price style — the `priceStyle` feature, the config's `series.style`, what a
+     *  save keeps. `scene.priceStyle` is the one DRAWN: this, or its fallback while the
+     *  symbol's facts rule it out (see {@link setSymbolFacts}). */
+    private chosenStyle: PriceStyle = 'candles';
+    /** The active symbol's style-deciding facts; null while unknown (every style applies). */
+    private symbolFacts: SymbolFacts | null = null;
 
     constructor(opts?: RendererDisplayOptions) {
         if (opts) {
@@ -436,6 +450,7 @@ export class NativeRenderer implements IChartRenderer {
             this.glowAmount = opts.glow;
             this.candleUp = opts.upColor;
             this.candleDown = opts.downColor;
+            this.chosenStyle = opts.priceStyle;
             this.scene.priceStyle = opts.priceStyle;
             this.scene.basePainting = basePaintingOf(opts.priceStyle);
             this.scene.candleOverride = candleOverrideFor(opts.priceStyle, this.scene.style.chartTypes);
@@ -447,7 +462,7 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     readonly name = 'native';
-    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animScroll', 'animAutoscale', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'scaleSide', 'rangeChips', 'indicatorChips', 'mergeChips', 'legendFolded', 'drawingTooltips', 'invertScale', 'scalePriceOnly', 'paneScales', 'autoScale', 'timezone', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'marks', 'indicatorTitles', 'indicatorValues', 'crosshairOverride', 'drawingsInteractive', 'priceAxisTicks'];
+    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animScroll', 'animAutoscale', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'invertScale', 'scalePriceOnly', 'paneScales', 'autoScale', 'timezone', 'keyboard', 'historyChords', 'priceStyle', 'shownPriceStyle', 'priceBaseline', 'baselinePrice', 'previousClose', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'marks', 'indicatorTitles', 'indicatorValues', 'crosshairOverride', 'drawingsInteractive', 'priceAxisTicks', 'scaleSide', 'rangeChips', 'indicatorChips', 'mergeChips', 'legendFolded', 'drawingTooltips'];
 
     /** Apply a render feature live — mutate the field + invalidate, no engine re-run. */
     applyFeature(key: string, value: unknown): void {
@@ -713,7 +728,10 @@ export class NativeRenderer implements IChartRenderer {
                 return price ? price.manualScale == null : true;
             }
             case 'timezone': return this.scene.timezone;
-            case 'priceStyle': return this.scene.priceStyle;
+            case 'priceStyle': return this.chosenStyle;
+            // READ-ONLY: the style the chart DRAWS — `priceStyle`, or the close-based
+            // fallback while the symbol's facts rule it out. Writes are ignored.
+            case 'shownPriceStyle': return this.scene.priceStyle;
             case 'priceBaseline': return this.scene.baselineValue;
             case 'baselinePrice': {
                 // READ-ONLY: the RESOLVED baseline reference price the paint splits on —
@@ -722,6 +740,14 @@ export class NativeRenderer implements IChartRenderer {
                 // (a status line's value ink) compares against this.
                 const price = this.scene.panes.get(PRICE_PANE_ID);
                 return price ? this.scene.baselinePriceFor(price.scale) : this.scene.baselineValue;
+            }
+            case 'previousClose': {
+                // READ-ONLY: the close of the bar before the one the readouts show — the bar
+                // under the crosshair, else the latest; null on the first bar. Host chrome
+                // coloring by change (the columns style's status line ink) compares against it.
+                const idx = this.hoverLogical ?? this.bars.length - 1;
+                const prev = this.bars[idx - 1];
+                return prev && Number.isFinite(prev.close) ? prev.close : null;
             }
             case 'tradeMarkers': return { ...this.scene.tradeMarkers, colors: { ...this.scene.tradeMarkers.colors } };
             case 'marks': return { visible: this.scene.marks.visible, groups: { ...this.scene.marks.groups } };
@@ -814,6 +840,21 @@ export class NativeRenderer implements IChartRenderer {
         if (m === this.scene.priceMintick) return;
         this.scene.priceMintick = m;
         this.scheduler?.invalidate(InvalidateLevel.Full);
+    }
+
+    /** Port surface: the active symbol's style-deciding facts. A chosen style they rule out
+     *  draws as its fallback, and an open settings dialog re-greys its style list. */
+    setSymbolFacts(facts: SymbolFacts | null): void {
+        this.symbolFacts = facts ? { ...facts } : null;
+        const before = this.scene.priceStyle;
+        this.showPriceStyle();
+        if (this.scene.priceStyle !== before) this.scheduler?.invalidate(InvalidateLevel.Full);
+        if (this.settingsDialog?.isOpen()) this.settingsDialog.refresh(this.getConfig());
+    }
+
+    /** The registered style ids the active symbol's facts rule out (none while unknown). */
+    private unavailablePriceStyles(): string[] {
+        return priceStyleIds().filter((id) => !priceStyleApplies(id, this.symbolFacts));
     }
 
     // ── rich serializable config (templates / persisted user settings — item 15) ──
@@ -932,7 +973,11 @@ export class NativeRenderer implements IChartRenderer {
                     baselineLevel: s.baseline.baselineLevel,
                 };
             })(),
-            series: { style: this.scene.priceStyle, baseline: this.scene.baselineValue, spacing: this.coords.spacingScale },
+            columns: (() => {
+                const wash = columnsDefaultColors({ upColor: this.candleUp, downColor: this.candleDown });
+                return { upColor: s.columns.upColor ?? wash.upColor, downColor: s.columns.downColor ?? wash.downColor };
+            })(),
+            series: { style: this.chosenStyle, baseline: this.scene.baselineValue, spacing: this.coords.spacingScale },
             sessions: { premarketColor: s.sessions.premarketColor, postmarketColor: s.sessions.postmarketColor, extendedColor: s.sessions.extendedColor },
         };
     }
@@ -1089,6 +1134,7 @@ export class NativeRenderer implements IChartRenderer {
             width: next.baseline.width,
             baselineLevel: next.baseline.baselineLevel,
         };
+        s.columns = { upColor: next.columns.upColor, downColor: next.columns.downColor };
         // session shading
         s.sessions = { premarketColor: next.sessions.premarketColor, postmarketColor: next.sessions.postmarketColor, extendedColor: next.sessions.extendedColor };
         // series
@@ -1204,7 +1250,8 @@ export class NativeRenderer implements IChartRenderer {
      *  independently); a pick is raised to the host (`onThemeSelect`), which owns the
      *  canonical theme. */
     private syncThemeControl(): void {
-        this.settingsDialog?.setThemeControl(isDarkColor(this.surfaceBackground) ? 'dark' : 'light', (name) => {
+        const current = registeredThemeIdOf(this.appTheme) ?? (isDarkColor(this.surfaceBackground) ? 'dark' : 'light');
+        this.settingsDialog?.setThemeControl(current, (name) => {
             for (const cb of this.themeSelectCbs) cb(name);
         });
     }
@@ -1225,6 +1272,7 @@ export class NativeRenderer implements IChartRenderer {
             (id) => markGroupOwnVisible(this.scene.marks.groups, id, this.scene.markGroups),
         );
         this.settingsDialog.setHiddenSettings(this.hiddenSettings);
+        this.settingsDialog.setPriceStyleState(() => ({ shown: this.scene.priceStyle, unavailable: this.unavailablePriceStyles() }));
         this.syncThemeControl();
         this.settingsDialog.toggle(
             this.getConfig(),
@@ -1247,7 +1295,8 @@ export class NativeRenderer implements IChartRenderer {
      * merge, like the type bags) are named back to their host-declared visibility.
      */
     private factoryResetDocument(factory: ChartConfig): ChartConfig {
-        const doc = factoryResetConfig(factory, this.scene.priceStyle);
+        // The snapshot's candle colors were its theme's; the reset gives the current theme's.
+        const doc = followThemeColors(factoryResetConfig(factory, this.chosenStyle), this.factoryTheme, this.appTheme);
         const groups = { ...doc.marks.groups };
         for (const g of this.markGroupsInUse()) groups[g.id] = g.visible !== false;
         return { ...doc, marks: { ...doc.marks, groups } };
@@ -1492,6 +1541,29 @@ export class NativeRenderer implements IChartRenderer {
         return { ...b, high: o + (b.high - o) * t, low: o + (b.low - o) * t, close: o + (b.close - o) * t };
     }
 
+    /** A theme's up and down colors are the series' defaults: on a theme switch, every series
+     *  color still on the previous theme's moves to the next theme's, and a color a host or
+     *  user chose stays. Colors left to inherit (`null`) keep inheriting. */
+    private followThemeCandles(prev: VelaTheme, next: VelaTheme): void {
+        if (prev.upColor === next.upColor && prev.downColor === next.downColor) return;
+        const follow = themeColorFollower(prev, next);
+        const s = this.scene.style;
+        this.candleUp = follow(this.candleUp);
+        this.candleDown = follow(this.candleDown);
+        s.candle = {
+            ...s.candle,
+            borderUpColor: follow(s.candle.borderUpColor),
+            borderDownColor: follow(s.candle.borderDownColor),
+            wickUpColor: follow(s.candle.wickUpColor),
+            wickDownColor: follow(s.candle.wickDownColor),
+        };
+        s.bars = { upColor: follow(s.bars.upColor), downColor: follow(s.bars.downColor) };
+        s.line = { ...s.line, color: follow(s.line.color) };
+        s.area = { ...s.area, lineColor: follow(s.area.lineColor), topColor: follow(s.area.topColor) };
+        const followColumns = columnsColorFollower(prev, next);
+        s.columns = { upColor: followColumns(s.columns.upColor), downColor: followColumns(s.columns.downColor) };
+    }
+
     /** Theme with the configured candle up/down colors applied (candles, wicks,
      *  plotcandle defaults, and the current-price line direction all follow them). */
     private deriveTheme(theme: VelaTheme): VelaTheme {
@@ -1539,6 +1611,7 @@ export class NativeRenderer implements IChartRenderer {
         this.mountContainer = container;
         this.publishGutters();
         this.theme = this.deriveTheme(theme);
+        this.appTheme = theme;
         // provisional chrome surface (refined by the first applyConfig)
         this.surfaceBackground = theme.background;
         this.surfaceTextColor = theme.textColor;
@@ -1607,6 +1680,7 @@ export class NativeRenderer implements IChartRenderer {
         this.layerOrderSig = ''; // recomputed on the first data frame (owned layers follow their indicator's z)
         this.wrapper.appendChild(this.plot);
         this.factoryConfig = this.getConfig();
+        this.factoryTheme = theme;
         this.attributionEl = this.buildAttributionEl();
         if (!this.attributionEnabled) this.attributionEl.style.display = 'none';
         this.positionAttribution();
@@ -1727,7 +1801,12 @@ export class NativeRenderer implements IChartRenderer {
                     style,
                     upColor: style === 'bars' ? barsUp : paint.up,
                     downColor: style === 'bars' ? barsDown : paint.down,
-                    lineColor: style === 'area' ? (st.area.lineColor ?? this.theme.upColor) : (st.line.color ?? this.theme.upColor),
+                    lineColor:
+                        style === 'area'
+                            ? (st.area.lineColor ?? this.theme.upColor)
+                            : style === 'columns'
+                              ? withAlpha(st.columns.upColor ?? this.theme.upColor, 1)
+                              : (st.line.color ?? this.theme.upColor),
                 };
             },
             chartBarMs: () => this.coords.barInterval,
@@ -1932,7 +2011,9 @@ export class NativeRenderer implements IChartRenderer {
     };
 
     setTheme(theme: VelaTheme): void {
+        this.followThemeCandles(this.appTheme, theme);
         this.theme = this.deriveTheme(theme);
+        this.appTheme = theme;
         // a full app-theme swap re-bases the chrome surface
         this.surfaceBackground = theme.background;
         this.surfaceTextColor = theme.textColor;
@@ -2558,9 +2639,21 @@ export class NativeRenderer implements IChartRenderer {
      * the core — which owns the DATA side of styles that need one (a chart type's SeriesDataEngine).
      */
     private setPriceStyle(style: PriceStyle): void {
-        if (style === this.scene.priceStyle) return;
+        this.showPriceStyle(style);
+    }
+
+    /** Choose `chosen` and draw it, or its fallback while the symbol's facts rule it out —
+     *  announced only when what is DRAWN changes, and while both reads still give the old
+     *  style (a listener sees the chart as it was). */
+    private showPriceStyle(chosen: PriceStyle = this.chosenStyle): void {
+        const style = shownPriceStyle(chosen, this.symbolFacts, priceStyleIds());
+        if (style === this.scene.priceStyle) {
+            this.chosenStyle = chosen;
+            return;
+        }
         const from = this.scene.priceStyle;
         for (const cb of this.priceStyleWillChangeCbs) cb(from, style);
+        this.chosenStyle = chosen;
         this.scene.priceStyle = style;
         this.scene.basePainting = basePaintingOf(style);
         this.scene.candleOverride = candleOverrideFor(style, this.scene.style.chartTypes);
@@ -2619,7 +2712,7 @@ export class NativeRenderer implements IChartRenderer {
         return () => this.configChangedCbs.delete(cb);
     }
 
-    onThemeSelect(cb: (theme: ThemeName) => void): Unsubscribe {
+    onThemeSelect(cb: (theme: ThemeId) => void): Unsubscribe {
         this.themeSelectCbs.add(cb);
         return () => this.themeSelectCbs.delete(cb);
     }
@@ -2687,12 +2780,14 @@ export class NativeRenderer implements IChartRenderer {
         return { from: this.coords.logicalToTime(from), to: this.coords.logicalToTime(to) };
     }
 
-    setVisibleRange(range: VisibleRange): void {
+    setVisibleRange(range: VisibleRange, opts?: VisibleRangeOptions): void {
         const fromL = this.coords.timeToLogical(range.from);
         const toL = this.coords.timeToLogical(range.to);
         const span = Math.max(1e-6, toL - fromL);
-        const barSpacing = clampBarSpacing(this.coords.width / (span * this.coords.spacingScale));
-        const rightOffset = toL - (this.coords.barCount - 1);
+        // A preset frame leaves the right margin's whitespace past `to`, sharing the width with the range.
+        const margin = opts?.rightMargin ? this.scene.style.margins.right : 0;
+        const barSpacing = clampBarSpacing(this.coords.width / ((span + margin) * this.coords.spacingScale));
+        const rightOffset = toL - (this.coords.barCount - 1) + margin;
         this.applyViewport({ barSpacing, rightOffset });
     }
 
@@ -2778,7 +2873,10 @@ export class NativeRenderer implements IChartRenderer {
         const scale = this.coords.spacingScale;
         // bar spacing: max keeps ≥ minVisible bars on screen; min keeps all bars + a margin within the width.
         const maxBs = Math.min(MAX_BAR_SPACING, W / (minVisible * scale));
-        const minBs = Math.max(MIN_BAR_SPACING, Math.min(maxBs, W / ((n + ZOOM_OUT_MARGIN_BARS) * scale)));
+        // The breathing room is at least the configured right margin, so every bar AND that
+        // margin fit at full zoom-out (a framed 'ALL' preset keeps its oldest bars on screen).
+        const room = Math.max(ZOOM_OUT_MARGIN_BARS, this.scene.style.margins.right);
+        const minBs = Math.max(MIN_BAR_SPACING, Math.min(maxBs, W / ((n + room) * scale)));
         const bs = Math.max(minBs, Math.min(maxBs, barSpacing));
         // right offset: the ONLY pan limit is keeping ≥ minVisible candles on screen. Panning left
         // can push the data far left (lots of right whitespace) until just minVisible remain; panning

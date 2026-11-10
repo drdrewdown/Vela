@@ -5,8 +5,10 @@
 import { msg } from '../core/i18n/message';
 import { textOf } from '../core/i18n/text';
 import type { MessageLike, Translator } from '../core/i18n/types';
-import { Menu } from '../ui/components/menu';
-import { injectStyles } from '../ui/styles';
+import { css } from '@luxalgo/vela-ui/css';
+import { DropdownMenu } from '@luxalgo/vela-ui/dropdown-menu';
+import { t } from '@luxalgo/vela-ui/t';
+import { injectChromeStyles } from '../ui/chromeStyles';
 import { TemplateDialog } from './template-dialog';
 import { timeframeLabel } from './timeframe';
 
@@ -31,7 +33,8 @@ const TEXT = {
 };
 
 const STYLE_ID = 'vela-widget-template-strip';
-const CSS = `
+const CSS = css`@layer vela.chrome {
+
 .vela-bb-templates { display: inline-flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden; }
 .vela-bb-template {
     all: unset;
@@ -40,18 +43,18 @@ const CSS = `
     align-items: center;
     gap: 5px;
     padding: 0 9px;
-    border-radius: 4px;
+    border-radius: ${t.radius.sm};
     font-weight: 600;
     white-space: nowrap;
     cursor: pointer;
-    color: var(--vela-fg-muted);
+    color: ${t.fg.muted};
 }
-.vela-bb-template:hover { background: var(--vela-hover); color: var(--vela-fg-bright); }
-.vela-bb-template[data-active='1'] { color: var(--vela-fg-bright); background: var(--vela-hover); box-shadow: inset 0 0 0 1px var(--vela-border-strong); }
-.vela-bb-template[data-drifted='1']::after { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--vela-accent); }
+.vela-bb-template:hover { background: ${t.hover}; color: ${t.fg.bright}; }
+.vela-bb-template[data-active='1'] { color: ${t.fg.bright}; background: ${t.hover}; outline: 1px solid ${t.border.strong}; outline-offset: -1px; }
+.vela-bb-template[data-drifted='1']::after { content: ''; width: 5px; height: 5px; border-radius: 50%; background: ${t.accent}; }
 .vela-bb-template-tf { font-size: 10px; font-weight: 500; opacity: 0.8; }
 .vela-bb-template[data-builtin='1'] { font-weight: 500; }
-.vela-bb-template-sep { width: 1px; height: 16px; margin: 0 4px; background: var(--vela-border-strong); }
+.vela-bb-template-sep { width: 1px; height: 16px; margin: 0 4px; background: ${t.border.strong}; }
 .vela-bb-template-add {
     all: unset;
     width: 24px;
@@ -59,15 +62,16 @@ const CSS = `
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
+    border-radius: ${t.radius.sm};
     font-size: 15px;
     font-weight: 600;
     cursor: pointer;
-    color: var(--vela-fg-muted);
+    color: ${t.fg.muted};
 }
-.vela-bb-template-add:hover { background: var(--vela-hover); color: var(--vela-fg-bright); }
+.vela-bb-template-add:hover { background: ${t.hover}; color: ${t.fg.bright}; }
 .vela-bb-template-add:disabled { cursor: not-allowed; opacity: 0.45; }
-`;
+
+}`;
 
 /** The most characters a chip shows of a name; the rest is the tooltip's. */
 const CHIP_CHARS = 14;
@@ -165,10 +169,10 @@ export function templateMenuRows(row: TemplateChipRow, i18n?: Translator | null)
 export class TemplateStrip {
     readonly el: HTMLElement;
     private readonly opts: TemplateStripOptions;
-    private readonly menu: Menu;
+    private readonly menu: DropdownMenu;
     private readonly dialog: TemplateDialog;
     private readonly add: HTMLButtonElement;
-    private readonly addMenu: Menu;
+    private readonly addMenu: DropdownMenu;
     private readonly fileInput: HTMLInputElement;
     private menuRow: TemplateChipRow | null = null;
     private dragName: string | null = null;
@@ -176,7 +180,7 @@ export class TemplateStrip {
     constructor(opts: TemplateStripOptions) {
         this.opts = opts;
         const doc = opts.host.ownerDocument;
-        injectStyles(STYLE_ID, CSS, doc);
+        injectChromeStyles(STYLE_ID, CSS, doc);
         this.el = doc.createElement('div');
         this.el.className = 'vela-bb-templates';
         this.el.setAttribute('role', 'group');
@@ -192,7 +196,7 @@ export class TemplateStrip {
             this.addMenu.setItems(addMenuRows(this.opts.rows().some((r) => !r.builtIn), this.opts.i18n));
             this.addMenu.openAt(e.clientX, e.clientY);
         });
-        this.addMenu = new Menu({ host: opts.host, items: [], placement: 'top-start', onSelect: (id) => this.runAdd(id) });
+        this.addMenu = new DropdownMenu({ host: opts.host, items: [], side: 'top', align: 'start', onSelect: (id) => this.runAdd(id) });
         this.fileInput = doc.createElement('input');
         this.fileInput.type = 'file';
         this.fileInput.accept = '.json,application/json';
@@ -204,7 +208,7 @@ export class TemplateStrip {
             void file.text().then((text) => this.opts.onImport?.(text));
         });
         opts.host.appendChild(this.fileInput);
-        this.menu = new Menu({ host: opts.host, items: [], placement: 'top-start', checkmarks: true, onSelect: (id) => this.run(id) });
+        this.menu = new DropdownMenu({ host: opts.host, items: [], side: 'top', align: 'start', checkmarks: true, onSelect: (id) => this.run(id) });
         this.dialog = new TemplateDialog(opts.host, opts.i18n);
         this.refresh();
     }

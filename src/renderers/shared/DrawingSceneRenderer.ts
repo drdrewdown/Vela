@@ -657,8 +657,9 @@ export class DrawingSceneRenderer {
         return wrapTextLines(text, maxWidth, (t) => this.measure(ctx, font, t));
     }
 
-    /** Draws the box text; returns the painted text block's rectangle (clipped to the box). */
-    private drawBoxText(ctx: CanvasRenderingContext2D, bx: DrawingBox, left: number, top: number, w: number, h: number, W = Number.POSITIVE_INFINITY): { left: number; top: number; right: number; bottom: number } {
+    /** Draws the box text; returns the painted text block's rectangle, or null when the
+     *  automatic size finds the box too small to hold readable text. */
+    private drawBoxText(ctx: CanvasRenderingContext2D, bx: DrawingBox, left: number, top: number, w: number, h: number, W = Number.POSITIVE_INFINITY): { left: number; top: number; right: number; bottom: number } | null {
         const text = bx.text!;
         const family = bx.fontFamily === 'monospace' ? 'monospace' : this.deps.theme.fontFamily || 'sans-serif';
         const variant = `${bx.italic ? 'italic ' : ''}${bx.bold ? 'bold ' : ''}`;
@@ -667,9 +668,12 @@ export class DrawingSceneRenderer {
         let size = namedFontSize(bx.textSize);
         let lines: string[];
         if (size === 0) {
-            const initial = `${variant}14px ${family}`;
-            lines = bx.wrap ? this.wrapText(ctx, initial, text, Math.max(1, w - pad * 2)) : text.split('\n');
-            size = autoFontSize(lines, w, h, bx.bold);
+            const ref = `${variant}14px ${family}`;
+            lines = bx.wrap ? this.wrapText(ctx, ref, text, Math.max(1, w - pad * 2)) : text.split('\n');
+            let widest = 0;
+            for (const l of lines) widest = Math.max(widest, this.measure(ctx, ref, l));
+            size = autoFontSize(widest, lines.length, w - pad * 2, h);
+            if (size === 0) return null;
         } else {
             const font = `${variant}${size}px ${family}`;
             lines = bx.wrap ? this.wrapText(ctx, font, text, Math.max(1, w - pad * 2)) : text.split('\n');
@@ -696,28 +700,23 @@ export class DrawingSceneRenderer {
             ctx.textAlign = 'center';
             tx = (visLeft + visRight) / 2;
         }
-        ctx.textBaseline = 'top';
+        ctx.textBaseline = 'middle';
         let blockTop: number;
         if (bx.vAlign === 'top') blockTop = top + pad;
         else if (bx.vAlign === 'bottom') blockTop = top + h - pad - blockH;
         else blockTop = top + (h - blockH) / 2;
 
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(left, top, w, h);
-        ctx.clip();
-        for (let i = 0; i < lines.length; i += 1) ctx.fillText(lines[i]!, tx, blockTop + i * lineH);
-        ctx.restore();
+        for (let i = 0; i < lines.length; i += 1) ctx.fillText(lines[i]!, tx, blockTop + (i + 0.5) * lineH);
 
         const font = `${variant}${size}px ${family}`;
         const textW = Math.max(1, ...lines.map((l) => this.measure(ctx, font, l)));
         const rawLeft = bx.hAlign === 'left' ? tx : bx.hAlign === 'right' ? tx - textW : tx - textW / 2;
         const hit = 3; // a little slack around the glyphs so the hover is forgiving
         return {
-            left: Math.max(left, rawLeft - hit),
-            top: Math.max(top, blockTop - hit),
-            right: Math.min(left + w, rawLeft + textW + hit),
-            bottom: Math.min(top + h, blockTop + blockH + hit),
+            left: rawLeft - hit,
+            top: blockTop - hit,
+            right: rawLeft + textW + hit,
+            bottom: blockTop + blockH + hit,
         };
     }
 

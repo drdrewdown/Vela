@@ -34,7 +34,17 @@ export { lowerTimeframeTicks, barsToTicks } from './core/replayTicks';
 // Native indicators (core-computed, no scripting engine) — register a type, then chart.addNativeIndicator(type)
 export { registerNativeIndicator, unregisterNativeIndicator, getNativeIndicator, nativeIndicatorTypes, nativeIndicatorDescriptors } from './core/native-indicators';
 export type { NativeIndicator, NativeIndicatorContext, NativeIndicatorDescriptor, NativeIndicatorInfo, NativeIndicatorOutput } from './core/native-indicators';
-export { DARK_THEME, LIGHT_THEME, resolveTheme, resolveChrome, mixHex, withAlpha } from './core/theme';
+export { DARK_THEME, LIGHT_THEME, resolveTheme, resolveChrome, mixHex, withAlpha, registerTheme, registeredThemes, type RegisteredTheme } from './core/theme';
+export {
+    createTheme,
+    checkTheme,
+    type UiTheme,
+    type ThemeInput,
+    type ThemeSettings,
+    type CreateThemeOptions,
+    type ComponentSettings,
+    type TokenName,
+} from '@luxalgo/vela-ui/theme';
 export { TypedEventBus } from './core/events/EventBus';
 
 // User drawings (model + registry + persistence; renderer-agnostic)
@@ -82,6 +92,7 @@ export type {
     MarketSnapshot,
     VelaTheme,
     ThemeName,
+    ThemeId,
     ProviderName,
     RendererConstructor,
     RendererDisplayOptions,
@@ -111,6 +122,7 @@ export type {
     AxisLongPressEvent,
     InputChangeEvent,
     VisibleRange,
+    VisibleRangeOptions,
     DataWindowReadout,
     PointerReadout,
     PointerReadoutBar,

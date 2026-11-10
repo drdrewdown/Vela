@@ -1,13 +1,15 @@
 import type { Translator } from '../../../core/i18n/types';
 import type { VelaTheme } from '../../../core/options';
 import type { IndicatorModel } from '../../../core/model/indicator';
-import { resolveChrome, withAlpha } from '../../../core/theme';
+import { resolveChrome } from '../../../core/theme';
 import type { ScaleChip } from '../../../core/ports/IChartRenderer';
 import type { OHLCV } from '../../../core/model/ohlcv';
 import type { LineStyle } from '../../../core/model/series';
 import type { CoordinateSystem } from '../core/CoordinateSystem';
 import type { SceneGraph, PaneNode } from '../core/SceneGraph';
 import { percentScaleFor } from '../core/SceneGraph';
+import { effectiveCandlePaint, withAlpha } from '../core/chartConfig';
+import { columnIsUp } from '../backend/close-styles';
 // Re-exported so existing importers (crosshair) can keep sourcing it from here.
 export { percentScaleFor } from '../core/SceneGraph';
 import { DrawingSceneRenderer, modelDrawingSet, type DrawingSet, type TimeWindow } from '../../shared/DrawingSceneRenderer';
@@ -742,30 +744,6 @@ export class ChromeRenderer {
         ctx.textAlign = "start";
     }
 
-    /**
-     * The color of the latest price element for the active chart style — matches how the
-     * series itself is drawn: candle/bar body up-down, the line/area line color, or the
-     * baseline side (above/below the baseline price).
-     */
-    private priceElementColor(scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, last: OHLCV): string {
-        const st = scene.style;
-        switch (scene.priceStyle) {
-            case 'bars':
-                return last.close >= last.open ? (st.bars.upColor ?? theme.upColor) : (st.bars.downColor ?? theme.downColor);
-            case 'line':
-                return st.line.color ?? theme.upColor;
-            case 'area':
-                return st.area.lineColor ?? theme.upColor;
-            case 'baseline': {
-                const i0 = Math.max(0, Math.floor(coords.visibleLogicalRange().from));
-                const baseline = scene.baselineValue ?? scene.bars[i0]?.close ?? 0;
-                return last.close >= baseline ? (st.baseline.topLineColor ?? theme.upColor) : (st.baseline.bottomLineColor ?? theme.downColor);
-            }
-            default: // 'candles'
-                return last.close >= last.open ? theme.upColor : theme.downColor;
-        }
-    }
-
     private drawTimeAxis(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, dataW: number, dataH: number, fullH: number): void {
         const isLeft = coords.leftOffsetPx > 0; // the scale docks left
         const fullW = canvasWidthPx(ctx, coords);
@@ -852,4 +830,44 @@ export function alignScaleChips<T extends { sY: number }>(chips: T[], priceY: nu
     }
 }
 
-
+/**
+ * The color of the latest price element for the active chart style — matches how the
+ * series itself is drawn: candle/bar body up-down, the line/area line color, the
+ * baseline side (above/below the baseline price), or the last column's up-down (worn
+ * opaque: the line and label are thin chrome, not a filled area). Candles resolve
+ * through the active style's own candle colors (a candle-based plugin style such as
+ * Footprint or TPO keeps its own), exactly as the candle painter does; with bodies
+ * hidden the candle reads as its outline, so the outline color is used.
+ */
+export function priceElementColor(scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, last: OHLCV): string {
+    const st = scene.style;
+    switch (scene.priceStyle) {
+        case 'bars':
+            return last.close >= last.open ? (st.bars.upColor ?? theme.upColor) : (st.bars.downColor ?? theme.downColor);
+        case 'line':
+        case 'linemarkers':
+        case 'stepline':
+            return st.line.color ?? theme.upColor;
+        case 'columns': {
+            const up = columnIsUp(scene.bars, scene.bars.length - 1);
+            return withAlpha(up ? (st.columns.upColor ?? theme.upColor) : (st.columns.downColor ?? theme.downColor), 1);
+        }
+        case 'area':
+            return st.area.lineColor ?? theme.upColor;
+        case 'baseline': {
+            const i0 = Math.max(0, Math.floor(coords.visibleLogicalRange().from));
+            const baseline = scene.baselineValue ?? scene.bars[i0]?.close ?? 0;
+            return last.close >= baseline ? (st.baseline.topLineColor ?? theme.upColor) : (st.baseline.bottomLineColor ?? theme.downColor);
+        }
+        default: {
+            // 'candles', 'heikinashi', and candle-based plugin styles.
+            const paint = effectiveCandlePaint(st.candle, scene.candleOverride, theme.upColor, theme.downColor);
+            const up = last.close >= last.open;
+            const body = up ? paint.up : paint.down;
+            if (!paint.candle.bodyVisible && paint.candle.borderVisible) {
+                return (up ? paint.candle.borderUpColor : paint.candle.borderDownColor) ?? body;
+            }
+            return body;
+        }
+    }
+}

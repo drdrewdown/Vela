@@ -96,6 +96,17 @@ describe('the template strip', () => {
         expect(names(host)).toEqual(['Fast']);
     });
 
+    it('the save dialog names its buttons, and its Save button commits', () => {
+        const { ws, host } = mount();
+        ws.setActiveCell('c1');
+        host.querySelector<HTMLButtonElement>('.vela-bb-template-add')!.click();
+        const footer = [...document.querySelectorAll<HTMLButtonElement>('[data-slot="dialog-footer"] button')];
+        expect(footer.map((b) => b.textContent)).toEqual(['Cancel', 'Save']);
+        document.querySelector<HTMLInputElement>('input[aria-label="Template name"]')!.value = 'Slow';
+        footer[1]!.click();
+        expect(names(host)).toEqual(['Slow']);
+    });
+
     it('the + is disabled once ten are saved', () => {
         const { ws, host } = mount();
         ws.setActiveCell('c1');

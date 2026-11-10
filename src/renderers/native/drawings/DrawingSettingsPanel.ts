@@ -23,14 +23,19 @@ import {
     timeframeBandOf,
 } from '../../../core/drawings';
 import { applyChromeTokens } from '../../shared/theme-tokens';
-import { Dialog } from '../../../ui/components/dialog';
-import { Popover, closeOpenPopovers } from '../../../ui/components/popover';
-import { buildFieldControl, fieldGrid } from '../../../ui/components/field';
-import { TextArea } from '../../../ui/components/text-area';
+import { Dialog } from '@luxalgo/vela-ui/dialog';
+import { createButton } from '@luxalgo/vela-ui/button';
+import { Popover, closeOpenPopovers } from '@luxalgo/vela-ui/popover';
+import { buildFieldControl, fieldGrid } from '@luxalgo/vela-ui/field';
+import { TextArea } from '@luxalgo/vela-ui/text-area';
 import { formatTimeStamp, valueDecimals } from '../chrome/ticks';
 import { buildPositionSection, buildProfileSection } from './DrawingSettingsSections';
 import type { PopupAnchor, SettingsActions, SettingsPatch } from './DrawingSettingsPopup';
-import { withKitTranslator } from '../../../ui/kit-text';
+import { withKitTranslator } from '@luxalgo/vela-ui/kit-text';
+import { css } from '@luxalgo/vela-ui/css';
+import { disposeWithin } from '@luxalgo/vela-ui/dispose';
+import { t } from '@luxalgo/vela-ui/t';
+
 
 const TEXT = {
     settings: msg('drawing.settings.settings', 'Settings'),
@@ -131,6 +136,8 @@ const LINE_LABEL_TYPES = new Set(['trendline', 'ray', 'extendedline', 'infoline'
  *  position (its own section edits entry, stop and target). */
 const NO_POINTS = new Set(['freehand', 'highlighter', 'vline', 'position']);
 const MAX_POINTS = 8;
+/** The least height (px) the panel takes beside the toolbar; with less it sits over it. */
+const MIN_ROOM = 200;
 /** Paths the rich sections own, kept out of the generic rows. */
 const POSITION_PATHS = new Set(['riskPercent', 'accountBalance', 'quantity', 'direction', 'entryPrice', 'stopPrice', 'targetPrice', 'showText', 'showHeader', 'showLossSize', 'showTargetLabel', 'showStopLabel', 'showPrices']);
 const LEVEL_PATHS = new Set(['showRatios']);
@@ -166,76 +173,77 @@ function ensureStyles(): void {
     const s = existing ?? document.createElement('style');
     s.id = STYLE_ID;
     s.dataset.rev = STYLE_REV;
-    s.textContent = `
+    s.textContent = css`@layer vela.chrome {
+
 .vela-dsp-pass { pointer-events: none !important; }
 .vela-dialog.vela-dsp { pointer-events: auto; width: 360px; min-width: 0; max-width: calc(100% - 24px); max-height: calc(100% - 24px); font-size: 13px; }
 .vela-dsp .vela-dialog-header { padding: 8px 8px 8px 16px; gap: 6px; }
 .vela-dsp .vela-dialog-title { font-size: 15px; line-height: 22px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vela-dsp .vela-dialog-footer { padding: 10px 12px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--vela-border); }
-.vela-dsp .vela-dialog-btn { height: 30px; font-size: 13px; }
+.vela-dsp .vela-dialog-footer { padding: 10px 12px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid ${t.border}; }
 .vela-dsp-scroll { overflow-y: auto; overflow-x: hidden; flex: 1 1 auto; min-height: 0; }
 .vela-dsp-block { padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
-.vela-dsp-block + .vela-dsp-block, .vela-dsp-fold { border-top: 1px solid var(--vela-border); }
-.vela-dsp-h { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--vela-fg-muted); }
+.vela-dsp-block + .vela-dsp-block, .vela-dsp-fold { border-top: 1px solid ${t.border}; }
+.vela-dsp-h { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: ${t.fg.muted}; }
 .vela-dsp-row { display: flex; align-items: center; gap: 8px; min-height: 30px; }
 .vela-dsp-row[hidden] { display: none; }
-.vela-dsp-lab { flex: 0 0 96px; color: var(--vela-fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vela-dsp-lab { flex: 0 0 96px; color: ${t.fg.muted}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vela-dsp-row > .vela-dsp-lab + * { min-width: 0; }
 .vela-dsp-spacer { flex: 1; }
 .vela-dsp-fold-h { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 8px; padding: 11px 16px; cursor: pointer; }
-.vela-dsp-fold-h:hover { background: var(--vela-hover); }
-.vela-dsp-fold-h:focus-visible { outline: 2px solid var(--vela-selected-bg); outline-offset: -2px; }
-.vela-dsp-fold-t { font-weight: 600; color: var(--vela-fg-bright); white-space: nowrap; }
-.vela-dsp-fold-s { flex: 1; min-width: 0; text-align: right; color: var(--vela-fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
-.vela-dsp-chev { display: flex; color: var(--vela-fg-muted); transition: transform var(--vela-dur-fast) ease; }
+.vela-dsp-fold-h:hover { background: ${t.hover}; }
+.vela-dsp-fold-h:focus-visible { outline: 2px solid ${t.selected.bg}; outline-offset: -2px; }
+.vela-dsp-fold-t { font-weight: 600; color: ${t.fg.bright}; white-space: nowrap; }
+.vela-dsp-fold-s { flex: 1; min-width: 0; text-align: end; color: ${t.fg.muted}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.vela-dsp-chev { display: flex; color: ${t.fg.muted}; transition: transform ${t.dur.fast} ease; }
 .vela-dsp-fold[data-open] .vela-dsp-chev { transform: rotate(90deg); }
 .vela-dsp-fold-b { padding: 0 16px 12px; display: flex; flex-direction: column; gap: 8px; }
 .vela-dsp-fold:not([data-open]) .vela-dsp-fold-b { display: none; }
-.vela-dsp-seg { display: inline-flex; flex: none; border: 1px solid var(--vela-border-strong); border-radius: 6px; overflow: hidden; }
+.vela-dsp-seg { display: inline-flex; flex: none; border: 1px solid ${t.border.strong}; border-radius: ${t.radius.md}; overflow: hidden; }
 .vela-dsp-seg[data-full] { display: flex; flex: 1; }
-.vela-dsp-seg > button { all: unset; box-sizing: border-box; cursor: pointer; height: 28px; min-width: 32px; padding: 0 8px; display: flex; align-items: center; justify-content: center; color: var(--vela-fg-muted); white-space: nowrap; }
+.vela-dsp-seg > button { all: unset; box-sizing: border-box; cursor: pointer; height: 28px; min-width: 32px; padding: 0 8px; display: flex; align-items: center; justify-content: center; color: ${t.fg.muted}; white-space: nowrap; }
 .vela-dsp-seg[data-full] > button { flex: 1 1 0; min-width: 0; }
-.vela-dsp-seg > button + button { border-left: 1px solid var(--vela-border); }
-.vela-dsp-seg > button:hover { background: var(--vela-hover); color: var(--vela-fg-bright); }
-.vela-dsp-seg > button[aria-pressed='true'] { background: var(--vela-active); color: var(--vela-fg-bright); }
-.vela-dsp-seg > button:focus-visible { outline: 2px solid var(--vela-selected-bg); outline-offset: -2px; }
+.vela-dsp-seg > button + button { border-inline-start: 1px solid ${t.border}; }
+.vela-dsp-seg > button:hover { background: ${t.hover}; color: ${t.fg.bright}; }
+.vela-dsp-seg > button[aria-pressed='true'] { background: ${t.active}; color: ${t.fg.bright}; }
+.vela-dsp-seg > button:focus-visible { outline: 2px solid ${t.selected.bg}; outline-offset: -2px; }
 .vela-dsp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.vela-dsp-chip { all: unset; box-sizing: border-box; cursor: pointer; height: 26px; padding: 0 10px; border-radius: 13px; border: 1px solid var(--vela-border-strong); color: var(--vela-fg-muted); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.vela-dsp-chip:hover { color: var(--vela-fg-bright); border-color: var(--vela-fg-muted); }
-.vela-dsp-chip[aria-pressed='true'] { background: var(--vela-active); border-color: transparent; color: var(--vela-fg-bright); }
-.vela-dsp-chip:focus-visible { outline: 2px solid var(--vela-selected-bg); outline-offset: 1px; }
-.vela-dsp-note { font-size: 12px; color: var(--vela-fg-muted); line-height: 1.45; }
+.vela-dsp-chip { all: unset; box-sizing: border-box; cursor: pointer; height: 26px; padding: 0 10px; border-radius: 13px; border: 1px solid ${t.border.strong}; color: ${t.fg.muted}; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.vela-dsp-chip:hover { color: ${t.fg.bright}; border-color: ${t.fg.muted}; }
+.vela-dsp-chip[aria-pressed='true'] { background: ${t.active}; border-color: transparent; color: ${t.fg.bright}; }
+.vela-dsp-chip:focus-visible { outline: 2px solid ${t.selected.bg}; outline-offset: 1px; }
+.vela-dsp-note { font-size: 12px; color: ${t.fg.muted}; line-height: 1.45; }
 .vela-dsp-pt { display: grid; grid-template-columns: 34px minmax(0, 120px) minmax(0, 1fr); align-items: center; gap: 8px; min-height: 30px; }
-.vela-dsp-pt-k { font-weight: 600; color: var(--vela-fg-muted); }
-.vela-dsp-pt-t { color: var(--vela-fg-muted); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vela-dsp-pt-k { font-weight: 600; color: ${t.fg.muted}; }
+.vela-dsp-pt-t { color: ${t.fg.muted}; font-size: 12px; text-align: end; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vela-dsp-tf[hidden], .vela-dsp-note[hidden] { display: none; }
 .vela-dsp-tf { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
-.vela-dsp-tf > button { all: unset; box-sizing: border-box; cursor: pointer; position: relative; height: 28px; border-radius: 6px; border: 1px solid var(--vela-border-strong); color: var(--vela-fg-muted); display: flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
-.vela-dsp-tf > button:hover { color: var(--vela-fg-bright); border-color: var(--vela-fg-muted); }
-.vela-dsp-tf > button[aria-pressed='true'] { background: var(--vela-active); border-color: transparent; color: var(--vela-fg-bright); }
-.vela-dsp-tf > button[data-here]::after { content: ''; position: absolute; top: 3px; right: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--vela-selected-bg); }
+.vela-dsp-tf > button { all: unset; box-sizing: border-box; cursor: pointer; position: relative; height: 28px; border-radius: ${t.radius.md}; border: 1px solid ${t.border.strong}; color: ${t.fg.muted}; display: flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
+.vela-dsp-tf > button:hover { color: ${t.fg.bright}; border-color: ${t.fg.muted}; }
+.vela-dsp-tf > button[aria-pressed='true'] { background: ${t.active}; border-color: transparent; color: ${t.fg.bright}; }
+.vela-dsp-tf > button[data-here]::after { content: ''; position: absolute; top: 3px; inset-inline-end: 3px; width: 5px; height: 5px; border-radius: 50%; background: ${t.selected.bg}; }
 .vela-dsp-grid { padding: 0; }
 .vela-dsp-lv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; }
 .vela-dsp-lv-c { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .vela-dsp-lv-c .vela-num:not([data-fill])[data-compact] { width: 76px; }
 .vela-dsp-lv-c .vela-num input { height: 28px; }
-.vela-dsp-lv-c[data-off] .vela-num input { color: var(--vela-fg-muted); }
-.vela-dsp-style { all: unset; box-sizing: border-box; cursor: pointer; flex: none; height: 28px; max-width: 150px; padding: 0 6px 0 10px; border-radius: 6px; border: 1px solid var(--vela-border-strong); display: inline-flex; align-items: center; gap: 4px; color: var(--vela-fg); font-size: 12px; }
+.vela-dsp-lv-c[data-off] .vela-num input { color: ${t.fg.muted}; }
+.vela-dsp-style { all: unset; box-sizing: border-box; cursor: pointer; flex: none; height: 28px; max-width: 150px; padding: 0 6px 0 10px; border-radius: ${t.radius.md}; border: 1px solid ${t.border.strong}; display: inline-flex; align-items: center; gap: 4px; color: ${t.fg}; font-size: 12px; }
 .vela-dsp-style > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vela-dsp-style:hover, .vela-dsp-style[aria-expanded='true'] { background: var(--vela-hover); color: var(--vela-fg-bright); }
+.vela-dsp-style:hover, .vela-dsp-style[aria-expanded='true'] { background: ${t.hover}; color: ${t.fg.bright}; }
 .vela-dsp-menu { min-width: 220px; max-height: 320px; overflow-y: auto; padding: 4px; display: flex; flex-direction: column; gap: 1px; }
-.vela-dsp-mh { padding: 6px 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--vela-fg-muted); }
+.vela-dsp-mh { padding: 6px 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: ${t.fg.muted}; }
 .vela-dsp-mi { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 0 4px 0 8px; height: 30px; border-radius: 5px; color: inherit; }
-.vela-dsp-mi:hover, .vela-dsp-mi:focus-visible { background: var(--vela-hover-strong); }
-.vela-dsp-mi[data-current] { color: var(--vela-fg-bright); font-weight: 600; }
+.vela-dsp-mi:hover, .vela-dsp-mi:focus-visible { background: ${t.hover.strong}; }
+.vela-dsp-mi[data-current] { color: ${t.fg.bright}; font-weight: 600; }
 .vela-dsp-mi > .vela-dsp-mi-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vela-dsp-mi-dot { flex: none; width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--vela-border-strong); }
-.vela-dsp-mi-x { all: unset; cursor: pointer; flex: none; width: 24px; height: 24px; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--vela-fg-muted); }
-.vela-dsp-mi-x:hover { background: var(--vela-hover); color: var(--vela-danger); }
-.vela-dsp-msep { height: 1px; background: var(--vela-border); margin: 4px 0; }
+.vela-dsp-mi-dot { flex: none; width: 14px; height: 14px; border-radius: ${t.radius.sm}; border: 1px solid ${t.border.strong}; }
+.vela-dsp-mi-x { all: unset; cursor: pointer; flex: none; width: 24px; height: 24px; border-radius: ${t.radius.sm}; display: flex; align-items: center; justify-content: center; color: ${t.fg.muted}; }
+.vela-dsp-mi-x:hover { background: ${t.hover}; color: ${t.danger}; }
+.vela-dsp-msep { height: 1px; background: ${t.border}; margin: 4px 0; }
 .vela-dsp-mname { display: flex; gap: 6px; padding: 4px; }
-.vela-dsp-mname > input { flex: 1; min-width: 0; height: 28px; box-sizing: border-box; padding: 0 8px; border-radius: 6px; border: 1px solid var(--vela-border-strong); background: transparent; color: inherit; font: inherit; outline: none; }
-.vela-dsp-mname > input:focus { border-color: var(--vela-selected-bg); }`;
+.vela-dsp-mname > input { flex: 1; min-width: 0; height: 28px; box-sizing: border-box; padding: 0 8px; border-radius: ${t.radius.md}; border: 1px solid ${t.border.strong}; background: transparent; color: inherit; font: inherit; outline: none; }
+.vela-dsp-mname > input:focus { border-color: ${t.selected.bg}; }
+}`;
     if (!existing) document.head.appendChild(s);
 }
 
@@ -300,12 +308,13 @@ export class DrawingSettingsPanel {
         withKitTranslator(this.env.i18n?.(), () => this.refresh?.());
     }
 
-    open(drawing: Drawing, actions: SettingsActions, anchor: PopupAnchor | null): void {
+    /** `anchor` is the drawing's box; `toolbar`, the quick toolbar's, which the panel opens beside. */
+    open(drawing: Drawing, actions: SettingsActions, anchor: PopupAnchor | null, toolbar: PopupAnchor | null = null): void {
         // Kit controls built here (steppers, color pickers) speak the chart's language too.
-        withKitTranslator(this.env.i18n?.(), () => this.build(drawing, actions, anchor));
+        withKitTranslator(this.env.i18n?.(), () => this.build(drawing, actions, anchor, toolbar));
     }
 
-    private build(drawing: Drawing, actions: SettingsActions, anchor: PopupAnchor | null): void {
+    private build(drawing: Drawing, actions: SettingsActions, anchor: PopupAnchor | null, toolbar: PopupAnchor | null): void {
         this.close();
         ensureStyles();
         const first = actions.resolve() ?? drawing;
@@ -332,7 +341,9 @@ export class DrawingSettingsPanel {
             rebuild: () => {
                 const top = scroll.scrollTop;
                 watchers = [];
-                scroll.replaceChildren(...this.sections(build));
+                const next = this.sections(build);
+                disposeWithin(scroll);
+                scroll.replaceChildren(...next);
                 scroll.scrollTop = top;
                 styleBtn.refresh();
             },
@@ -344,9 +355,11 @@ export class DrawingSettingsPanel {
             actions.restore?.(snapshot);
             this.close();
         };
+        const i18n = this.env.i18n?.();
         const ui = new Dialog({
             host: this.host,
             title: meta?.label ?? this.t(TEXT.settings),
+            ...(i18n ? { i18n } : {}),
             modal: false,
             contained: true,
             align: 'center',
@@ -362,7 +375,7 @@ export class DrawingSettingsPanel {
         applyChromeTokens(ui.panel, this.theme);
         ui.backdrop.classList.add('vela-dsp-pass');
         ui.positioner.classList.add('vela-dsp-pass');
-        // Open on the side of the chart away from the drawing, so the drawing stays in view.
+        // Without the toolbar to hang off: the side of the chart away from the drawing.
         const hostW = this.host.clientWidth;
         const leftHalf = anchor != null && hostW > 0 && anchor.x + anchor.w / 2 < hostW / 2;
         ui.positioner.style.justifyContent = leftHalf ? 'flex-end' : 'flex-start';
@@ -389,6 +402,44 @@ export class DrawingSettingsPanel {
         };
         build.rebuild();
         ui.show();
+        if (toolbar) this.placeBeside(ui, toolbar, anchor);
+    }
+
+    /** Hang the panel off the quick toolbar, like a menu from its gear: on the toolbar's side away
+     *  from the drawing when it fits there, else the side with more room (it scrolls inside), its
+     *  left edge in line with the toolbar's. Opening folds grow it away from the toolbar. On the
+     *  mobile layout the panel fills the shell instead. */
+    private placeBeside(ui: Dialog, bar: PopupAnchor, drawing: PopupAnchor | null): void {
+        if (ui.positioner.closest('[data-layout="mobile"]')) return;
+        const W = this.host.clientWidth;
+        const H = this.host.clientHeight;
+        if (W === 0 || H === 0) return;
+        const p = ui.panel;
+        const gap = 8;
+        const edge = 12;
+        ui.positioner.style.padding = '0';
+        p.style.position = 'absolute';
+        p.style.margin = '0';
+        // The dialog shows itself a tick after `show()`; lay its layer out now to measure the panel.
+        const shown = ui.positioner.style.display;
+        ui.positioner.style.display = '';
+        const w = p.offsetWidth;
+        const h = p.offsetHeight;
+        ui.positioner.style.display = shown;
+
+        const room = { above: bar.y - gap - edge, below: H - (bar.y + bar.h) - gap - edge };
+        const awayAbove = drawing != null && drawing.y + drawing.h / 2 > bar.y + bar.h / 2;
+        const order: Array<'above' | 'below'> = awayAbove ? ['above', 'below'] : ['below', 'above'];
+        const side = order.find((s) => room[s] >= h) ?? (room.above > room.below ? 'above' : 'below');
+        p.style.left = `${Math.max(4, Math.min(bar.x, W - w - 4))}px`; // the toolbar's own side margin
+        if (room[side] < MIN_ROOM) {
+            // Too little room either side (a short chart): over the toolbar, kept in view.
+            p.style.top = `${Math.max(edge, Math.min(bar.y, H - h - edge))}px`;
+            return;
+        }
+        p.style.maxHeight = `${room[side]}px`;
+        if (side === 'below') p.style.top = `${bar.y + bar.h + gap}px`;
+        else p.style.bottom = `${H - bar.y + gap}px`;
     }
 
     close(): void {
@@ -575,6 +626,7 @@ export class DrawingSettingsPanel {
         };
         const fill = (): void => {
             last = key();
+            disposeWithin(grid);
             grid.replaceChildren();
             const free = b.live() instanceof FibLevels; // horizontal levels may sit at or beyond either anchor
             (b.live().editableLevels() ?? []).forEach((lv, i) => {
@@ -936,10 +988,10 @@ export class DrawingSettingsPanel {
             host: this.host,
             theme: t,
             position: 'absolute',
-            boundary: this.host,
+            collisionBoundary: this.host,
             boundaryInset: 4,
             viewportInset: 0,
-            gap: 6,
+            sideOffset: 6,
             align: 'end',
             zIndex: 6000,
             onClose: () => {
@@ -1244,12 +1296,7 @@ function separator(): HTMLElement {
 }
 
 function button(label: string, primary: boolean, onClick: () => void): HTMLButtonElement {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.textContent = label;
-    b.className = primary ? 'vela-dialog-btn vela-dialog-btn-primary' : 'vela-dialog-btn';
-    b.addEventListener('click', onClick);
-    return b;
+    return createButton({ text: label, variant: primary ? 'default' : 'outline', size: 'sm', onClick }).el;
 }
 
 /** A menu row's text, in the row's text slot. */

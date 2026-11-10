@@ -85,8 +85,10 @@ export {
     type SeriesDataEngine,
     type SeriesDataEngineHost,
 } from './chart-types/registry';
+export { priceStyleApplies, shownPriceStyle } from './chart-types/applicability';
 export type { BarTransform } from './core/price-styles/BarTransform';
 export { registerRendererDefaults, unregisterRendererDefaults, rendererDefaults } from './core/renderer-defaults';
+export { registerShellDefaults, unregisterShellDefaults, shellDefaults, type ShellDefaults } from './widget/shell-defaults';
 export {
     registerNativeIndicator,
     unregisterNativeIndicator,
@@ -154,17 +156,29 @@ export {
     type SidePanelHandle,
     type SidePanelHeader,
     type SidePanelButton,
+    type TopbarItems,
+    type TopbarItemId,
+    type PanelDockView,
+    type DockedPanelInfo,
+    type DockStripOptions,
+    type DockedStrip,
+    type SidebarControl,
 } from './widget/contributions';
+export { composeSidebar, SIDEBAR_DEFAULT_TOP, SIDEBAR_DEFAULT_BOTTOM, type SidebarComposition } from './widget/sidebar-composition';
 // Where the built-in right-click rows sit in the sort `context:*` actions share with them.
 export { CONTEXT_MENU_BUILTIN_ORDER } from './widget/context-menu-model';
 // A plugin panel gets the shell's own column; these bounds are what `resizable` clamps to.
 export { clampPanelWidth, DEFAULT_PANEL_WIDTH, DEFAULT_PANEL_MIN_WIDTH, DEFAULT_PANEL_MAX_WIDTH, type SidePanelOptions } from './widget/side-panel';
 export { drawingTypes, getDrawingType, type DrawingTypeMeta } from './core/drawings/registry';
 export type { DrawingTypeKey } from './core/drawings/Drawing';
-export { registerIcon, iconMarkup } from './ui/icons';
+export { registerIcon, iconMarkup } from '@luxalgo/vela-ui/icons';
 export type { KeyBindingDescriptor, ResolvedBinding } from './ui/keymap';
 export type { PriceStyle } from './core/options';
 export type { DataProvider, ProviderInfo, ProviderCapabilities, SymbolDescriptor } from './core/ports/DataProvider';
+// A provider's PERMANENT refusal of a series (a timeframe finer than the series' own): throw
+// it from `getBars`; engines detect it on a rejected `fetchSeries` with the guard, which reads
+// the name, never the class (a provider may bundle its own copy of Vela).
+export { DataUnavailableError, isDataUnavailableError, type DataUnavailableReason, type DataUnavailableDetails } from './core/data-unavailable';
 
 // SCRIPTING ENGINES (`chart.registerEngine` / the widget's `engines` option): a language
 // runtime implementing the `ScriptingEngine` port — prepare/execute sessions over bars
@@ -187,7 +201,7 @@ export type {
     EngineContextSnapshot,
     ContextSelect,
 } from './core/ports/ScriptingEngine';
-export type { MarketDataFeed, SymbolInfo, BarRange } from './core/ports/MarketDataFeed';
+export type { MarketDataFeed, SymbolInfo, SymbolFacts, BarRange } from './core/ports/MarketDataFeed';
 // What an engine fills so a host can read a running strategy (`EngineContextSnapshot.strategy`
 // / `.trades`) and what the core reshapes it into (`script:run`, `chart.runScript()`).
 export type { StrategyState, StrategyTrade, StrategyFill } from './core/model/strategy';

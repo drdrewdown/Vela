@@ -7,13 +7,18 @@ import { isDarkColor } from '../../core/color';
 import { iconAt } from '../../core/icons';
 import { applyChromeTokens } from './theme-tokens';
 import { attachChromeTooltip, chromeHint } from './chrome-tooltip';
-import { toggleSelectList, type SelectOption } from '../../ui/components/select';
-import { Popover, closeOpenPopovers, eventDismissedPopover, isPopoverOpen, openPopoverTrigger } from '../../ui/components/popover';
-import { Dialog } from '../../ui/components/dialog';
-import { DatePicker, normalizeDateInput } from '../../ui/components/date-picker';
-import { fieldRow, fieldSection, buildFieldControl, fieldGridColumns, FIELD_GAP_PX } from '../../ui/components/field';
-import { overlayScrollbarCss, FIELD_FOCUS_CSS, FIELD_FOCUS_RING } from '../../ui/styles';
-import { withKitTranslator } from '../../ui/kit-text';
+import { toggleSelectList, type SelectOption } from '@luxalgo/vela-ui/select';
+import { Popover, closeOpenPopovers, eventDismissedPopover, isPopoverOpen, openPopoverTrigger } from '@luxalgo/vela-ui/popover';
+import { Dialog } from '@luxalgo/vela-ui/dialog';
+import { createButton } from '@luxalgo/vela-ui/button';
+import { createTabs } from '@luxalgo/vela-ui/tabs';
+import { DatePicker, normalizeDateInput } from '@luxalgo/vela-ui/date-picker';
+import { fieldRow, fieldSection, buildFieldControl, fieldGridColumns, FIELD_GAP_PX } from '@luxalgo/vela-ui/field';
+import { overlayScrollbarCss, FIELD_FOCUS_CSS, FIELD_FOCUS_RING } from '@luxalgo/vela-ui/styles';
+import { withKitTranslator } from '@luxalgo/vela-ui/kit-text';
+import { css } from '@luxalgo/vela-ui/css';
+import { t } from '@luxalgo/vela-ui/t';
+
 
 /** Emitted when the user edits an input in the in-chart settings dialog. */
 export interface InputsUIChange {
@@ -131,13 +136,13 @@ export class IndicatorInputsDialog {
         this.propSnapshot = { ...row.propValues };
         ensureDialogStyles();
         const t = this.host.theme();
-        const border = 'var(--vela-border)';
-        const fg = 'var(--vela-fg-bright)';
         const host = this.host.dialogHost() ?? this.host.container;
 
+        const i18n = this.i18n;
         const ui = new Dialog({
             host,
             title: row.title,
+            ...(i18n ? { i18n } : {}),
             // Non-modal: live-edit dialog — a modal machine locks pointer events on the
             // whole body, killing the chart and the body-portaled popovers.
             modal: false,
@@ -145,7 +150,8 @@ export class IndicatorInputsDialog {
             align: 'center',
             draggable: !this.host.mobile(),
             flush: true,
-            className: 'vela-dialog--form vela-ind-dialog',
+            variant: 'form',
+            className: 'vela-ind-dialog',
             closeOnEscape: false,
             footer: (foot) => {
                 foot.append(
@@ -181,49 +187,39 @@ export class IndicatorInputsDialog {
             if (existing) existing.inputs.push(...propDecls);
             else tabDefs.push({ name: PROPS_TAB, inputs: propDecls });
         }
-        const tabs = document.createElement('div');
-        tabs.style.cssText = `display:flex;gap:12px;padding:0 20px;border-bottom:1px solid ${border};flex:0 0 auto;`;
-        const tabEls: HTMLElement[] = [];
         const bodies: HTMLElement[] = [];
         const gates: VisibilityGate[] = [];
-        let active = 0;
-        const activate = (idx: number): void => {
-            active = idx;
-            for (let i = 0; i < tabEls.length; i += 1) {
-                const on = i === idx;
-                const el = tabEls[i]!;
-                el.style.borderBottomColor = on ? fg : 'transparent';
-                el.style.color = on ? 'inherit' : 'var(--vela-fg-muted)';
-                el.classList.toggle('vela-ind-tab-active', on);
-                bodies[i]!.style.display = on ? 'grid' : 'none';
-            }
+        const tabGates: Array<{ id: string; visible: VisibilityGate['visible'] }> = [];
+        const showBody = (id: string): void => {
+            bodies.forEach((body, i) => {
+                body.style.display = String(i) === id ? 'grid' : 'none';
+            });
         };
+        const tabs = createTabs({
+            variant: 'line',
+            className: 'vela-ind-tabs',
+            items: tabDefs.map((def, idx) => ({ value: String(idx), label: this.tabLabel(def.name) })),
+            onValueChange: showBody,
+        });
         for (const [idx, def] of tabDefs.entries()) {
-            const tab = document.createElement('div');
-            tab.textContent = this.tabLabel(def.name);
-            tab.className = 'vela-ind-tab';
-            tab.style.cssText = `padding:0 0 8px;margin-bottom:-1px;border-bottom:2px solid transparent;${tabDefs.length > 1 ? 'cursor:pointer;' : ''}`;
-            tab.addEventListener('click', () => activate(idx));
-            tabs.appendChild(tab);
-            tabEls.push(tab);
             bodies.push(this.buildTabBody(def.inputs, row, gates));
             // The strip label leaves only when every input on the tab is gated out —
             // possible only when all of them carry a `when`.
             if (def.inputs.every((d) => d.when)) {
-                gates.push({ el: tab, visible: (bag) => def.inputs.some((d) => inputVisible(d.when, bag)) });
+                tabGates.push({ id: String(idx), visible: (bag) => def.inputs.some((d) => inputVisible(d.when, bag)) });
             }
         }
-        ui.body.appendChild(tabs);
-        for (const b of bodies) ui.body.appendChild(b);
-        activate(0);
+        ui.body.appendChild(tabs.el);
+        bodies.forEach((b, i) => {
+            tabs.panel(String(i), b);
+            ui.body.appendChild(b);
+        });
+        showBody(tabs.value ?? '0');
         const refresh = (): void => {
             const bag = valuesBag(row);
             for (const g of gates) g.el.style.display = g.visible(bag) ? '' : 'none';
-            // An edit that gates the ACTIVE tab out lands the user on the first live one.
-            if (tabEls[active]?.style.display === 'none') {
-                const next = tabEls.findIndex((el) => el.style.display !== 'none');
-                if (next >= 0) activate(next);
-            }
+            // Gating the ACTIVE tab out lands the user on the first live one.
+            for (const g of tabGates) tabs.setHidden(g.id, !g.visible(bag));
         };
         this.refreshVisibility = refresh;
         refresh();
@@ -693,13 +689,13 @@ export class IndicatorInputsDialog {
     }
 
     /** Placement shared by the indicator dialog's dropdowns and the time combobox. */
-    private listPopover(): { theme: VelaTheme; matchWidth: boolean; boundary: HTMLElement | 'viewport'; boundaryInset: number; gap: number } {
+    private listPopover(): { theme: VelaTheme; matchWidth: boolean; collisionBoundary: HTMLElement | 'viewport'; boundaryInset: number; sideOffset: number } {
         return {
             theme: this.host.theme(),
             matchWidth: true,
-            boundary: this.dialog ?? 'viewport',
+            collisionBoundary: this.dialog ?? 'viewport',
             boundaryInset: 8,
-            gap: 4,
+            sideOffset: 4,
         };
     }
 
@@ -709,9 +705,9 @@ export class IndicatorInputsDialog {
             trigger: anchor,
             theme: this.host.theme(),
             className: 'vela-ind-cal',
-            boundary: this.dialog ?? 'viewport',
+            collisionBoundary: this.dialog ?? 'viewport',
             boundaryInset: 8,
-            gap: 4,
+            sideOffset: 4,
             onClose: () => {
                 this.calendarPop = null;
                 this.calendarAnchor = null;
@@ -771,14 +767,7 @@ export class IndicatorInputsDialog {
     }
 
     private dialogButton(label: string, primary: boolean, onClick: () => void): HTMLButtonElement {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.textContent = label;
-        // Primary = filled inverse chip; Cancel = outlined. Both hover states are in the
-        // scoped stylesheet.
-        b.className = primary ? 'vela-dialog-btn vela-dialog-btn-primary' : 'vela-dialog-btn';
-        b.addEventListener('click', onClick);
-        return b;
+        return createButton({ text: label, variant: primary ? 'default' : 'outline', onClick }).el;
     }
 }
 
@@ -918,22 +907,24 @@ export function ensureDialogStyles(): void {
     const s = existing ?? document.createElement('style');
     s.id = DIALOG_STYLE_ID;
     s.dataset.rev = DIALOG_STYLE_REV;
-    s.textContent = `
+    s.textContent = css`@layer vela.chrome {
+
 .vela-ind-combo input{${FIELD_FOCUS_CSS}}
-.vela-ind-combo input:hover{border-color:var(--vela-fg-muted);}
+.vela-ind-combo input:hover{border-color:${t.fg.muted};}
 .vela-ind-combo input:focus{${FIELD_FOCUS_RING}}
-.vela-ind-combo-chevron{position:absolute;right:0;top:0;bottom:0;width:26px;border:none;background:transparent;color:inherit;opacity:0.55;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;}
+.vela-ind-combo-chevron{position:absolute;inset-inline-end:0;top:0;bottom:0;width:26px;border:none;background:transparent;color:inherit;opacity:0.55;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;}
 .vela-ind-combo-chevron:hover{opacity:0.9;}
-.vela-ind-cal{background:var(--vela-bg);color:var(--vela-fg);border:none;border-radius:6px;box-shadow:var(--vela-shadow);font:14px var(--vela-font);padding:10px 12px;user-select:none;}
-${overlayScrollbarCss('.vela-dialog.vela-ind-dialog *', 9)}
-.vela-ind-tab{font-weight:600;font-size:13px;line-height:20px;transition:color var(--vela-dur-fast) ease,border-color var(--vela-dur-fast) ease;}
-.vela-ind-tab:not(.vela-ind-tab-active):hover{color:var(--vela-fg-bright);}
-.vela-ind-ctl,.vela-ind-close{background-color:transparent;color:inherit;transition:color var(--vela-dur-fast) ease,background-color var(--vela-dur-fast) ease;}
+.vela-ind-cal{background:${t.bg};color:${t.fg};border:none;border-radius:${t.radius.md};box-shadow:${t.shadow};font:14px ${t.font};padding:10px 12px;user-select:none;}
+${overlayScrollbarCss('.vela-dialog.vela-ind-dialog *')}
+.vela-ind-tabs{padding:0 20px;flex:0 0 auto;}
+.vela-ind-tabs>.vela-tab:only-child{cursor:default;}
+.vela-ind-ctl,.vela-ind-close{background-color:transparent;color:inherit;transition:color ${t.dur.fast} ease,background-color ${t.dur.fast} ease;}
 .vela-ind-ctl svg,.vela-ind-close svg{width:${LEGEND_ICON_PX}px;height:${LEGEND_ICON_PX}px;display:block;flex:none;stroke-width:1;}
-.vela-ind-ctl:hover{background-color:var(--vela-hover-strong);}
-.vela-ind-close:hover{color:var(--vela-danger) !important;background-color:var(--vela-hover-strong);}
-.vela-ind-fold{transition:border-color var(--vela-dur-fast) ease,opacity var(--vela-dur-fast) ease;}
-.vela-ind-fold:hover{border-color:var(--vela-border-strong);opacity:0.9;}`;
+.vela-ind-ctl:hover{background-color:${t.hover.strong};}
+.vela-ind-close:hover{color:${t.danger} !important;background-color:${t.hover.strong};}
+.vela-ind-fold{transition:border-color ${t.dur.fast} ease,opacity ${t.dur.fast} ease;}
+.vela-ind-fold:hover{border-color:${t.border.strong};opacity:0.9;}
+}`;
     if (!existing) document.head.appendChild(s);
 }
 

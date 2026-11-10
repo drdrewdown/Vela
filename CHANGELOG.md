@@ -2,6 +2,483 @@
 
 All notable changes to Vela, newest first.
 
+## [0.10.5]
+
+### Added
+
+- **Line with markers, step line and columns.** Three more chart styles suit series with one
+  value per bar, such as economic data. Line with markers draws the line with a dot on each
+  bar, shown once the bars are far enough apart to tell the dots apart. Step line holds each
+  value flat until the next bar, then steps to it. Columns draw a column per bar from the
+  bottom of the chart up to its value, in the up color when the value is at or above the
+  previous bar's and in the down color when it is lower. Pick them from the chart style menu
+  or with `priceStyle: 'linemarkers'`, `'stepline'` or `'columns'`. The first two take the
+  line's color and width from the chart settings; columns have their own up and down colors,
+  which start as the chart's up and down colors at half opacity.
+- **Data sources can refuse a timeframe they never serve.** A provider can now say that a
+  series does not exist at a timeframe, such as a monthly economic series asked for hourly
+  bars, by throwing a `DataUnavailableError` that names the finest timeframe it serves. The
+  chart then stops loading and polling that market instead of waiting on an empty chart, and
+  fires `data:unavailable` with the provider's suggested timeframes so the page can switch.
+  A script that asks for such a series with `request.security` gets the provider's message
+  instead of empty data. Any other provider error still reads as an empty answer. In the
+  workspace, a chart on such a symbol switches to the timeframe the source suggests and says
+  so. The timeframe you picked stays yours: it is the one saved with the layout and shared
+  with linked charts, and it comes back on the next symbol that serves it.
+- **Data providers can describe what each symbol offers.** `getSymbolInfo` now has typed,
+  documented fields for a symbol's data: the timeframes the source serves for it (the finest
+  one and its natural one, or an exact list), whether it has volume (`volume: false` when it
+  has none), and the market's time zone and trading hours. A chart opened on a symbol without
+  volume, such as a macro-economic series, no longer adds the volume indicator on its own; a
+  volume indicator you added or saved stays. Hosts that save a chart's indicators themselves
+  can read `chart.pendingNativeIndicators()` beside `presentNativeIndicators()`, so a save made
+  while that choice is still loading keeps the volume indicator.
+- **Series with one value per bar are drawn as a line.** A data provider can now say that a
+  symbol has one value per bar at every timeframe, such as an economic series, with
+  `ohlc: false` in `getSymbolInfo`. Candles, bars and Heikin Ashi have nothing to show there,
+  so the chart draws such a symbol as a line whatever style is chosen, and the style menu, the
+  mobile style list and the chart settings show those styles greyed out, with a tooltip saying
+  why. The style you chose stays yours: it is the one saved with the layout, and it comes back
+  on the next symbol that can draw it. Picking another style on such a symbol, such as an
+  area, makes it your style. Nothing is greyed while the symbol's information is still
+  loading. A plugin chart type can declare which symbols it can draw with `supports`, and it is
+  greyed and replaced by a line the same way. Hosts read the drawn style with
+  `chart.renderer.get('shownPriceStyle')`, the symbol's facts with `chart.symbolFacts()` and the
+  `symbol:facts` event, and test a style with `priceStyleApplies`. In the workspace,
+  `cell.priceStyle` is the drawn style and `cell.requestedPriceStyle` the chosen one.
+
+### Changed
+
+- **Vela requires `@luxalgo/vela-ui` 0.4.1.** The kit adds the icons of the new chart
+  styles and lets a menu row or a select option say why it is unavailable, which the
+  chart style pickers use.
+
+### Fixed
+
+- **Month and second timeframes are measured correctly.** A timeframe written with a month
+  count (`1M`, `3M`, `12M`) was measured as that many minutes in places, and a seconds
+  timeframe (`30S`) as one hour. Scripts that ask for monthly or quarterly data now load it
+  in one right-sized request instead of a long run of oversized ones, and on these charts
+  live updates, replay and the drawing tools that read finer-timeframe data work from the
+  true bar length.
+
+## [0.10.4]
+
+### Changed
+
+- **Vela requires `@luxalgo/vela-ui` 0.4.0.** In the kit, the component that shows a value
+  under its label is now the figure (`@luxalgo/vela-ui/figure`, `createFigure`), because
+  content blockers blocked the old stat module. Its
+  [changelog](packages/vela-ui/CHANGELOG.md) explains how to move to it.
+
+### Fixed
+
+- **Open menus stay on top of the chart.** On a fresh install, the timeframe and chart style
+  menus could sink under the chart as soon as the pointer left them, so they seemed to vanish
+  when the pointer crossed the status line. They now stay above the chart until you close
+  them.
+- **Search fields clear with a cross in the theme's color.** The cross that clears a search
+  field shows in the chart's text color, white on a dark theme and black on a light one,
+  instead of the browser's own blue one.
+
+## [0.10.3]
+
+### Added
+
+- **Toasts, cards and treemaps in the kit.** `@luxalgo/vela-ui` 0.3.0, which Vela now requires,
+  adds toasts that stack in a corner and can be raised from anywhere, a card for one subject
+  (a panel of figures, a chart with its title) and a treemap of weighted tiles tinted by a
+  value. Its [changelog](packages/vela-ui/CHANGELOG.md) has the details.
+
+### Changed
+
+- **Script alerts arrive as cards that stack.** When an indicator raises an alert, it now shows
+  as a card in the bottom corner of the charts: the alert's title, then the symbol, timeframe
+  and indicator with its message, under a bell. Alerts that fire close together stack instead
+  of replacing each other; hovering the stack spreads it out and holds it, and a swipe
+  dismisses one. Plugins can raise their own notices there with the toasts of
+  `@luxalgo/vela-ui`.
+
+### Fixed
+
+- **Script box text sits on the box's midpoint and is never cut off.** Text inside a Pine
+  Script® box was drawn slightly above the box's centre, so it no longer lined up with a
+  level drawn through the middle of the box, and a box smaller than its text cut the letters
+  off at its edges. The text is now centred on the midpoint and shows in full, overflowing a
+  box too small for it, as text on a drawn rectangle does. To keep text inside its box, use
+  the automatic text size: it shrinks the text to fit the box, and hides it when the box is
+  too small to hold readable text.
+- **The chart's dialogs name their close button.** Screen readers announced the ✕ of the
+  settings, the symbol search, the timeframe and the other dialogs as an unnamed button; it
+  is now "Close", in the chart's language.
+
+## [0.10.2]
+
+### Added
+
+- **Every Hyperliquid market, HIP-3 dexes included.** The Hyperliquid provider now serves the
+  perpetuals that builder-deployed (HIP-3) dexes list next to the main perps and spot pairs:
+  stocks, commodities, indices and whatever else is deployed, around the clock. Chart one by
+  the name Hyperliquid gives it, with the provider in front (`hyperliquid:xyz:TSLA`). Symbol
+  search finds them with the dex's name in the description, and they load with live candles
+  and the right price precision. Main perps and spot pairs work as before.
+
+## [0.10.1]
+
+### Added
+
+- **More components for the panels next to a chart.** `@luxalgo/vela-ui` 0.2.0, which Vela now
+  requires, adds a slider, collapsible sections, list rows, sort buttons for lists that are
+  not tables, and a month grid of daily figures. Its tabs can read on two lines, and its
+  buttons can hold key caps or be favorite stars. Its
+  [changelog](packages/vela-ui/CHANGELOG.md) has the details.
+
+### Fixed
+
+- **The current price wears the candles' own colors on every candle style.** On a
+  candle-based plugin style that keeps its own candle colors (Footprint, TPO), the
+  current-price line, label and countdown stayed the chart's default up/down colors;
+  they now take the last candle's color as it is painted, and its outline color when
+  candle bodies are hidden.
+- **The chart no longer restyles the page around it.** Once the chart had built a control of
+  the UI kit, the page's own controls that share its part names took the kit's styles too:
+  opening the chart settings, for one, restyled every shadcn/ui select on the page. The kit's
+  styles now stay inside the chart, the menus and dialogs it opens, and other kit hosts. The
+  fix ships in `@luxalgo/vela-ui` 0.2.0, which Vela now requires.
+- **Switch rows in the chart's menus** fill with the theme's selected color when on, like every
+  other toggle, instead of the accent (from `@luxalgo/vela-ui` 0.2.0).
+- **A timeline mark's popup has its card again.** Since 0.10.0 the popup showed its titles,
+  text and buttons unstyled, with no background, so they were hard to read over the chart. It
+  is the UI kit's callout panel again: an elevated card with bold titles, muted text and
+  themed buttons, which a theme's `callout-bubble` parts restyle.
+
+## [0.10.0]
+
+### Added
+
+- **The package carries what a coding agent needs.** Six agent skills in `skills/`
+  (building charts, data providers, indicators and scripting engines, drawing tools,
+  extending charts with plugins, upgrading from 0.9), the docs, the
+  changelog and an `llms.txt` index now ship with it, matching the installed version.
+  `npx skills experimental_sync` links the skills into a project, the UI kit's three
+  included; `npx skills add LuxAlgo/Vela` installs them from the repository.
+- **Plugins can give shell options a default.** `registerShellDefaults({ sidebar })` gives
+  every shell built afterwards the right-edge sidebar (or a composition of it) where its host
+  said nothing about it; the host's own value, `false` included, always wins, and shells
+  already built are untouched. It returns a disposer; `unregisterShellDefaults` and
+  `shellDefaults` complete it, as for `registerRendererDefaults`.
+- **The UI kit is its own package.** `@luxalgo/vela-ui` holds every component of the kit,
+  its design tokens and its icons, with one import path per component
+  (`@luxalgo/vela-ui/button`, `@luxalgo/vela-ui/select`), so a page or a plugin can use the
+  components without the chart and bundle only the ones it imports. Vela depends on it,
+  and `@luxalgo/vela/ui` keeps exporting what it did, renamed components under their old
+  names until the next release; the upgrading guide in the docs lists what to change, and
+  the few breaking changes below say what to do instead. A page that loads two copies of
+  the kit (a host whose dependencies resolve to two versions) still works as one: the copies
+  share the icons, the CSS written with `css`, element ids, the language of the kit's words
+  and the open popover.
+- **A context menu in the UI kit.** `createContextMenu({ target, items, onSelect })`
+  (`@luxalgo/vela-ui/context-menu`, also on `@luxalgo/vela/ui`) opens the dropdown menu's list
+  where it is asked for: a right-click on the target, a long press on a touch screen
+  (`longPress: false` turns it off where a long press already means something), or the
+  keyboard's context-menu key. `items` may be a function of the opening event, so the rows can
+  depend on the spot; a right-click an inner menu already answered is left to it. The chart,
+  status line, legend and object tree menus use it, and the object tree's opens on a long
+  press too.
+- **Release kit controls with the subtree they live in.** Controls that run a state machine
+  (checkbox, switch, number field, select, tabs, toggle group, tooltip, the color picker's
+  opacity) tie their teardown to their element. `disposeWithin(root)` releases every control
+  in a subtree you discard, whether or not you kept the handles, and a destroyed `Dialog`,
+  `Drawer` or `Popover` does it for its content; `buildFieldControl` also returns `destroy`.
+  The chart, indicator and drawing settings release their controls on every close and
+  rebuild, so opening them again and again no longer grows the page's memory or slows its
+  keyboard and pointer handling.
+- **Themes beyond dark and light.** `createTheme` builds a whole theme from a few choices:
+  a brand color (its readable ink derived), a radius scale, a font, any token by name, and
+  the settings each component declares (`components: { button: { radius: '2px' } }`,
+  checked by the typecheck). It also builds one from colors alone, reading light or dark
+  from the background. Pass it as `theme` or to `setTheme`, or add settings to a chart theme
+  of your own (`{ ...DARK_THEME, ui: { accent: '#7c3aed' } }`). `registerTheme` offers a
+  theme by id, next to Dark and Light in the chart settings. `checkTheme` lists what a
+  theme gets wrong (unknown tokens, components, settings and parts, colors it cannot derive
+  from, text with too little contrast), and `createTheme` warns about each, so a misspelled
+  name in a theme loaded from JSON is reported rather than ignored. A page using the kit
+  without Vela can link the built-in themes as plain CSS (`@luxalgo/vela-ui/themes/dark.css`).
+- **Restyle a component completely from the theme.** A component's `css` in the theme
+  restyles its parts (`components.button.css.root`, `components.button.css.icon`), written
+  with the `css` tag, now exported from `@luxalgo/vela/ui` with the typed tokens `t`,
+  wherever the theme applies and after every other layer of the kit, with `&` for the part's
+  variants and states. The parts are typed. CSS not written with the `css` tag, like a theme
+  loaded from a saved file, is left out unless the host passes `{ allowCss: true }`. The
+  gallery's "shadcn look" rebuilds shadcn's buttons and tabs this way, from a theme alone.
+- **Data components in the UI kit.** `@luxalgo/vela-ui` gains a sortable `DataTable` with a
+  sticky header, `Stat` figures toned as a gain or a loss, `Kbd` keycaps, an `EmptyState`, a
+  `HoverCard` (a title, a shortcut, a description and rich content beside a control), a
+  `Sparkline`, a `Donut`, and three SVG charts with hover readouts: `BarChart`, `LineChart`
+  and `ScatterChart`. Their colors come from the theme, including the new `profit` and
+  `loss` tokens, which default to the candles' up and down colors. Buttons gain `up` and
+  `down` variants in the market's colors (buy and sell), a toggle option a `tone` that fills
+  it with one of them while it is on, and a tab an icon and a count (`setCount`).
+- **The UI kit ships its own reference.** `@luxalgo/vela-ui` carries, versioned with its
+  code, a manifest of every component (`@luxalgo/vela-ui/manifest.json`: its import, props,
+  variants, parts and their slots, settings, the tokens it reads, an example), the JSON
+  Schema of a theme written to a file (`@luxalgo/vela-ui/theme.schema.json`), its guides
+  (theming, what to change and where, writing a component) and an `llms.txt` index for
+  coding agents. All of it is generated from the source, so it cannot drift.
+- **A command line for the UI kit.** `npx @luxalgo/vela-ui add <component>` makes the kit a
+  direct dependency and prints the component's import; `--source` copies its source into
+  the project as a component of the project's own, which never styles the kit's, and
+  `diff` shows what changed upstream since. `check` finds a second installed copy of the
+  kit, copies behind the installed version, and mistakes in the project's theme file.
+- **A switch and an input group in the UI kit.** `@luxalgo/vela-ui/switch` is a sliding
+  on/off toggle with shadcn's props (`checked`, `defaultChecked`, `onCheckedChange`, `name`,
+  `value`, `required`), a compact `sm` size and a `destructive` variant whose track turns red
+  while on; given `checked` it is controlled and moves only through `setChecked`.
+  `@luxalgo/vela/ui` keeps `Switch` as the deprecated name of `Checkbox` for this release and
+  offers the new switch under that name once the alias is gone. `@luxalgo/vela-ui/input-group`
+  is an input with addons inside its border (an icon, a short text or a button, at its start
+  or end, or in a row above or below) that reports every keystroke (`onValueChange`). `Input`
+  takes a `type` (`search`, `email`, `password`, `url`, `tel`).
+- **The kit's CSS rules, for your CSS.** `@luxalgo/vela-ui/stylelint` is the stylelint config
+  the kit's own components are checked with (tokens through `t`, no raw colors, logical
+  directions, parts rather than class names); a project extends it for the components it
+  writes with the `css` tag. The gallery also gains a theme editor that re-themes every
+  component live and writes the matching `createTheme` call.
+
+### Changed
+
+- **The button, badge, tabs and toggle group are `create…` functions.** `createButton`,
+  `createBadge`, `createTabs` and `createToggleGroup` return a handle with the element and
+  its methods, like every other component, and tab and toggle items carry `value`, as every
+  other control does. `@luxalgo/vela/ui` keeps `Button`, `Badge`, `Tabs`, `ToggleGroup`,
+  `buttonController` and `badgeController` as deprecated wrappers for one release; `Tabs` and
+  `ToggleGroup` still take items with `id`. _(Breaking: `tabsController` and
+  `toggleGroupController` are gone, so build the control with `createTabs` or
+  `createToggleGroup`; code that types items as `TabItem` or `ToggleGroupItem` names their key
+  `value` instead of `id`.)_
+- **One scrollbar across the chart and its panels.** Every scroller inside the chart, its
+  dialogs, menus and panels, and the kit's components shows the same thin scrollbar: a
+  rounded thumb, no track, no arrows. The `scroll` token colors it, now the chart's border
+  color by default, and the new `scroll-size` token sets its width (5px). `overlayScrollbarCss`
+  draws the same bar for a scroller outside the chart. A page that sets `scrollbar-width` or
+  `scrollbar-color` on every element turns Chromium's native bar back on inside the chart;
+  leave Vela out of that rule.
+- **Rows plugins add to an axis menu show no icon.** The price and time axis menus are lists
+  of checkmarked settings, so a row a plugin adds there shows without its icon and lines up
+  with them; the chart's body menu keeps them.
+- **The sidebar's icons are the drawing toolbar's size**, 18px instead of 14px, so the two
+  rails read as one set.
+- **A kit button centers its content the same way with or without an icon**, and its label
+  stays on one line. Its icon is 16px at every size but `xs` (12px), so a small button's icon
+  is 16px instead of 13px and centered in an icon-only button.
+- **The kit's menu is `DropdownMenu`** (`@luxalgo/vela-ui/dropdown-menu`,
+  `createDropdownMenu`, `dropdownMenuController`, data-slots `dropdown-menu-content`,
+  `dropdown-menu-item` and the rest, settings `--vela-dropdown-menu-*`, theme
+  `components['dropdown-menu']`). Its rows keep the `MenuItemDescriptor` type, the format
+  plugins contribute to every menu. `@luxalgo/vela/ui` keeps `Menu`, `createMenu`,
+  `menuController` and their types as deprecated aliases for one release. With
+  `align: 'center'` a dropdown menu opens centered on its button, on whichever `side`.
+- **Three kit components take shadcn's names.** The square check box was called `Switch`;
+  it is `Checkbox` (`@luxalgo/vela-ui/checkbox`, `createCheckbox`, data-slots `checkbox` and
+  `checkbox-icon`, settings `--vela-checkbox-*`, theme `components.checkbox`). The one-line
+  text field is `Input` (`@luxalgo/vela-ui/input`, `createInput`, data-slots `input` and
+  `input-control`, theme `components.input`). The empty state is `Empty`
+  (`@luxalgo/vela-ui/empty`, `createEmpty`, data-slots `empty`, `empty-icon`,
+  `empty-title`, `empty-description`, theme `components.empty`). `@luxalgo/vela/ui` keeps
+  `Switch`, `createSwitch`, `switchController`, `TextField`, `createTextField`,
+  `textFieldController` and their types as deprecated aliases for one release.
+- **The kit's primitives take shadcn's props.**
+  - Every floating part (the popover and what opens on it: the select list, the color and
+    glyph pickers, the callout panel; the menu, the tooltip, the hover card) takes `side`,
+    `align`, `sideOffset`, `alignOffset`, `avoidCollisions`, `collisionPadding` and
+    `collisionBoundary`. A popover can now open on any side of its trigger, and flips to the
+    opposite side when its own lacks room; its content carries `data-side` and `data-align`.
+    Defaults are unchanged. A select takes them at its top level (`list` keeps its other
+    options), and the placement math (`placePopover`) and types live in the kit's root.
+  - Form controls: the switch takes `defaultChecked`, `onCheckedChange`, `name` and
+    `required`; the select takes `defaultValue`, `onValueChange`, `placeholder` (shown,
+    dimmed, until a pick), `name` and `required` (a hidden native select carries the value
+    to forms and their validation); the text field and text area take `defaultValue`,
+    `placeholder`, `name` and `required`; the number field takes `name` and `required`.
+  - The drawer takes a `direction` (`'bottom'` by default; `'top'`, `'right'`, `'left'`),
+    sliding in from that edge, with a pull toward it dismissing; a side drawer's right is the
+    inline end, mirrored in right-to-left layouts.
+  - Deprecated, kept for one release: the popover's and select list's `gap` and `boundary`,
+    the menu's and tooltip's `placement`, the hover card's `delay`, the switch's and the
+    select's `onChange`. Vela's own code uses the new names.
+- **Vela's chrome CSS is linted.** Every chrome stylesheet is a `css` template that writes
+  its `@layer vela.chrome`, reads the tokens through `t` and uses logical properties
+  (`inset-inline-start`, `margin-inline-end`…, the same in left-to-right layouts), and
+  `npm run lint` checks it with the kit's stylelint config (`.vela-*` classes allowed). The
+  violations it carried before the rules sit in `stylelint-baseline.json`, which may only
+  shrink (`npm run lint:css -- --update-baseline` after fixing some). The chrome's radii now
+  come from the radius tokens, so a theme that sets them reshapes the chrome too.
+- **`@luxalgo/vela-ui/css`, `@luxalgo/vela-ui/t` and `@luxalgo/vela-ui/stylelint/lint`.** The
+  `css` tag and the tokens have their own entries, for CSS written outside the kit; `lintCss`
+  runs the shared stylelint config, fails on a template postcss-lit skipped, and holds older
+  CSS to a baseline that only tightens.
+- **The color picker's opacity is a slider, on Zag's slider machine.** The knob has the
+  slider role, the translated "Opacity" name and its value as text ("45%"); with the focus
+  on it, the arrow keys step the opacity by 1%, Page Up/Down by 10%, Home/End to the ends.
+  `commit: 'live'` still commits every move and `commit: 'release'` once per drag or key, and
+  a typed percentage commits once. The swatches carry their color as a name and the current
+  one is `aria-pressed`. The picker looks the same.
+- **The select's list is a listbox, on Zag's listbox machine.** Every list built by
+  `fillSelectList` (the select, `openSelectList`, `toggleSelectList`) carries the listbox and
+  option roles; while it has the focus, the arrow keys and Home/End move the highlight, Enter
+  picks, and typing jumps to an option. The select's trigger announces the list
+  (`aria-haspopup`, `aria-expanded`), opens it with ArrowDown/ArrowUp too, moves the focus into
+  it and gets it back when the list closes. Other callers opt in with `focusList: true` (off
+  by default, so a trigger the user types in keeps the focus). A click still picks at once,
+  the current option included. `fillSelectList` now returns the function that releases the
+  list.
+- **The number field runs on Zag's number-input machine.** The field is now a text input
+  with `inputmode="decimal"` and the spinbutton role, carrying `aria-valuenow` and its bounds;
+  the arrow keys and Page Up/Down step it, and the steppers repeat while held. Its commit rules
+  are unchanged and still report at once: on blur or Enter (clamped), on every keystroke in
+  `live` mode, and an empty field means `emptyValue` in placeholder mode. Values show as plain
+  numbers (no grouping). A stepper pressed with a mouse now leaves the focus in the field; a
+  touch leaves it where it was. _(Breaking: the element is no longer `type="number"`, so read
+  the value from the field's `value` and `onChange`, not from `valueAsNumber`.)_
+- **The switch runs on Zag's switch machine.** Its root (`Switch.el`) is now a `<label>`
+  holding a hidden checkbox, the control that takes focus and carries the `id` given, so a
+  host's own `<label for>` still reaches it. The root carries its state as `data-state`
+  (`checked`, `unchecked`) and `data-disabled`, and shows the kit's focus ring on keyboard
+  focus only. It looks the same at rest and on hover; `onChange` still reports the user's
+  toggles at once, and `setChecked` still reports nothing. _(Breaking: `Switch.el` is the
+  label, no longer a `<button>`; set `disabled` through the options and read `checked`.)_
+- **The drawing toolbar runs the shell's full height once a layout region is in use.** A
+  shell with a full-height column panel, a right-edge element or a docked strip lays out as
+  a grid, and the drawing toolbar now has its own column there: from under the topbar to the
+  foot of the shell, beside the strips, the bottom bar and the strips under it, as the right
+  edge runs from top to foot. Docking any strip switches a shell with a drawing toolbar to
+  the grid. A covering strip and a maximized column panel cover the toolbar too. A shell
+  using no region keeps its plain column.
+- **Vela's own chrome CSS sits in `@layer vela.chrome`**, above the UI kit's components and
+  below Pro's and a theme's restyles, so CSS a host writes without a layer overrides it
+  without `!important` or specificity races. The public `injectStyles` stays unlayered.
+- **The UI kit states the browsers it supports**: Chrome and Edge 111, Firefox 113, Safari
+  16.2, the first with `color-mix()`, which its tints (destructive buttons, badges, the
+  selected tab) and parts of the chart's chrome already used. On older browsers those tints
+  show no fill.
+- **Theme tokens are a stylesheet rule.** The chart writes its theme once per page in the
+  `vela.theme` cascade layer, keyed by a `data-vela-theme` attribute, instead of inline
+  styles on every element of its chrome. A page's own CSS now overrides any token without
+  `!important` (`[data-vela-theme] { --vela-accent: … }`), and several themes still
+  coexist on one page. `applyThemeTokens` is deprecated in favor of `applyTheme`, which
+  also takes a theme from `createTheme`. _(Breaking: code that read a token from an
+  element's inline style reads it with `getComputedStyle` instead.)_
+- **Vela's CommonJS build loads the kit as an ES module.** `@luxalgo/vela-ui` ships as ES
+  modules only, so `require('@luxalgo/vela')` needs a Node version that can load them:
+  20.19 or 22.12 and later. _(Breaking: on an older Node, import Vela as an ES module or
+  upgrade Node.)_
+- **The UI kit's styles give way to yours.** Every component of `@luxalgo/vela/ui`, from
+  dialogs, drawers, menus and tooltips to selects, number inputs and color fields, keeps
+  its styles in the `vela.ui` cascade layer, so a page's own CSS overrides them without
+  `!important` or a more specific selector, and every part carries a `data-slot` to style
+  it by. Each component also has a `create…` function (`createDialog`, `createDropdownMenu`,
+  `createSelect`, …) next to its class, which keeps working, and dialogs take a `variant`
+  (`settings`, `form`) for the two settings cards. Hover and focus fades follow the kit's
+  motion tokens, and layouts mirror in right-to-left text. _(Breaking: a global rule your
+  page writes outside any layer, such as a reset of every `button` or `input`, now reaches
+  the kit's controls too; scope it away from Vela or move it into a layer of its own.)_
+
+### Fixed
+
+- **A theme's candle colors color the candles.** The `upColor` and `downColor` of a theme
+  (`colors.up` and `colors.down` in `createTheme`) only reached the interface: the candles
+  kept the brand green and red. They are now the candles' defaults: a chart starts on them,
+  and a theme switch moves the candles, wicks, borders and bars still on the previous
+  theme's colors to the new one's. A color set with the chart's `upColor` / `downColor`
+  options or in its settings stays, and "Reset defaults" returns to the current theme's
+  colors. The built-in dark and light themes share their candle colors, so they look as
+  before.
+- **Submenus open beside their menu.** A submenu (the price scale's Labels and Levels) covered
+  the edge of the menu it opened from, and more of it when it opened to the left near the
+  screen's edge; it now opens just past that edge, on whichever side has room, with its first
+  row level with the row that opened it.
+- **Menus stay inside a small chart.** A menu (the chart's right-click menu, the price
+  scale's) opened in a chart shorter than the menu no longer runs past the chart's edge and
+  scrolls the page or panel around it: it fits the room on the side it opens on and scrolls
+  inside itself.
+- **A plain dialog's footer is laid out.** A `Dialog` with a `footer` and no `variant` put
+  its buttons against the dialog's bottom and left edges; they now sit at the end, padded
+  like the body above them. The `settings` and `form` variants are unchanged.
+
+## [0.9.4]
+
+### Added
+
+- **Resize a rectangle from any side.** A selected rectangle now has eight handles: one on
+  each corner and one in the middle of each side. Drag a corner to resize the box in both
+  directions, or a side handle to move just that side, so you can stretch a zone to a new
+  high or extend it in time without touching its other edges.
+- **A toolbar on the shell's right edge.** `sidebar: true` gives the shell a toolbar on its
+  fourth side, beside the topbar, the charts and the bottom bar. It takes over the
+  side-panel toggles from the topbar and hosts the entries plugins register with
+  `registerWidgetAction({ target: 'sidebar' })`, which can show a pressed state (`active`)
+  and a badge (`ctx.sidebar.setBadge`). Plugins can hide and give back its entries at
+  runtime (`ctx.sidebar.setVisible`), as they do the topbar's, and anchor their own popovers
+  to their buttons, which carry `data-action-id` like the topbar's. Hosts lay its upper and
+  lower sections out with `{ top, bottom }`, as they compose the topbar. It is off by
+  default and desktop only: on the mobile layout the panels keep their menu rows and the
+  sidebar's entries join them.
+- **Buttons, tabs, toggle groups and badges in the UI kit.** `@luxalgo/vela/ui` now has
+  `createButton` (default, outline, secondary, ghost, destructive and link, in four
+  heights and their square icon sizes, with icons on either side and toggle states),
+  `createTabs` (an island, an underlined strip, and the filled, soft and vertical rail
+  looks, with keyboard navigation, tabs that can hide, and the full tabs semantics),
+  `createToggleGroup` (one choice among a few options, or several toggled on their own)
+  and `createBadge` (status labels and counts). Variant, size, part and prop names follow
+  shadcn's, and every part carries a `data-slot` to style it by. Tabs and toggle groups
+  run Zag state machines, which own their keyboard behavior and accessibility, so another
+  view layer can run the same machines and behave the same. Their styles sit in the
+  `vela.ui` cascade layer, so a page's own CSS overrides them without `!important`.
+- **The indicator settings, the symbol picker and the drawings drawer use them.** Their
+  tabs and the settings dialogs' buttons look as before. The indicator settings tabs now
+  answer the arrow keys, announce themselves as tabs with their panels, and brighten on
+  hover as they were meant to.
+- **Plugins can shape the shell's chrome without touching its markup.** A plugin can hide
+  the shell's own topbar items at runtime (`ctx.topbar.setVisible('alerts', false)`), which
+  also removes their row in the mobile menu, their bottom-bar stop and their keyboard
+  shortcut, and gives them back the same way. It can read the side-panel dock (which panels
+  it holds, which one is open or maximized) and follow its changes (`ctx.panels`). A side
+  panel can draw its own header (`registerSidePanel({ header: 'none' })`) and close itself
+  from it. On the mobile layout, a contributed bottom-bar button whose condition depends on
+  the layout now appears or leaves when the shell switches layouts, and contributed buttons
+  carry their action's id for styling.
+- **Plugins can lay out full-height panels, a rail and covering strips.** A side panel can
+  take the full height of the shell beside the topbar, the charts and the bottom bar
+  (`registerSidePanel({ placement: 'column' })`), which all narrow to make room. A plugin
+  can dock an element at the shell's outer right edge for a rail (`ctx.dockEdge`), dock a
+  strip under the bottom bar (`ctx.dockStrip(el, { position: 'below-bottombar' })`), and lay
+  a docked strip over the whole chart column and back (`cover`), leaving full-height panels,
+  the rail and the mobile bottom bar uncovered. A shell that uses none of these keeps its
+  layout exactly as before.
+
+### Changed
+
+- **A drawing's settings open beside its toolbar.** The settings panel now opens right next
+  to the drawing's toolbar, where its gear is, instead of at the far edge of the chart. It
+  takes the side of the toolbar away from the drawing when there is room, so the drawing
+  stays in view as you edit it, and it stays inside the chart, scrolling when the chart is
+  short.
+- **The object tree's group button starts a group with nothing selected.** It used to stay
+  dim until you picked drawings in the panel. With nothing picked it now adds an empty
+  "Group N" at the top of the main chart, with its name ready to edit and a "Drag drawings
+  here" hint; drag drawings onto it to fill it. With drawings picked it groups them, as
+  before. An empty group waits for its first drawing, then behaves like any other group and
+  goes away once its last drawing leaves.
+
+### Fixed
+
+- **Resetting the chart view keeps your margins.** "Reset chart view" in the chart menu
+  placed the newest bar against the price axis and ignored the right margin set in the
+  chart settings. It now leaves that margin past the newest bar, as scrolling to the latest
+  bar does. So do the range buttons in the bottom bar and `setVisibleRangePreset`. The
+  Alt+R key now resets the view as the menu row does, so a price scale you dragged fits the
+  data again, with the top and bottom margins.
+
 ## [0.9.3]
 
 ### Added

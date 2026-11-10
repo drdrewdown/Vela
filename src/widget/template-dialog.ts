@@ -4,10 +4,14 @@
 import { msg } from '../core/i18n/message';
 import { textOf } from '../core/i18n/text';
 import type { MessageArgs, MessageLike, Translator } from '../core/i18n/types';
-import { Dialog } from '../ui/components/dialog';
-import { Switch } from '../ui/components/switch';
-import { TextField } from '../ui/components/text-field';
-import { injectStyles } from '../ui/styles';
+import { createButton, type ButtonHandle } from '@luxalgo/vela-ui/button';
+import { Checkbox } from '@luxalgo/vela-ui/checkbox';
+import { css } from '@luxalgo/vela-ui/css';
+import { Dialog } from '@luxalgo/vela-ui/dialog';
+import { Input } from '@luxalgo/vela-ui/input';
+import { t } from '@luxalgo/vela-ui/t';
+import { nextUid } from '@luxalgo/vela-ui/zag';
+import { injectChromeStyles } from '../ui/chromeStyles';
 
 const TEXT = {
     name: msg('widget.templateDialog.name', 'Template name'),
@@ -24,14 +28,15 @@ const TEXT = {
 };
 
 const STYLE_ID = 'vela-widget-template-dialog';
-const CSS = `
-.vela-td { display: flex; flex-direction: column; gap: var(--vela-space-3); min-width: 320px; }
-.vela-td-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--vela-fg); font-size: 13px; }
-.vela-td-row-hint { color: var(--vela-fg-muted); font-size: 12px; }
-.vela-td-note { color: var(--vela-fg-muted); font-size: 12px; }
-.vela-td-error { color: var(--vela-danger); font-size: 12px; min-height: 1.2em; }
-.vela-td-actions { display: flex; justify-content: flex-end; gap: 8px; }
-`;
+const CSS = css`@layer vela.chrome {
+
+.vela-td { display: flex; flex-direction: column; gap: ${t.space[3]}; min-width: 320px; }
+.vela-td-row { display: flex; align-items: center; justify-content: space-between; gap: ${t.space[3]}; color: ${t.fg}; font-size: 13px; }
+.vela-td-row-hint { color: ${t.fg.muted}; font-size: 12px; }
+.vela-td-note { color: ${t.fg.muted}; font-size: 12px; }
+.vela-td-error { color: ${t.danger}; font-size: 12px; min-height: 1.2em; }
+
+}`;
 
 export interface TemplateDialogRequest {
     mode: 'save' | 'rename';
@@ -51,22 +56,22 @@ export interface TemplateDialogRequest {
 export class TemplateDialog {
     private readonly dialog: Dialog;
     private readonly form: HTMLElement;
-    private readonly name: TextField;
+    private readonly name: Input;
     private readonly error: HTMLElement;
-    private readonly submit: HTMLButtonElement;
+    private readonly submit: ButtonHandle;
     private req: TemplateDialogRequest | null = null;
     private remember = { timeframe: true, symbol: false };
 
     private readonly i18n: Translator | null;
-    private readonly cancel: HTMLButtonElement;
+    private readonly cancel: ButtonHandle;
 
     constructor(host: HTMLElement, i18n?: Translator) {
         this.i18n = i18n ?? null;
         const doc = host.ownerDocument;
-        injectStyles(STYLE_ID, CSS, doc);
+        injectChromeStyles(STYLE_ID, CSS, doc);
         this.form = doc.createElement('div');
         this.form.className = 'vela-td';
-        this.name = new TextField({ fill: true });
+        this.name = new Input({ fill: true });
         this.name.input.maxLength = 40;
         this.name.input.addEventListener('keydown', (e) => {
             e.stopPropagation();
@@ -75,19 +80,17 @@ export class TemplateDialog {
         });
         this.error = doc.createElement('div');
         this.error.className = 'vela-td-error';
-        const actions = doc.createElement('div');
-        actions.className = 'vela-td-actions';
-        const cancel = doc.createElement('button');
-        cancel.type = 'button';
-        cancel.className = 'vela-dialog-btn';
-        cancel.addEventListener('click', () => this.dialog.hide());
-        this.cancel = cancel;
-        this.submit = doc.createElement('button');
-        this.submit.type = 'button';
-        this.submit.className = 'vela-dialog-btn vela-dialog-btn-primary';
-        this.submit.addEventListener('click', () => this.commit());
-        actions.append(cancel, this.submit);
-        this.dialog = new Dialog({ title: this.t(TEXT.saveTitle), host, content: this.form, footer: actions, align: 'center', draggable: true });
+        this.cancel = createButton({ text: this.t(TEXT.cancel), variant: 'outline', onClick: () => this.dialog.hide() });
+        this.submit = createButton({ text: this.t(TEXT.save), onClick: () => this.commit() });
+        this.dialog = new Dialog({
+            title: this.t(TEXT.saveTitle),
+            host,
+            content: this.form,
+            footer: (el) => el.append(this.cancel.el, this.submit.el),
+            align: 'center',
+            draggable: true,
+            ...(i18n ? { i18n } : {}),
+        });
     }
 
     open(req: TemplateDialogRequest): void {
@@ -118,9 +121,10 @@ export class TemplateDialog {
     /** Re-read the title, the buttons and the name field in the current language. */
     relocalize(): void {
         const rename = this.req?.mode === 'rename';
+        this.dialog.setI18n(this.i18n);
         this.dialog.titleEl.textContent = this.t(rename ? TEXT.renameTitle : TEXT.saveTitle);
-        this.submit.textContent = this.t(rename ? TEXT.rename : TEXT.save);
-        this.cancel.textContent = this.t(TEXT.cancel);
+        this.submit.setText(this.t(rename ? TEXT.rename : TEXT.save));
+        this.cancel.setText(this.t(TEXT.cancel));
         this.name.input.placeholder = this.t(TEXT.name);
         this.name.input.setAttribute('aria-label', this.t(TEXT.name));
     }
@@ -138,9 +142,11 @@ export class TemplateDialog {
     }
 
     private switchRow(doc: Document, label: string, hint: string | undefined, checked: boolean, onChange: (on: boolean) => void): HTMLElement {
-        const row = doc.createElement('label');
+        const row = doc.createElement('div');
         row.className = 'vela-td-row';
-        const text = doc.createElement('span');
+        const id = nextUid('vela-td-remember');
+        const text = doc.createElement('label');
+        text.htmlFor = id;
         text.textContent = label;
         if (hint) {
             const h = doc.createElement('span');
@@ -148,7 +154,7 @@ export class TemplateDialog {
             h.textContent = ` ${hint}`;
             text.appendChild(h);
         }
-        const sw = new Switch({ checked, size: 'sm', onChange });
+        const sw = new Checkbox({ id, defaultChecked: checked, size: 'sm', onCheckedChange: onChange });
         row.append(text, sw.el);
         return row;
     }

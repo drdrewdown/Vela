@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NativeRenderer } from '../src/renderers/native/NativeRenderer';
 import { mergeConfig } from '../src/renderers/native/core/chartConfig';
@@ -29,62 +30,36 @@ describe('drawing tooltips', () => {
     });
 });
 
-/** The plot subset the tip touches — tests run in a plain node environment. */
-interface StubPlot {
-    handlers: Record<string, (e: unknown) => void>;
-    children: Array<{ textContent: string }>;
-    plot: HTMLElement;
-}
-
-function stubPlot(): StubPlot {
-    const handlers: Record<string, (e: unknown) => void> = {};
-    const children: Array<{ textContent: string }> = [];
-    const makeEl = () => ({
-        textContent: '',
-        offsetWidth: 80,
-        offsetHeight: 20,
-        style: { cssText: '', setProperty: () => undefined },
-        remove: () => {
-            const i = children.findIndex((c) => c === el);
-            if (i >= 0) children.splice(i, 1);
-        },
-    });
-    let el: ReturnType<typeof makeEl>;
-    const plot = {
-        clientWidth: 800,
-        clientHeight: 400,
-        ownerDocument: { createElement: () => (el = makeEl()) },
-        addEventListener: (name: string, fn: (e: unknown) => void) => { handlers[name] = fn; },
-        removeEventListener: () => undefined,
-        getBoundingClientRect: () => ({ left: 0, top: 0 }),
-        appendChild: (c: { textContent: string }) => { children.push(c); },
-    } as unknown as HTMLElement;
-    return { handlers, children, plot };
+/** A mouse `pointermove` over the plot (jsdom has no PointerEvent). */
+function hover(plot: HTMLElement, x: number, y: number): void {
+    const e = new MouseEvent('pointermove', { clientX: x, clientY: y });
+    Object.defineProperty(e, 'pointerType', { value: 'mouse' });
+    plot.dispatchEvent(e);
 }
 
 describe('LabelTooltip', () => {
     beforeEach(() => {
         vi.useFakeTimers();
-        vi.stubGlobal('window', globalThis); // the tip arms its hover delay on `window.setTimeout`
     });
     afterEach(() => {
-        vi.unstubAllGlobals();
         vi.useRealTimers();
+        document.body.replaceChildren();
     });
 
     it('opens a tip with the label text after a short hover', () => {
-        const { handlers, children, plot } = stubPlot();
+        const plot = document.createElement('div');
+        document.body.append(plot);
         const tip = new LabelTooltip(plot, {
             theme: () => ({ background: '#000', textColor: '#fff', borderColor: '#333', fontFamily: 'sans-serif' } as VelaTheme),
             lookup: (x, y) => (x < 100 && y < 100 ? 'Order block · 5400.25' : null),
         });
-        handlers.pointermove!({ pointerType: 'mouse', clientX: 40, clientY: 40 });
-        expect(children).toHaveLength(0); // not yet — a sweep through a label must not flash
+        hover(plot, 40, 40);
+        expect(plot.children).toHaveLength(0); // not yet — a sweep through a label must not flash
         vi.advanceTimersByTime(400);
-        expect(children).toHaveLength(1);
-        expect(children[0]!.textContent).toBe('Order block · 5400.25');
-        handlers.pointermove!({ pointerType: 'mouse', clientX: 400, clientY: 40 });
-        expect(children).toHaveLength(0);
+        expect(plot.children).toHaveLength(1);
+        expect(plot.children[0]!.textContent).toBe('Order block · 5400.25');
+        hover(plot, 400, 40);
+        expect(plot.children).toHaveLength(0);
         tip.destroy();
     });
 });

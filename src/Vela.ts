@@ -1,8 +1,8 @@
 import type { IChartRenderer, VisibleRange } from './core/ports/IChartRenderer';
 import type { ScriptingEngine } from './core/ports/ScriptingEngine';
-import type { MarketDataFeed } from './core/ports/MarketDataFeed';
+import type { MarketDataFeed, SymbolFacts } from './core/ports/MarketDataFeed';
 import type { VisibleRangePreset } from './core/visible-range';
-import type { VelaOptions, VelaTheme, ThemeName, MarketSwitch, MarketSnapshot, AddIndicatorOptions } from './core/options';
+import type { VelaOptions, VelaTheme, MarketSwitch, MarketSnapshot, AddIndicatorOptions } from './core/options';
 import { resolveAnimations } from './core/options';
 import type { InputValue } from './core/model/inputs';
 import type { OHLCV } from './core/model/ohlcv';
@@ -14,7 +14,6 @@ import type { ScriptRun, ScriptRunResult } from './core/script-run';
 import { EngineOrchestrator, type ResolvedConfig } from './core/engine/EngineOrchestrator';
 import type { SceneInspection } from './core/engine/inspect';
 import { resolveTheme } from './core/theme';
-import { BEARISH, BULLISH } from './core/palette';
 import { RendererControl } from './core/RendererControl';
 import { rendererDefaults } from './core/renderer-defaults';
 import { PanesControl } from './core/PanesControl';
@@ -86,8 +85,8 @@ export class Vela {
             nativeBackend: options.nativeBackend ?? 'auto',
             ...resolveAnimations(options.animations),
             glow: options.glow ?? 0,
-            upColor: options.upColor ?? BULLISH,
-            downColor: options.downColor ?? BEARISH,
+            upColor: options.upColor ?? theme.upColor,
+            downColor: options.downColor ?? theme.downColor,
             priceStyle: options.priceStyle ?? 'candles',
             priceAxisTicks: options.priceAxis?.ticks ?? null,
         };
@@ -223,6 +222,28 @@ export class Vela {
      */
     presentNativeIndicators(): string[] {
         return this.orchestrator.presentNativeIndicators();
+    }
+
+    /**
+     * The native-indicator types the chart is about to add on its own and has not yet: the
+     * volume indicator while the first market's symbol facts, which decide it, are still in
+     * flight after the first candles (a source can state that a symbol has no volume). Empty
+     * otherwise. Persistence snapshots report these beside {@link presentNativeIndicators},
+     * so a save in that moment is not read back as the user removing the indicator.
+     */
+    pendingNativeIndicators(): string[] {
+        return this.orchestrator.pendingNativeIndicators();
+    }
+
+    /**
+     * The facts the chart applies about its symbol, from its data source's `SymbolInfo`:
+     * `ohlc: false` for one value per bar, `volume: false` for no volume. `null` while
+     * unknown (the info has not landed, or the source states none); `{}` when it landed
+     * without either. They decide which price styles can draw the symbol — test one with
+     * `priceStyleApplies(id, chart.symbolFacts())` — and change with `symbol:facts`.
+     */
+    symbolFacts(): SymbolFacts | null {
+        return this.orchestrator.symbolFacts();
     }
 
     /** Live handles of every indicator currently on the chart (script + native) — drive
@@ -515,14 +536,14 @@ export class Vela {
     }
 
     /**
-     * Swap the app theme at runtime — `'dark'`, `'light'`, or a full custom
-     * {@link VelaTheme}. Re-skins the chart surface, axes, legends and in-chart chrome
+     * Swap the app theme at runtime — `'dark'`, `'light'`, a full custom
+     * {@link VelaTheme}, or a `createTheme` result. Re-skins the chart surface, axes, legends and in-chart chrome
      * live (no indicator re-run, no rebuild) and emits `theme:changed` with the resolved
      * theme so host chrome around the chart can follow. Explicitly customized plot
      * cosmetics (a config-set background or series color) are re-based only when they
      * were inherited from the previous theme.
      */
-    setTheme(theme: ThemeName | VelaTheme): this {
+    setTheme(theme: NonNullable<VelaOptions['theme']>): this {
         this.orchestrator.setTheme(resolveTheme(theme));
         return this;
     }

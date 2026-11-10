@@ -7,22 +7,25 @@
 import { msg } from '../core/i18n/message';
 import { textOf } from '../core/i18n/text';
 import type { MessageLike, Translator } from '../core/i18n/types';
-import { iconEl } from '../ui/icons';
-import { injectStyles } from '../ui/styles';
+import { iconEl } from '@luxalgo/vela-ui/icons';
+import { injectChromeStyles } from '../ui/chromeStyles';
 import { parseSymbol } from '../data/ProviderRegistry';
 import { timeframeLabel } from './timeframe';
 import { actionLabel, mobilePlacement, widgetActions, type WidgetContext } from './contributions';
 import { TOPBAR_BUILTIN_IDS } from './topbar-composition';
+import { css } from '@luxalgo/vela-ui/css';
+import { t } from '@luxalgo/vela-ui/t';
 
 const STYLE_ID = 'vela-widget-mobilebar';
-const CSS = `
+const CSS = css`@layer vela.chrome {
+
 .vela-mobilebar {
     display: none;
     align-items: stretch;
     gap: 2px;
     padding: 4px 6px calc(4px + env(safe-area-inset-bottom, 0px));
-    border-top: 1px solid var(--vela-border);
-    color: var(--vela-fg-muted);
+    border-top: 1px solid ${t.border};
+    color: ${t.fg.muted};
     flex: none;
 }
 [data-layout='mobile'] .vela-mobilebar { display: flex; }
@@ -30,6 +33,7 @@ const CSS = `
 [data-layout='mobile'] .vela-widget-bottombar { display: none; }
 .vela-mb-item {
     all: unset;
+    box-sizing: border-box;
     flex: 1 1 0;
     min-width: 0;
     min-height: 44px;
@@ -37,19 +41,20 @@ const CSS = `
     align-items: center;
     justify-content: center;
     gap: 6px;
-    border-radius: 6px;
+    border-radius: ${t.radius.md};
     cursor: pointer;
-    color: var(--vela-fg-bright);
+    color: ${t.fg.bright};
     font-size: 13px;
     font-weight: 600;
     -webkit-tap-highlight-color: transparent;
 }
+.vela-mb-item[hidden] { display: none; }
 .vela-mb-item[hidden] { display: none !important; }
-.vela-mb-item:active { background: var(--vela-hover); }
+.vela-mb-item:active { background: ${t.hover}; }
 .vela-mb-item .vela-icon { font-size: 18px; width: 18px; height: 18px; }
 /* A lit stop (the maximize toggle while something is isolated): the inverse
    "selected" chip — white on the dark theme, dark on the light one. */
-.vela-mb-item.vela-mb-on, .vela-mb-item.vela-mb-on:active { background: var(--vela-selected-bg); color: var(--vela-selected-fg); }
+.vela-mb-item.vela-mb-on, .vela-mb-item.vela-mb-on:active { background: ${t.selected.bg}; color: ${t.selected.fg}; }
 /* Left-aligned contributed actions get their own stops (the built-in indicators
    slot) — the wrapper is layout-transparent so each stop flexes like a sibling. */
 .vela-mb-actions { display: contents; }
@@ -64,7 +69,8 @@ const CSS = `
     line-height: 44px;
     text-align: center;
 }
-`;
+
+}`;
 
 const TEXT = {
     symbolSearch: msg('widget.mobileBar.symbolSearch', 'Symbol search'),
@@ -109,6 +115,8 @@ export class MobileBar {
     private readonly maxEl: HTMLButtonElement | null;
     /** Left-aligned contributed actions — filled by {@link renderActions}. */
     private readonly actionsHost: HTMLElement;
+    /** The indicators stop (null when the shell has no indicator surface). */
+    private readonly indicatorsEl: HTMLButtonElement | null;
     private readonly opts: MobileBarOptions;
     /** Each fixed stop's accessible name, re-read by {@link relocalize}. */
     private readonly labels: Array<{ el: HTMLElement; label: MessageLike }> = [];
@@ -122,7 +130,7 @@ export class MobileBar {
     constructor(host: HTMLElement, opts: MobileBarOptions) {
         this.opts = opts;
         const doc = host.ownerDocument;
-        injectStyles(STYLE_ID, CSS, doc);
+        injectChromeStyles(STYLE_ID, CSS, doc);
         this.el = doc.createElement('div');
         this.el.className = 'vela-mobilebar';
 
@@ -143,6 +151,7 @@ export class MobileBar {
         this.tfEl.textContent = timeframeLabel(opts.timeframe, opts.i18n);
         const onIndicators = opts.onIndicatorsClick;
         const indicators = onIndicators ? item('vela-mb-indicators', TEXT.indicators, onIndicators, 'indicators') : null;
+        this.indicatorsEl = indicators;
         this.actionsHost = doc.createElement('span');
         this.actionsHost.className = 'vela-mb-actions';
         const onDrawings = opts.onDrawingsClick;
@@ -171,6 +180,7 @@ export class MobileBar {
         for (const action of widgetActions('topbar', ctx).filter((a) => mobilePlacement(a) === 'bar' && !builtin.has(a.id))) {
             const b = doc.createElement('button');
             b.className = 'vela-mb-item';
+            b.dataset.actionId = action.id;
             const label = textOf(ctx.i18n ?? this.opts.i18n, actionLabel(action, ctx));
             b.setAttribute('aria-label', label);
             if (action.icon) b.appendChild(iconEl(action.icon, doc));
@@ -181,6 +191,11 @@ export class MobileBar {
             });
             this.actionsHost.appendChild(b);
         }
+    }
+
+    /** Show or hide the indicators stop (the topbar's `'indicators'` item hidden at runtime). */
+    setIndicatorsVisible(visible: boolean): void {
+        if (this.indicatorsEl) this.indicatorsEl.hidden = !visible;
     }
 
     setSymbol(symbol: string): void {
