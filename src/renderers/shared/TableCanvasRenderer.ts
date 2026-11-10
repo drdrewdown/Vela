@@ -159,6 +159,7 @@ function layoutTable(ctx: CanvasRenderingContext2D, t: DrawingTable, args: Table
         let w = Math.ceil(maxW) + 2 * PAD_X;
         let h = Math.ceil(lines.length * px * LINE_HEIGHT) + 2 * PAD_Y;
         if (cell.width) w = Math.max(w, (cell.width / 100) * args.plotWidth);
+        if (cell.minWidth) w = Math.max(w, cell.minWidth);
         if (cell.height) h = Math.max(h, (cell.height / 100) * args.paneHeight);
         return { w, h };
     };

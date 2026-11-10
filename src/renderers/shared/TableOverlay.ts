@@ -175,6 +175,7 @@ export class TableOverlay {
                     whiteSpace: 'pre',
                 } satisfies Partial<CSSStyleDeclaration>);
                 if (cell.width) td.style.width = `${(cell.width / 100) * plotW}px`;
+                if (cell.minWidth) td.style.minWidth = `${cell.minWidth}px`;
                 if (cell.height) td.style.height = `${(cell.height / 100) * paneH}px`;
                 if (cell.tooltip) td.title = cell.tooltip;
                 td.textContent = cell.text ?? '';

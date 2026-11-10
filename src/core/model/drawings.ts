@@ -240,6 +240,9 @@ export interface TableCell {
     italic: boolean;
     /** Cell width as a percent of the pane's width (absent/0 = size to content). */
     width?: number;
+    /** A floor on the cell's width in CSS pixels, under its content size — a column that must
+     *  not move as its text changes. Independent of `width` (the larger wins). */
+    minWidth?: number;
     /** Cell height as a percent of the pane's height (absent/0 = size to content). */
     height?: number;
     /** A non-origin cell absorbed by a `table.merge_cells` region → not rendered.
