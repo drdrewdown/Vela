@@ -559,7 +559,8 @@ export class ChromeRenderer {
         // 2. Current Price Line across the chart
         let rawSym = scene.symbol.replace(/^[a-z]+:/i, "").trim().toUpperCase(); // a provider prefix is not part of the tag
         if (rawSym && !rawSym.startsWith("$")) rawSym = "$" + rawSym;
-        const tickerTag = rawSym || "$NQ";
+        // A chart that was never told its symbol has no tag: the price box stands alone.
+        const tickerTag = rawSym;
 
         // The chip pair, the countdown pill and the range chips paint in the theme's chrome tokens.
         const chrome = resolveChrome(theme);
@@ -571,7 +572,7 @@ export class ChromeRenderer {
 
         const priceText = formatAxisValue(pricePane.scale, pricePane.bounds.height, last.close, percentScaleFor(scene, pricePane), scene.priceMintick, undefined, scene.format, 'lastPrice');
         const wPrice = Math.max(ctx.measureText(priceText).width + 8, 62);
-        const wTicker = Math.max(ctx.measureText(tickerTag).width + 8, 36);
+        const wTicker = tickerTag ? Math.max(ctx.measureText(tickerTag).width + 8, 36) : 0;
         const chipH = CHIP_H;
         const top = Math.round(y - chipH / 2);
 
@@ -616,19 +617,23 @@ export class ChromeRenderer {
 
                 // Attached Ticker tag on chart canvas
                 xTicker = axisW + 1;
-                ctx.fillStyle = chipBg;
-                ctx.fillRect(xTicker, top, wTicker, chipH);
-                ctx.fillStyle = chipFg;
-                ctx.textAlign = "center";
-                ctx.fillText(tickerTag, xTicker + wTicker / 2, top + chipH / 2);
+                if (tickerTag) {
+                    ctx.fillStyle = chipBg;
+                    ctx.fillRect(xTicker, top, wTicker, chipH);
+                    ctx.fillStyle = chipFg;
+                    ctx.textAlign = "center";
+                    ctx.fillText(tickerTag, xTicker + wTicker / 2, top + chipH / 2);
+                }
             } else {
                 // Attached Ticker tag on chart canvas
                 xTicker = dataW - 1 - wTicker;
-                ctx.fillStyle = chipBg;
-                ctx.fillRect(xTicker, top, wTicker, chipH);
-                ctx.fillStyle = chipFg;
-                ctx.textAlign = "center";
-                ctx.fillText(tickerTag, xTicker + wTicker / 2, top + chipH / 2);
+                if (tickerTag) {
+                    ctx.fillStyle = chipBg;
+                    ctx.fillRect(xTicker, top, wTicker, chipH);
+                    ctx.fillStyle = chipFg;
+                    ctx.textAlign = "center";
+                    ctx.fillText(tickerTag, xTicker + wTicker / 2, top + chipH / 2);
+                }
 
                 // Price box on axis gutter
                 xPrice = dataW + 1;
@@ -643,10 +648,11 @@ export class ChromeRenderer {
                 tag: tickerTag,
                 title: "Current Market Price",
                 priceText: priceText,
-                tooltip: tickerTag + ": " + priceText + "\nLive Last Traded Price",
+                tooltip: (tickerTag ? tickerTag + ": " : "") + priceText + "\nLive Last Traded Price",
                 color: chipBg,
                 boxPrice: { x: xPrice, y: top, w: wPrice, h: chipH },
-                boxTag: { x: xTicker, y: top, w: wTicker, h: chipH },
+                // Without a tag the chip is its price box alone.
+                boxTag: tickerTag ? { x: xTicker, y: top, w: wTicker, h: chipH } : { x: xPrice, y: top, w: wPrice, h: chipH },
                 meta: { type: "ticker", symbol: tickerTag, price: last.close },
             });
         }
