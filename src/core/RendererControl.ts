@@ -3,7 +3,7 @@ import type { Unsubscribe } from './util/types';
 import type { WallClock } from './util/wall-clock';
 import type { SymbolPickerFn } from './model/inputs';
 import type { MessageLike } from './i18n/types';
-import type { SettingsVisibilityPolicy } from './options';
+import type { SettingsTemplateStore, SettingsVisibilityPolicy } from './options';
 
 /**
  * The public control surface for the active renderer — `chart.renderer`. A thin
@@ -271,6 +271,18 @@ export class RendererControl {
      */
     setSettingsVisibility(policy: SettingsVisibilityPolicy): this {
         this.renderer.setSettingsVisibility?.(policy);
+        return this;
+    }
+
+    /**
+     * Give the settings dialog a Template menu: the chart's config saved under a name
+     * (`Save as…`), applied back with a click, removed, beside `Apply defaults`. The store
+     * keeps the documents (see `SettingsTemplateStore`); `null` removes the menu. A
+     * workspace sets one for every chart, kept in its state document. Silent no-op without
+     * a settings dialog.
+     */
+    setSettingsTemplates(store: SettingsTemplateStore | null): this {
+        this.renderer.setSettingsTemplates?.(store);
         return this;
     }
 

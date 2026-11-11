@@ -2,7 +2,7 @@ import { msg, withValues } from '../../../core/i18n/message';
 import { sourceText, textOf } from '../../../core/i18n/text';
 import type { MessageArgs, MessageLike, Translator } from '../../../core/i18n/types';
 import { PRICE_STYLE_UNAVAILABLE, priceStyleMessage } from '../../../chart-types/labels';
-import type { VelaTheme, ThemeId, SettingsDialogLayout } from '../../../core/options';
+import type { VelaTheme, ThemeId, SettingsDialogLayout, SettingsTemplateStore } from '../../../core/options';
 import { registeredThemes } from '../../../core/theme';
 import type { ChartConfig } from '../core/chartConfig';
 import {
@@ -48,6 +48,8 @@ import type { MarkGroup } from '../../../core/marks/types';
 import { markGroupRows } from '../../../core/marks/visibility';
 import { withKitTranslator } from '@luxalgo/vela-ui/kit-text';
 import { createSwitch } from '@luxalgo/vela-ui/switch';
+import { DropdownMenu, type MenuItemDescriptor } from '@luxalgo/vela-ui/dropdown-menu';
+import { Input } from '@luxalgo/vela-ui/input';
 import { css } from '@luxalgo/vela-ui/css';
 import { disposeWithin } from '@luxalgo/vela-ui/dispose';
 import { t } from '@luxalgo/vela-ui/t';
@@ -60,6 +62,14 @@ const TEXT = {
     done: msg('chart.settings.done', 'Done'),
     appliesInstantly: msg('chart.settings.appliesInstantly', 'Changes apply instantly'),
     preview: msg('chart.settings.preview', 'Preview'),
+    template: msg('chart.settings.template', 'Template'),
+    applyDefaults: msg('chart.settings.applyDefaults', 'Apply defaults'),
+    saveAs: msg('chart.settings.saveAs', 'Save as…'),
+    noTemplates: msg('chart.settings.noTemplates', 'No saved templates yet'),
+    removeTemplate: msg('chart.settings.removeTemplate', 'Remove'),
+    templateName: msg('chart.settings.templateName', 'Template name'),
+    save: msg('chart.settings.save', 'Save'),
+    cancel: msg('chart.settings.cancel', 'Cancel'),
     previewNote: msg('chart.settings.previewNote', 'Scroll to zoom, drag to pan.'),
     symbol: msg('chart.settings.symbol', 'Symbol'),
     chartType: msg('chart.settings.chartType', 'Chart type'),
@@ -329,7 +339,13 @@ ${overlayScrollbarCss('.vela-sd-pane')}
 .vela-sd-aside-chart{flex:1 1 auto;min-height:0;border:1px solid ${t.border};border-radius:${t.radius.lg};overflow:hidden;}
 .vela-sd-aside-note{color:${t.fg.muted};font-size:12px;}
 @container (max-width:900px){.vela-sd-aside{display:none;}}
+/* The footer's Template menu and the name field Save as… opens in the footer itself. */
+.vela-sd-tpl{display:inline-flex;align-items:center;gap:6px;}
+.vela-sd-tpl-name{display:flex;align-items:center;gap:6px;flex:1 1 auto;min-width:0;}
+.vela-sd-tpl-name[hidden]{display:none;}
+.vela-sd-tpl-name>:first-child{flex:0 1 220px;min-width:0;}
 .vela-sd-foot-note{flex:1 1 auto;text-align:center;color:${t.fg.muted};font-size:12px;}
+.vela-sd-naming .vela-sd-foot-note{display:none;}
 .vela-sd-btn-primary{color:${t.surface};background:${t.fg.bright};border-color:${t.fg.bright};font-weight:600;}
 .vela-sd-btn-primary:hover{color:${t.surface};background:${t.fg};border-color:${t.fg};}
 }`;
@@ -440,6 +456,113 @@ export class SettingsDialog {
         const preview = this.preview;
         if (!preview || preview.chart || !this.previewFactory) return;
         preview.chart = this.previewFactory(preview.chartHost);
+    }
+
+    private templates: SettingsTemplateStore | null = null;
+    /** The chart's config as it stands now — what Save as… keeps (the open-time snapshot is stale after an edit). */
+    private currentConfig: (() => ChartConfig) | null = null;
+    /** The open dialog's Template menu, rebuilt from the store after every save and remove. */
+    private templateMenu: DropdownMenu | null = null;
+
+    /** Give the footer a Template menu over `store`: Apply defaults, Save as…, and the saved
+     *  templates (a click applies one). `current` reads the config a save keeps. `null`
+     *  leaves the plain Reset defaults button. An open dialog rebuilds. */
+    setTemplates(store: SettingsTemplateStore | null, current: () => ChartConfig): void {
+        this.currentConfig = current;
+        if (store === this.templates) return;
+        this.templates = store;
+        this.reopenIfLive();
+    }
+
+    /** The Template menu's rows: the two actions, then each template (a click applies it)
+     *  and a Remove branch naming them again. */
+    private templateItems(): MenuItemDescriptor[] {
+        const names = this.templates?.names() ?? [];
+        const items: MenuItemDescriptor[] = [
+            { id: 'defaults', label: this.t(TEXT.applyDefaults) },
+            { id: 'save', label: this.t(TEXT.saveAs) },
+        ];
+        if (names.length === 0) {
+            items.push({ id: 'none', label: this.t(TEXT.noTemplates), disabled: true, separatorBefore: true });
+            return items;
+        }
+        names.forEach((name, i) => items.push({ id: `apply:${name}`, label: name, separatorBefore: i === 0 }));
+        items.push({ id: 'remove', label: this.t(TEXT.removeTemplate), separatorBefore: true, submenu: names.map((name) => ({ id: `remove:${name}`, label: name })) });
+        return items;
+    }
+
+    /** Build the footer's Template control: the menu button and the name field Save as… shows. */
+    private buildTemplateControl(foot: HTMLElement, host: HTMLElement): void {
+        const store = this.templates;
+        if (!store) return;
+        const wrap = document.createElement('div');
+        wrap.className = 'vela-sd-tpl';
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'vela-sd-btn vela-sd-tpl-btn';
+        trigger.textContent = this.t(TEXT.template);
+        wrap.appendChild(trigger);
+
+        const nameRow = document.createElement('div');
+        nameRow.className = 'vela-sd-tpl-name';
+        nameRow.hidden = true;
+        const name = new Input({ fill: true });
+        name.input.maxLength = 40;
+        name.input.placeholder = this.t(TEXT.templateName);
+        name.input.setAttribute('aria-label', this.t(TEXT.templateName));
+        const saveBtn = document.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.className = 'vela-sd-btn vela-sd-tpl-save';
+        saveBtn.textContent = this.t(TEXT.save);
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'vela-sd-btn vela-sd-tpl-cancel';
+        cancelBtn.textContent = this.t(TEXT.cancel);
+        nameRow.append(name.el, saveBtn, cancelBtn);
+
+        const naming = (on: boolean): void => {
+            nameRow.hidden = !on;
+            foot.classList.toggle('vela-sd-naming', on);
+            if (!on) return;
+            name.input.value = '';
+            name.input.focus();
+        };
+        const commit = (): void => {
+            const text = name.input.value.trim();
+            if (!text || !this.currentConfig) return;
+            // A refused save (the list is full) leaves the field open for another try.
+            if (!store.save(text, this.currentConfig())) return;
+            menu.setItems(this.templateItems());
+            naming(false);
+        };
+        saveBtn.addEventListener('click', commit);
+        cancelBtn.addEventListener('click', () => naming(false));
+        name.input.addEventListener('keydown', (e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') commit();
+            if (e.key === 'Escape') naming(false);
+        });
+
+        const menu = new DropdownMenu({
+            trigger,
+            host,
+            items: this.templateItems(),
+            side: 'top',
+            align: 'start',
+            onSelect: (id) => {
+                if (id === 'defaults') this.onReset?.();
+                else if (id === 'save') naming(true);
+                else if (id.startsWith('apply:')) {
+                    const config = store.read(id.slice('apply:'.length));
+                    if (config != null) this.onImport?.(config);
+                } else if (id.startsWith('remove:')) {
+                    store.remove(id.slice('remove:'.length));
+                    menu.setItems(this.templateItems());
+                }
+            },
+        });
+        this.templateMenu = menu;
+        foot.append(wrap, nameRow);
     }
 
     /** Whether this build is laid out as cards: the layout asked for, off the mobile chrome. */
@@ -588,12 +711,17 @@ export class SettingsDialog {
             closeOnBackdrop: true,
             footer: (foot) => {
                 foot.style.cssText = `padding:10px 14px;display:flex;align-items:center;justify-content:flex-start;gap:8px;`;
-                const resetBtn = document.createElement('button');
-                resetBtn.type = 'button';
-                resetBtn.textContent = this.t(TEXT.resetDefaults);
-                resetBtn.className = 'vela-sd-btn';
-                resetBtn.addEventListener('click', () => this.onReset?.());
-                foot.appendChild(resetBtn);
+                if (this.templates) {
+                    // The Template menu carries Apply defaults, so it stands where the reset button did.
+                    this.buildTemplateControl(foot, this.container);
+                } else {
+                    const resetBtn = document.createElement('button');
+                    resetBtn.type = 'button';
+                    resetBtn.textContent = this.t(TEXT.resetDefaults);
+                    resetBtn.className = 'vela-sd-btn';
+                    resetBtn.addEventListener('click', () => this.onReset?.());
+                    foot.appendChild(resetBtn);
+                }
                 if (!this.cards) return;
                 const note = document.createElement('span');
                 note.className = 'vela-sd-foot-note';
@@ -1124,6 +1252,8 @@ export class SettingsDialog {
         this.hintTips = [];
         this.preview?.chart?.destroy();
         this.preview = null;
+        this.templateMenu?.destroy();
+        this.templateMenu = null;
         ui?.destroy();
     }
 

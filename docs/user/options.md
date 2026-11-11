@@ -196,6 +196,26 @@ chart and is dropped when the host is too narrow for both columns:
 new VelaWorkspace('#chart', { settings: { layout: 'cards', preview: true } });
 ```
 
+#### Settings templates
+
+`chart.renderer.setSettingsTemplates(store)` puts a **Template** menu in the dialog's
+footer, where the Reset defaults button stands: *Apply defaults*, *Save as…*, the saved
+templates (a click applies one) and a *Remove* list. A template is the chart's config
+document (`chart.renderer.getConfig()`); the store only keeps them:
+
+```js
+const kept = new Map();
+chart.renderer.setSettingsTemplates({
+  names: () => [...kept.keys()],
+  read: (name) => kept.get(name) ?? null,
+  save: (name, config) => (kept.set(name, config), true),   // false = refused, the name field stays open
+  remove: (name) => void kept.delete(name),
+});
+```
+
+A [workspace](./workspace.md#settings-templates) sets one for every chart and keeps the
+templates in its state document. `null` brings the Reset defaults button back.
+
 Ids are dot-separated paths: `<tab>`, `<tab>.<group>`, `<tab>.<group>.<row>`. Enumerate
 every addressable id of a live chart with `chart.renderer.listSettingsIds()` (plugin
 chart types and host-app sections included).

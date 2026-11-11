@@ -36,7 +36,7 @@ import type { Pane } from '../../core/model/scene';
 import type { IndicatorModel, PaneAxisBand } from '../../core/model/indicator';
 import type { ScenePatch } from '../../core/model/patch';
 import type { InputValue, SymbolPickerFn } from '../../core/model/inputs';
-import type { RendererDisplayOptions, NativeBackend, PriceStyle, MoveTarget, ThemeId, IntroAnimation, IntroStyle, PriceAxisTicksFn, PriceAxisSymbolTagFn, SettingsDialogLayout, SettingsVisibilityPolicy } from '../../core/options';
+import type { RendererDisplayOptions, NativeBackend, PriceStyle, MoveTarget, ThemeId, IntroAnimation, IntroStyle, PriceAxisTicksFn, PriceAxisSymbolTagFn, SettingsDialogLayout, SettingsTemplateStore, SettingsVisibilityPolicy } from '../../core/options';
 import type { SymbolFacts } from '../../core/ports/MarketDataFeed';
 import { priceStyleApplies, shownPriceStyle } from '../../chart-types/applicability';
 import {
@@ -395,6 +395,7 @@ export class NativeRenderer implements IChartRenderer {
     private hiddenSettings: readonly string[] = [];
     private settingsLayout: SettingsDialogLayout = 'rail';
     private settingsPreview = false;
+    private settingsTemplates: SettingsTemplateStore | null = null;
     private readonly settingsPreviewFactory = (host: HTMLElement): SettingsPreview => this.mountSettingsPreview(host);
     /** Where modal dialogs mount — a HOST override (multi-chart shells pass their root
      *  so dialogs center globally instead of clipping inside one cell). Null = the plot. */
@@ -1305,12 +1306,17 @@ export class NativeRenderer implements IChartRenderer {
         this.settingsDialog.setHiddenSettings(this.hiddenSettings);
         this.settingsDialog.setLayout(this.settingsLayout);
         this.settingsDialog.setPreview(this.settingsPreview ? this.settingsPreviewFactory : null);
+        this.settingsDialog.setTemplates(this.settingsTemplates, () => this.getConfig());
         this.settingsDialog.setPriceStyleState(() => ({ shown: this.scene.priceStyle, unavailable: this.unavailablePriceStyles() }));
         this.syncThemeControl();
         this.settingsDialog.toggle(
             this.getConfig(),
             (patch) => this.applyConfig(patch),
-            (json) => this.applyConfig(json),
+            (json) => {
+                this.applyConfig(json);
+                // A template shows in the open dialog's controls at once, like a reset.
+                this.settingsDialog?.refresh(this.getConfig());
+            },
             () => {
                 if (this.factoryConfig) this.applyConfig(this.factoryResetDocument(this.factoryConfig));
                 // Re-seed the open dialog in place so every control shows the restored
@@ -2739,6 +2745,11 @@ export class NativeRenderer implements IChartRenderer {
     setSettingsSections(sections: HostSettingsSection[]): void {
         this.hostSettingsSections = sections;
         this.settingsDialog?.setHostSections(sections);
+    }
+
+    setSettingsTemplates(store: SettingsTemplateStore | null): void {
+        this.settingsTemplates = store;
+        this.settingsDialog?.setTemplates(store, () => this.getConfig());
     }
 
     setSettingsVisibility(policy: SettingsVisibilityPolicy): void {

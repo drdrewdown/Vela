@@ -4,7 +4,7 @@ import type { IndicatorModel } from '../model/indicator';
 import type { ScenePatch } from '../model/patch';
 import type { InputValue, SymbolPickerFn } from '../model/inputs';
 import type { Millis } from '../model/time';
-import type { VelaTheme, ThemeId, MoveTarget, PriceStyle, SettingsVisibilityPolicy } from '../options';
+import type { VelaTheme, ThemeId, MoveTarget, PriceStyle, SettingsTemplateStore, SettingsVisibilityPolicy } from '../options';
 import type { Unsubscribe } from '../util/types';
 import type { WallClock } from '../util/wall-clock';
 import type { IDrawingsRendererPort } from '../drawings/port';
@@ -617,6 +617,9 @@ export interface IChartRenderer {
      *  being stored and applied. `layout` picks the dialog's arrangement. Optional — a
      *  renderer without a settings dialog omits it. */
     setSettingsVisibility?(policy: SettingsVisibilityPolicy): void;
+    /** Where the settings dialog's Template menu keeps its templates; `null` removes the menu.
+     *  Optional — a renderer without a settings dialog omits it. */
+    setSettingsTemplates?(store: SettingsTemplateStore | null): void;
     /** Every addressable setting id of this chart (built-ins, chart-type sections,
      *  host sections) — the discovery surface for the visibility policy. */
     listSettingsIds?(): string[];

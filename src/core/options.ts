@@ -270,6 +270,24 @@ export interface SettingsVisibilityPolicy {
     preview?: boolean;
 }
 
+/**
+ * Where a chart's settings templates are kept: named snapshots of the chart's config
+ * (`chart.renderer.getConfig()`), saved and applied from the settings dialog's Template
+ * menu. The dialog shows the menu while a store is set (`chart.renderer.setSettingsTemplates`);
+ * the store only keeps the documents — applying one is an ordinary `applyConfig`.
+ */
+export interface SettingsTemplateStore {
+    /** The saved templates' names, in the order the menu lists them. */
+    names(): string[];
+    /** A template's config document, or `null` when no template carries the name. */
+    read(name: string): unknown;
+    /** Keep `config` under `name`, replacing a template of that name. Return `false` when
+     *  it could not be kept (the list is full); the dialog then leaves the name field open. */
+    save(name: string, config: unknown): boolean;
+    /** Drop the template of that name. */
+    remove(name: string): void;
+}
+
 /** A settings-dialog layout (see `SettingsVisibilityPolicy.layout`). */
 export type SettingsDialogLayout = 'rail' | 'cards';
 

@@ -80,6 +80,7 @@ export interface VelaCoreMessageCatalog {
     'chart.settings.animateZoomHint': string;
     'chart.settings.animation': string;
     'chart.settings.appliesInstantly': string;
+    'chart.settings.applyDefaults': string;
     'chart.settings.area': string;
     'chart.settings.axisLabels': string;
     'chart.settings.background': string;
@@ -92,6 +93,7 @@ export interface VelaCoreMessageCatalog {
     'chart.settings.bottom': string;
     'chart.settings.bottomFill': string;
     'chart.settings.bottomLine': string;
+    'chart.settings.cancel': string;
     'chart.settings.candles': string;
     'chart.settings.canvas': string;
     'chart.settings.chartSettings': string;
@@ -123,6 +125,7 @@ export interface VelaCoreMessageCatalog {
     'chart.settings.mergeChips': string;
     'chart.settings.mode': string;
     'chart.settings.navigation': string;
+    'chart.settings.noTemplates': string;
     'chart.settings.panMomentum': string;
     'chart.settings.panMomentumHint': string;
     'chart.settings.paneSeparatorColor': string;
@@ -135,10 +138,13 @@ export interface VelaCoreMessageCatalog {
     'chart.settings.rangeMin': string;
     'chart.settings.regular': string;
     'chart.settings.removeInstance': string;
+    'chart.settings.removeTemplate': string;
     'chart.settings.resetDefaults': string;
     'chart.settings.revealOnLoad': string;
     'chart.settings.revealOnLoadHint': string;
     'chart.settings.right': string;
+    'chart.settings.save': string;
+    'chart.settings.saveAs': string;
     'chart.settings.scaleBorderColor': string;
     'chart.settings.scalePriceOnly': string;
     'chart.settings.scalesAndLines': string;
@@ -147,6 +153,8 @@ export interface VelaCoreMessageCatalog {
     'chart.settings.spacing': string;
     'chart.settings.style': string;
     'chart.settings.symbol': string;
+    'chart.settings.template': string;
+    'chart.settings.templateName': string;
     'chart.settings.textColor': string;
     'chart.settings.textSize': string;
     'chart.settings.theme': string;
