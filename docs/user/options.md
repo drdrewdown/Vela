@@ -204,7 +204,7 @@ new VelaWorkspace('#chart', { settings: { layout: 'cards', preview: true } });
 
 `chart.renderer.setSettingsTemplates(store)` puts a **Template** menu in the dialog's
 footer, where the Reset defaults button stands: *Apply defaults*, *Save as…*, the saved
-templates (a click applies one) and a *Remove* list. A template is the chart's config
+templates (a click applies one), *Manage*, *Import…* and *Export…*. A template is the chart's config
 document (`chart.renderer.getConfig()`); the store only keeps them:
 
 ```js
@@ -216,6 +216,12 @@ chart.renderer.setSettingsTemplates({
   remove: (name) => void kept.delete(name),
 });
 ```
+
+Under *Manage* each template has its own actions: *Remove* always, and *Rename…* and
+*Move up* / *Move down* when the store has the optional `rename(from, to)` (return
+`false` for a taken name) and `move(name, toIndex)`. *Import…* reads a file of templates
+and saves each through the store; *Export…* downloads them as one JSON document,
+`{ "version": 1, "settingsTemplates": [{ "name": "…", "config": { … } }] }`.
 
 A [workspace](./workspace.md#settings-templates) sets one for every chart and keeps the
 templates in its state document. `null` brings the Reset defaults button back.

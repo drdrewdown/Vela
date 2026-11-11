@@ -6,6 +6,7 @@ import { msg } from '../core/i18n/message';
 import { textOf } from '../core/i18n/text';
 import type { MessageLike, Translator } from '../core/i18n/types';
 import { css } from '@luxalgo/vela-ui/css';
+import { downloadText } from '../core/util/download';
 import { DropdownMenu } from '@luxalgo/vela-ui/dropdown-menu';
 import { t } from '@luxalgo/vela-ui/t';
 import { injectChromeStyles } from '../ui/chromeStyles';
@@ -144,15 +145,6 @@ export function addMenuRows(hasTemplates: boolean, i18n?: Translator | null): Ar
 }
 
 /** Hand the browser a text file to save. */
-function downloadText(doc: Document, text: string, filename: string): void {
-    const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-    const a = doc.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
 /** The right-click menu of a chip, by the chip's kind. */
 export function templateMenuRows(row: TemplateChipRow, i18n?: Translator | null): Array<{ id: string; label: string; checked?: boolean; toggle?: boolean; separatorBefore?: boolean }> {
     const t = (m: MessageLike): string => textOf(i18n, m);

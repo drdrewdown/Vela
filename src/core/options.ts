@@ -286,6 +286,12 @@ export interface SettingsTemplateStore {
     save(name: string, config: unknown): boolean;
     /** Drop the template of that name. */
     remove(name: string): void;
+    /** Rename a template. Return `false` when it could not be (the new name is taken); the
+     *  dialog then leaves the name field open. A store without it offers no Rename. */
+    rename?(from: string, to: string): boolean;
+    /** Move a template to `toIndex` in {@link names}' order. A store without it offers no
+     *  Move up / Move down. */
+    move?(name: string, toIndex: number): void;
 }
 
 /** A settings-dialog layout (see `SettingsVisibilityPolicy.layout`). */

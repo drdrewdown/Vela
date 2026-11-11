@@ -50,6 +50,8 @@ import { withKitTranslator } from '@luxalgo/vela-ui/kit-text';
 import { createSwitch } from '@luxalgo/vela-ui/switch';
 import { DropdownMenu, type MenuItemDescriptor } from '@luxalgo/vela-ui/dropdown-menu';
 import { Input } from '@luxalgo/vela-ui/input';
+import { downloadText } from '../../../core/util/download';
+import { parseSettingsTemplates, settingsTemplatesDocument } from './settings-templates';
 import { css } from '@luxalgo/vela-ui/css';
 import { disposeWithin } from '@luxalgo/vela-ui/dispose';
 import { t } from '@luxalgo/vela-ui/t';
@@ -67,6 +69,13 @@ const TEXT = {
     saveAs: msg('chart.settings.saveAs', 'Save as…'),
     noTemplates: msg('chart.settings.noTemplates', 'No saved templates yet'),
     removeTemplate: msg('chart.settings.removeTemplate', 'Remove'),
+    manageTemplates: msg('chart.settings.manageTemplates', 'Manage'),
+    renameTemplate: msg('chart.settings.renameTemplate', 'Rename…'),
+    moveTemplateUp: msg('chart.settings.moveTemplateUp', 'Move up'),
+    moveTemplateDown: msg('chart.settings.moveTemplateDown', 'Move down'),
+    importTemplates: msg('chart.settings.importTemplates', 'Import…'),
+    exportTemplates: msg('chart.settings.exportTemplates', 'Export…'),
+    rename: msg('chart.settings.rename', 'Rename'),
     templateName: msg('chart.settings.templateName', 'Template name'),
     save: msg('chart.settings.save', 'Save'),
     cancel: msg('chart.settings.cancel', 'Cancel'),
@@ -477,20 +486,31 @@ export class SettingsDialog {
         this.reopenIfLive();
     }
 
-    /** The Template menu's rows: the two actions, then each template (a click applies it)
-     *  and a Remove branch naming them again. */
+    /** The Template menu's rows: the two actions, each template (a click applies it), a
+     *  Manage branch holding each template's own actions (what the store can do), and the
+     *  file actions. Ids are `<action>:<name>`. */
     private templateItems(): MenuItemDescriptor[] {
-        const names = this.templates?.names() ?? [];
+        const store = this.templates;
+        const names = store?.names() ?? [];
         const items: MenuItemDescriptor[] = [
             { id: 'defaults', label: this.t(TEXT.applyDefaults) },
             { id: 'save', label: this.t(TEXT.saveAs) },
         ];
-        if (names.length === 0) {
-            items.push({ id: 'none', label: this.t(TEXT.noTemplates), disabled: true, separatorBefore: true });
-            return items;
-        }
+        if (names.length === 0) items.push({ id: 'none', label: this.t(TEXT.noTemplates), disabled: true, separatorBefore: true });
         names.forEach((name, i) => items.push({ id: `apply:${name}`, label: name, separatorBefore: i === 0 }));
-        items.push({ id: 'remove', label: this.t(TEXT.removeTemplate), separatorBefore: true, submenu: names.map((name) => ({ id: `remove:${name}`, label: name })) });
+        if (names.length > 0) {
+            const actions = (name: string, i: number): MenuItemDescriptor[] => [
+                ...(store?.rename ? [{ id: `rename:${name}`, label: this.t(TEXT.renameTemplate) }] : []),
+                ...(store?.move ? [
+                    { id: `up:${name}`, label: this.t(TEXT.moveTemplateUp), disabled: i === 0 },
+                    { id: `down:${name}`, label: this.t(TEXT.moveTemplateDown), disabled: i === names.length - 1 },
+                ] : []),
+                { id: `remove:${name}`, label: this.t(TEXT.removeTemplate), separatorBefore: Boolean(store?.rename || store?.move) },
+            ];
+            items.push({ id: 'manage', label: this.t(TEXT.manageTemplates), separatorBefore: true, submenu: names.map((name, i) => ({ id: `manage:${name}`, label: name, submenu: actions(name, i) })) });
+        }
+        items.push({ id: 'import', label: this.t(TEXT.importTemplates), separatorBefore: names.length === 0 });
+        if (names.length > 0) items.push({ id: 'export', label: this.t(TEXT.exportTemplates) });
         return items;
     }
 
@@ -523,21 +543,43 @@ export class SettingsDialog {
         cancelBtn.textContent = this.t(TEXT.cancel);
         nameRow.append(name.el, saveBtn, cancelBtn);
 
-        const naming = (on: boolean): void => {
+        // The one name field serves Save as… (empty) and Rename… (the template's name, selected).
+        let renaming: string | null = null;
+        const naming = (on: boolean, rename: string | null = null): void => {
+            renaming = on ? rename : null;
             nameRow.hidden = !on;
             foot.classList.toggle('vela-sd-naming', on);
             if (!on) return;
-            name.input.value = '';
+            saveBtn.textContent = this.t(rename === null ? TEXT.save : TEXT.rename);
+            name.input.value = rename ?? '';
             name.input.focus();
+            name.input.select();
         };
         const commit = (): void => {
             const text = name.input.value.trim();
             if (!text || !this.currentConfig) return;
-            // A refused save (the list is full) leaves the field open for another try.
-            if (!store.save(text, this.currentConfig())) return;
+            // A refused save or rename (a full list, a taken name) leaves the field open for another try.
+            const kept = renaming === null ? store.save(text, this.currentConfig()) : store.rename?.(renaming, text) === true;
+            if (!kept) return;
             menu.setItems(this.templateItems());
             naming(false);
         };
+        // Import…: a file of templates, each saved through the store (one of a name already there replaces it).
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = '.json,application/json';
+        fileInput.hidden = true;
+        fileInput.className = 'vela-sd-tpl-file';
+        fileInput.addEventListener('change', () => {
+            const file = fileInput.files?.[0];
+            fileInput.value = '';
+            if (!file) return;
+            void file.text().then((text) => {
+                for (const t of parseSettingsTemplates(text)) store.save(t.name, t.config);
+                if (this.templateMenu === menu) menu.setItems(this.templateItems());
+            });
+        });
+        wrap.appendChild(fileInput);
         saveBtn.addEventListener('click', commit);
         cancelBtn.addEventListener('click', () => naming(false));
         name.input.addEventListener('keydown', (e) => {
@@ -558,6 +600,14 @@ export class SettingsDialog {
                 else if (id.startsWith('apply:')) {
                     const config = store.read(id.slice('apply:'.length));
                     if (config != null) this.onImport?.(config);
+                } else if (id === 'import') fileInput.click();
+                else if (id === 'export') downloadText(document, settingsTemplatesDocument(store), 'settings-templates.json');
+                else if (id.startsWith('rename:')) naming(true, id.slice('rename:'.length));
+                else if (id.startsWith('up:') || id.startsWith('down:')) {
+                    const target = id.slice(id.indexOf(':') + 1);
+                    const at = store.names().indexOf(target);
+                    if (at >= 0) store.move?.(target, at + (id.startsWith('up:') ? -1 : 1));
+                    menu.setItems(this.templateItems());
                 } else if (id.startsWith('remove:')) {
                     store.remove(id.slice('remove:'.length));
                     menu.setItems(this.templateItems());

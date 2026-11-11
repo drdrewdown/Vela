@@ -109,10 +109,12 @@ export interface VelaCoreMessageCatalog {
     'chart.settings.done': string;
     'chart.settings.dotted': string;
     'chart.settings.events': string;
+    'chart.settings.exportTemplates': string;
     'chart.settings.fillBottomArea': string;
     'chart.settings.fillTopArea': string;
     'chart.settings.grid': string;
     'chart.settings.horizontal': string;
+    'chart.settings.importTemplates': string;
     'chart.settings.indexedTo100': string;
     'chart.settings.indicatorChips': string;
     'chart.settings.invertScale': string;
@@ -121,9 +123,12 @@ export interface VelaCoreMessageCatalog {
     'chart.settings.line': string;
     'chart.settings.lineColor': string;
     'chart.settings.logarithmic': string;
+    'chart.settings.manageTemplates': string;
     'chart.settings.margins': string;
     'chart.settings.mergeChips': string;
     'chart.settings.mode': string;
+    'chart.settings.moveTemplateDown': string;
+    'chart.settings.moveTemplateUp': string;
     'chart.settings.navigation': string;
     'chart.settings.noTemplates': string;
     'chart.settings.panMomentum': string;
@@ -139,6 +144,8 @@ export interface VelaCoreMessageCatalog {
     'chart.settings.regular': string;
     'chart.settings.removeInstance': string;
     'chart.settings.removeTemplate': string;
+    'chart.settings.rename': string;
+    'chart.settings.renameTemplate': string;
     'chart.settings.resetDefaults': string;
     'chart.settings.revealOnLoad': string;
     'chart.settings.revealOnLoadHint': string;
