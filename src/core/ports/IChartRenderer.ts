@@ -610,8 +610,9 @@ export interface IChartRenderer {
      *  them to the type's data engine. */
     onChartTypeSettingsChange?(cb: (typeId: string, values: Record<string, unknown>) => void): Unsubscribe;
     /** Host-app settings tabs (callback rows) shown by the renderer's settings dialog.
-     *  `id` names a section for the visibility policy (defaults to the title's slug). */
-    setSettingsSections?(sections: ReadonlyArray<{ title: MessageLike; rows: readonly unknown[]; id?: string }>): void;
+     *  `id` names a section for the visibility policy (defaults to the title's slug);
+     *  `icon` (an icon registry id) leads the section's tab in the cards layout. */
+    setSettingsSections?(sections: ReadonlyArray<{ title: MessageLike; rows: readonly unknown[]; id?: string; icon?: string }>): void;
     /** Settings-dialog visibility policy: `hidden` lists setting ids to hide (a tab, a
      *  group, or a row — subtree semantics). Presentation-only: hidden values keep
      *  being stored and applied. `layout` picks the dialog's arrangement. Optional — a

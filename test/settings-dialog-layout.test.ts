@@ -89,6 +89,28 @@ describe('the settings dialog layout', () => {
         expect(host.querySelector('.vela-sd-deck')).not.toBeNull();
     });
 
+    it('leads each tab with its icon, and leaves a tab without one as its title alone', () => {
+        const host = document.createElement('div');
+        document.body.append(host);
+        const dialog = new SettingsDialog(host, DARK_THEME);
+        live.push(dialog);
+        dialog.setLayout('cards');
+        dialog.setHostSections([
+            { title: 'Status line', icon: 'type', rows: [{ kind: 'toggle', label: 'Symbol', get: () => true, set: () => {} }] },
+            { title: 'Plain', rows: [{ kind: 'toggle', label: 'One', get: () => true, set: () => {} }] },
+            { title: 'Unknown icon', icon: 'no-such-icon', rows: [{ kind: 'toggle', label: 'Two', get: () => true, set: () => {} }] },
+        ]);
+        dialog.open(new NativeRenderer().getConfig(), () => {});
+        const icons = Object.fromEntries([...host.querySelectorAll<HTMLElement>('.vela-sd-tab')].map((tab) => [tab.textContent, tab.querySelector('.vela-sd-tab-icon svg') !== null]));
+        expect(icons).toEqual({ 'Symbol': true, 'Status line': true, 'Plain': false, 'Unknown icon': false, 'Scales and lines': true, 'Canvas': true });
+    });
+
+    it('draws no tab icons on the rail', () => {
+        const { host } = open();
+        expect(host.querySelectorAll('.vela-sd-tab').length).toBeGreaterThan(2);
+        expect(host.querySelector('.vela-sd-tab-icon')).toBeNull();
+    });
+
     it('leaves the mobile presentation as it is', () => {
         const { host } = open('cards', true);
         expect(host.querySelector('.vela-sd-deck')).toBeNull();

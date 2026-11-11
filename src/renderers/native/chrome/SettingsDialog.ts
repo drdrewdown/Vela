@@ -19,7 +19,7 @@ import {
     type SettingsSelectOption,
     type SettingsValueRow,
 } from '../../../chart-types/registry';
-import { iconAt } from '../../../core/icons';
+import { iconAt, iconMarkup } from '../../../core/icons';
 import { TIMEZONES, tzMenuLabel, normalizeTimezone } from '../../../core/timezones';
 import { closeOpenPopovers } from '@luxalgo/vela-ui/popover';
 import { closeWidthPopover } from '@luxalgo/vela-ui/glyph-select';
@@ -195,6 +195,8 @@ export interface HostSettingsSection {
     placement?: 'after-symbol' | 'end' | 'symbol';
     /** Stable visibility id (defaults to the title's slug). Row ids scope under it. */
     id?: string;
+    /** An icon id from the icon registry, drawn before the tab's title in the cards layout. */
+    icon?: string;
 }
 
 
@@ -323,7 +325,8 @@ ${overlayScrollbarCss('.vela-sd-pane')}
 .vela-sd-cards{width:min(760px,94vw);max-width:min(760px,94vw);max-height:84vh;}
 .vela-sd-cards .vela-sd-rail{flex:0 0 auto;display:flex;flex-direction:row;gap:4px;padding:10px 14px;border-bottom:1px solid ${t.border};overflow-x:auto;scrollbar-width:none;}
 .vela-sd-cards .vela-sd-rail::-webkit-scrollbar{display:none;}
-.vela-sd-cards .vela-sd-tab{flex:0 0 auto;padding:8px 14px;white-space:nowrap;}
+.vela-sd-cards .vela-sd-tab{flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;padding:8px 14px;white-space:nowrap;}
+.vela-sd-tab-icon{display:inline-flex;line-height:0;}
 .vela-sd-cards .vela-sd-tab-sub{padding-inline-start:14px;}
 .vela-sd-cards .vela-sd-pane{padding:16px 18px;}
 .vela-sd-deck{columns:2 240px;column-gap:14px;}
@@ -807,7 +810,7 @@ export class SettingsDialog {
         };
 
         // ══ SYMBOL — chart type + per-style cosmetics + time zone (the reference tab) ══
-        body.append(sid(this.section(TEXT.symbol), 'symbol'));
+        body.append(sid(this.section(TEXT.symbol, 'style-candles'), 'symbol'));
         body.append(sid(this.sectionTitle(TEXT.chartType), 'symbol.type'));
         const styles = this.priceStyleState?.() ?? { shown: config.series.style, unavailable: [] };
         const shownStyle = styles.shown;
@@ -977,7 +980,7 @@ export class SettingsDialog {
                 const rows = filterHiddenHostRows(hs.rows, scope, this.hiddenSettings);
                 if (rows.length === 0) continue;
                 // 'symbol' inlines rows into the CURRENT pane (a section title, no tab).
-                body.append(placement === 'symbol' ? this.sectionTitle(hs.title) : this.section(hs.title));
+                body.append(placement === 'symbol' ? this.sectionTitle(hs.title) : this.section(hs.title, hs.icon));
                 for (const hr of rows) {
                     if (hr.kind === 'heading') body.append(this.sectionTitle(hr.label));
                     else if (hr.kind === 'toggle') body.append(this.boolRow(hr.label, hr.get(), (v) => hr.set(v)));
@@ -1011,7 +1014,7 @@ export class SettingsDialog {
         renderHostSections('after-symbol');
 
         // ══ SCALES AND LINES — price scale + crosshair (the reference tab) ══
-        body.append(sid(this.section(TEXT.scalesAndLines), 'scales'));
+        body.append(sid(this.section(TEXT.scalesAndLines, 'ruler'), 'scales'));
         body.append(sid(this.sectionTitle(TEXT.priceScale), 'scales.price-scale'));
         body.append(
             sid(this.selectRowLabeled(
@@ -1038,7 +1041,7 @@ export class SettingsDialog {
         body.append(sid(this.selectRowLabeled(TEXT.style, config.crosshair.style, [['solid', TEXT.solid], ['dashed', TEXT.dashed], ['dotted', TEXT.dotted]] as const, (v) => this.emit({ crosshair: { style: v } })), 'scales.crosshair.style'));
 
         // ══ CANVAS — background/text + grid (the reference tab) ══
-        body.append(sid(this.section(TEXT.canvas), 'canvas'));
+        body.append(sid(this.section(TEXT.canvas, 'brush'), 'canvas'));
         body.append(sid(this.sectionTitle(TEXT.backgroundAndText), 'canvas.background'));
         body.append(sid(this.colorRow(TEXT.background, config.layout.background, (v) => this.emit({ layout: { background: v } })), 'canvas.background.color'));
         body.append(sid(this.colorRow(TEXT.textColor, config.layout.textColor, (v) => this.emit({ layout: { textColor: v } })), 'canvas.background.text-color'));
@@ -1064,7 +1067,7 @@ export class SettingsDialog {
 
         // ══ EVENTS — timeline-mark group visibility, a tab of its own (present only while marks name groups) ══
         if (this.markGroups.length > 0) {
-            body.append(sid(this.section(TEXT.events), MARKS_SETTINGS_ID));
+            body.append(sid(this.section(TEXT.events, 'calendar'), MARKS_SETTINGS_ID));
             body.append(sid(this.sectionTitle(TEXT.visibleEvents), MARKS_GROUPS_SETTINGS_ID));
             // Children list indented under their parent and dim while the parent is off — the
             // parent is the master switch, the child keeps its own choice for when it returns.
@@ -1172,6 +1175,15 @@ export class SettingsDialog {
                 tab.type = 'button';
                 tab.textContent = label;
                 tab.className = 'vela-sd-tab' + (child.dataset.sdSub !== undefined ? ' vela-sd-tab-sub' : '');
+                // The cards layout's strip leads each tab with its icon; a tab without one is its title alone.
+                const icon = cards ? child.dataset.sdTabIcon : undefined;
+                if (icon !== undefined && iconMarkup(icon) !== null) {
+                    const glyph = document.createElement('span');
+                    glyph.className = 'vela-sd-tab-icon';
+                    glyph.setAttribute('aria-hidden', 'true');
+                    glyph.innerHTML = iconAt(icon, 14);
+                    tab.prepend(glyph);
+                }
                 panes.push({ title, label, el, tab, style: child.dataset.sdStyle, visibility: child.dataset.sdVisibility });
                 current = el;
                 child.remove();
@@ -1286,7 +1298,8 @@ export class SettingsDialog {
      * refresher.
      */
     private chartTypeSection(typeId: string, section: ChartTypeSettingsSection, config: ChartConfig, body: HTMLElement): void {
-        const marker = this.section(section.title);
+        // A chart type's tab wears the icon its style picker entry does.
+        const marker = this.section(section.title, `style-${typeId}`);
         marker.dataset.sdStyle = typeId;
         marker.dataset.sdVisibility = section.visibility ?? 'active';
         body.append(marker);
@@ -1745,9 +1758,11 @@ export class SettingsDialog {
 
     /** A tab MARKER — the shell splits the linear build into panes at these. The tab's
      *  identity is its English title (what `section` arguments and the remembered active
-     *  tab name); it shows translated. */
-    private section(title: MessageLike): HTMLElement {
+     *  tab name); it shows translated. `icon` (an icon registry id) leads the tab in the
+     *  cards layout. */
+    private section(title: MessageLike, icon?: string): HTMLElement {
         const el = document.createElement('div');
+        if (icon) el.dataset.sdTabIcon = icon;
         el.dataset.sdTab = sourceText(title);
         el.dataset.sdTabLabel = this.t(title);
         el.style.display = 'none';

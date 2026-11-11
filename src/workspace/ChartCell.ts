@@ -895,6 +895,7 @@ export class ChartCell {
         const advanced = {
             title: TEXT.advanced,
             id: 'advanced',
+            icon: 'gear',
             placement: 'end' as const,
             rows: [
                 {
@@ -949,12 +950,13 @@ export class ChartCell {
                 },
             ],
         };
-        const sections: Array<{ title: MessageLike; rows: readonly unknown[]; placement?: 'after-symbol' | 'end' | 'symbol'; id?: string }> = [];
+        const sections: Array<{ title: MessageLike; rows: readonly unknown[]; placement?: 'after-symbol' | 'end' | 'symbol'; id?: string; icon?: string }> = [];
         if (this.statusline) {
             const sl = this.statusline;
             sections.push({
                 title: TEXT.statusLine,
                 id: 'status-line',
+                icon: 'type',
                 rows: [
                     { kind: 'heading', label: TEXT.statusLineParts, id: 'parts' },
                     {

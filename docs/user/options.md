@@ -185,6 +185,10 @@ and a **Done** button in the footer:
 new VelaWorkspace('#chart', { settings: { layout: 'cards' } });
 ```
 
+Each tab of the cards layout leads with an icon: the built-in tabs have their own, a
+chart type's tab wears its style icon, and a host section names one with `icon` (an icon
+registry id) in `setSettingsSections`. A tab without one shows its title alone.
+
 The mobile presentation is the same under both.
 
 `settings.preview: true` adds a preview column to the cards layout: a small chart of the
