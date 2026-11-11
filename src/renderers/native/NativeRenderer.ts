@@ -99,7 +99,7 @@ import { stackLayers } from './core/layerStacking';
 import { layerAbove, layerBelow, loweredZ, priceStack, raisedZ, untie, type StackEntry } from './core/overlayStack';
 import { applyAttributionMarkTheme, attributionMarkColor, createAttributionMark, createCustomMark } from './chrome/AttributionMark';
 import { rasterizeOverlay } from '../shared/dom-raster';
-import type { HostSettingsSection } from './chrome/SettingsDialog';
+import type { HostSettingsSection, SettingsPreview } from './chrome/SettingsDialog';
 import { settingsIdCatalog } from './chrome/settings-visibility';
 import { VpvrRenderer } from './vpvr/VpvrRenderer';
 import { DARK_THEME, LIGHT_THEME, registeredThemeIdOf } from '../../core/theme';
@@ -130,6 +130,7 @@ const RIGHT_AXIS_W = AXIS_MASTER_W; // px reserved on the right for one price-ax
 const AXIS_COL_W = AXIS_MERGED_W; // px width of each EXTRA merged-indicator scale column, added right of the master
 const COLLAPSED_PANE_H = 26; // px height of a collapsed pane's strip (legend + expand affordance)
 const TIME_AXIS_H = 22; // px reserved at the bottom for the time axis
+const SETTINGS_PREVIEW_BARS = 48; // bars the settings dialog's preview chart draws (the latest ones)
 // ── "scroll to most recent bar" affordance (bottom-right, shown only when the latest bar is off-screen and the cursor is nearby) ──
 // Size/border match the playground drawing-toolbar collapse toggle (`.toolbar-toggle`).
 const SCROLL_BTN_SIZE = 26; // px — width & height (`.toolbar-toggle`)
@@ -391,6 +392,8 @@ export class NativeRenderer implements IChartRenderer {
      *  state, never part of the persisted config. */
     private hiddenSettings: readonly string[] = [];
     private settingsLayout: SettingsDialogLayout = 'rail';
+    private settingsPreview = false;
+    private readonly settingsPreviewFactory = (host: HTMLElement): SettingsPreview => this.mountSettingsPreview(host);
     /** Where modal dialogs mount — a HOST override (multi-chart shells pass their root
      *  so dialogs center globally instead of clipping inside one cell). Null = the plot. */
     private dialogHost: HTMLElement | null = null;
@@ -1171,6 +1174,22 @@ export class NativeRenderer implements IChartRenderer {
         // The settings dialog commits through applyConfig — this is how host chrome
         // that mirrors a config value (bottom-bar timezone) learns about in-chart edits.
         for (const cb of this.configChangedCbs) cb();
+        this.settingsDialog?.syncPreview(next);
+    }
+
+    /**
+     * The settings dialog's preview: a second renderer on this chart's latest bars, under
+     * this chart's config, without the chrome that belongs to the chart proper.
+     */
+    private mountSettingsPreview(host: HTMLElement): SettingsPreview {
+        const chart = new NativeRenderer();
+        chart.mount(host, this.appTheme);
+        for (const feature of ['settings', 'attribution', 'keyboard', 'drawingsInteractive']) chart.applyFeature(feature, false);
+        chart.setMarketSymbol(this.scene.symbol);
+        chart.setSymbolFacts(this.symbolFacts);
+        chart.applyConfig(this.getConfig());
+        chart.setBars(this.bars.slice(-SETTINGS_PREVIEW_BARS));
+        return { update: (config) => chart.applyConfig(config), destroy: () => chart.destroy() };
     }
 
     /**
@@ -1274,6 +1293,7 @@ export class NativeRenderer implements IChartRenderer {
         );
         this.settingsDialog.setHiddenSettings(this.hiddenSettings);
         this.settingsDialog.setLayout(this.settingsLayout);
+        this.settingsDialog.setPreview(this.settingsPreview ? this.settingsPreviewFactory : null);
         this.settingsDialog.setPriceStyleState(() => ({ shown: this.scene.priceStyle, unavailable: this.unavailablePriceStyles() }));
         this.syncThemeControl();
         this.settingsDialog.toggle(
@@ -2698,8 +2718,10 @@ export class NativeRenderer implements IChartRenderer {
     setSettingsVisibility(policy: SettingsVisibilityPolicy): void {
         this.hiddenSettings = [...(policy.hidden ?? [])];
         this.settingsLayout = policy.layout ?? 'rail';
+        this.settingsPreview = policy.preview === true;
         this.settingsDialog?.setHiddenSettings(this.hiddenSettings);
         this.settingsDialog?.setLayout(this.settingsLayout);
+        this.settingsDialog?.setPreview(this.settingsPreview ? this.settingsPreviewFactory : null);
     }
 
     listSettingsIds(): string[] {

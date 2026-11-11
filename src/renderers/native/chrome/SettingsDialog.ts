@@ -59,6 +59,8 @@ const TEXT = {
     resetDefaults: msg('chart.settings.resetDefaults', 'Reset defaults'),
     done: msg('chart.settings.done', 'Done'),
     appliesInstantly: msg('chart.settings.appliesInstantly', 'Changes apply instantly'),
+    preview: msg('chart.settings.preview', 'Preview'),
+    previewNote: msg('chart.settings.previewNote', 'Scroll to zoom, drag to pan.'),
     symbol: msg('chart.settings.symbol', 'Symbol'),
     chartType: msg('chart.settings.chartType', 'Chart type'),
     type: msg('chart.settings.type', 'Type'),
@@ -319,6 +321,14 @@ ${overlayScrollbarCss('.vela-sd-pane')}
 .vela-sd-card .vela-field-section{margin-top:0;}
 .vela-sd-card .vela-field-cell{justify-content:flex-end;}
 .vela-sd-card .vela-field-cell>.vela-hint{order:-1;}
+/* The preview column: a live chart beside the cards. The panel is the query container:
+   on a host too narrow for both, the cards keep the whole width. */
+.vela-sd-cards.vela-sd-previewed{width:min(1060px,94vw);max-width:min(1060px,94vw);container-type:inline-size;}
+.vela-sd-aside{flex:0 0 38%;min-width:0;display:flex;flex-direction:column;gap:10px;padding:16px 18px;border-inline-start:1px solid ${t.border};}
+.vela-sd-aside-title{color:${t.fg.muted};font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;}
+.vela-sd-aside-chart{flex:1 1 auto;min-height:0;border:1px solid ${t.border};border-radius:${t.radius.lg};overflow:hidden;}
+.vela-sd-aside-note{color:${t.fg.muted};font-size:12px;}
+@container (max-width:900px){.vela-sd-aside{display:none;}}
 .vela-sd-foot-note{flex:1 1 auto;text-align:center;color:${t.fg.muted};font-size:12px;}
 .vela-sd-btn-primary{color:${t.surface};background:${t.fg.bright};border-color:${t.fg.bright};font-weight:600;}
 .vela-sd-btn-primary:hover{color:${t.surface};background:${t.fg};border-color:${t.fg};}
@@ -330,6 +340,16 @@ ${overlayScrollbarCss('.vela-sd-pane')}
  *  outside the presets (a 24,000-bar history on a list that stops at 20,000). */
 const selectOptionsWith = (options: readonly (readonly [string, MessageLike])[], current: string): readonly (readonly [string, MessageLike])[] =>
     options.some(([value]) => value === current) ? options : [...options, [current, current] as const];
+
+/** A live chart drawn beside the dialog's rows (see {@link SettingsDialog.setPreview}). */
+export interface SettingsPreview {
+    /** Redraw under `config` — called after every change the dialog makes. */
+    update(config: ChartConfig): void;
+    destroy(): void;
+}
+
+/** Mounts a {@link SettingsPreview} into `host`, which is attached and sized. */
+export type SettingsPreviewFactory = (host: HTMLElement) => SettingsPreview;
 
 export class SettingsDialog {
     private root: HTMLElement | null = null;
@@ -376,6 +396,50 @@ export class SettingsDialog {
         if (layout === this.layout) return;
         this.layout = layout;
         this.reopenIfLive();
+    }
+
+    private previewFactory: SettingsPreviewFactory | null = null;
+    /** The open dialog's preview column and the chart in it (mounted once the dialog shows). */
+    private preview: { el: HTMLElement; chartHost: HTMLElement; chart: SettingsPreview | null } | null = null;
+
+    /** Give the cards layout a preview column: a chart from `factory` that follows every
+     *  change made in the dialog. `null` removes it. An open dialog rebuilds. */
+    setPreview(factory: SettingsPreviewFactory | null): void {
+        if (factory === this.previewFactory) return;
+        this.previewFactory = factory;
+        this.reopenIfLive();
+    }
+
+    /** Redraw the preview under `config`. No-op without one. */
+    syncPreview(config: ChartConfig): void {
+        this.preview?.chart?.update(config);
+    }
+
+    /** The preview column of this build, created on first use and kept across rebuilds of
+     *  the panes (a reset re-seeds the rows; the chart beside them stays). */
+    private previewColumn(): HTMLElement | null {
+        if (!this.cards || !this.previewFactory) return null;
+        if (this.preview) return this.preview.el;
+        const el = document.createElement('div');
+        el.className = 'vela-sd-aside';
+        const title = document.createElement('div');
+        title.className = 'vela-sd-aside-title';
+        title.textContent = this.t(TEXT.preview);
+        const chartHost = document.createElement('div');
+        chartHost.className = 'vela-sd-aside-chart';
+        const note = document.createElement('div');
+        note.className = 'vela-sd-aside-note';
+        note.textContent = this.t(TEXT.previewNote);
+        el.append(title, chartHost, note);
+        this.preview = { el, chartHost, chart: null };
+        return el;
+    }
+
+    /** Mount the preview chart — on a SHOWN dialog, where its host has a size. */
+    private mountPreview(): void {
+        const preview = this.preview;
+        if (!preview || preview.chart || !this.previewFactory) return;
+        preview.chart = this.previewFactory(preview.chartHost);
     }
 
     /** Whether this build is laid out as cards: the layout asked for, off the mobile chrome. */
@@ -548,6 +612,7 @@ export class SettingsDialog {
         });
         if (mobile) ui.positioner.classList.add('vela-sd-mobile');
         if (this.cards) ui.panel.classList.add('vela-sd-cards');
+        if (this.cards && this.previewFactory) ui.panel.classList.add('vela-sd-previewed');
         ui.positioner.style.paddingTop = mobile ? '0' : this.cards ? '6vh' : '8vh';
 
         this.root = ui.positioner;
@@ -556,6 +621,7 @@ export class SettingsDialog {
         const panes = withKitTranslator(this.i18n?.(), () => this.buildContent(ui, config, section, mobile));
         ui.show();
         this.layoutPanes(panes);
+        this.mountPreview();
     }
 
     /**
@@ -572,6 +638,8 @@ export class SettingsDialog {
         for (const dispose of this.hintTips) dispose();
         this.hintTips = [];
         this.config = config;
+        // The preview outlives the rebuild: out of the body before its contents are disposed.
+        this.preview?.el.remove();
         disposeWithin(ui.body);
         ui.body.replaceChildren();
         this.layoutPanes(withKitTranslator(this.i18n?.(), () => this.buildContent(ui, config, this.activeSection ?? undefined, this.mobileLayout)));
@@ -1028,7 +1096,17 @@ export class SettingsDialog {
         activate(wanted >= 0 ? wanted : 0);
         this.syncTypeTabs?.(shownStyle);
 
-        shell.append(rail, paneHost);
+        const aside = this.previewColumn();
+        if (cards) {
+            // Under the tab strip: the cards, and the preview column beside them.
+            const main = document.createElement('div');
+            main.style.cssText = 'display:flex;flex:1 1 auto;min-height:0;';
+            main.append(paneHost);
+            if (aside) main.append(aside);
+            shell.append(rail, main);
+        } else {
+            shell.append(rail, paneHost);
+        }
         if (railScrim) shell.append(railScrim);
         ui.body.appendChild(shell);
         return panes.map((p) => p.el);
@@ -1044,6 +1122,8 @@ export class SettingsDialog {
         this.tabs = [];
         for (const dispose of this.hintTips) dispose(); // a tip open at close time must not outlive its row
         this.hintTips = [];
+        this.preview?.chart?.destroy();
+        this.preview = null;
         ui?.destroy();
     }
 

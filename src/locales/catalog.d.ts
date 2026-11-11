@@ -127,6 +127,8 @@ export interface VelaCoreMessageCatalog {
     'chart.settings.panMomentumHint': string;
     'chart.settings.paneSeparatorColor': string;
     'chart.settings.percent': string;
+    'chart.settings.preview': string;
+    'chart.settings.previewNote': string;
     'chart.settings.priceScale': string;
     'chart.settings.rangeChips': string;
     'chart.settings.rangeMax': string;

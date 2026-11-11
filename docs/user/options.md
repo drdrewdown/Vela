@@ -67,7 +67,7 @@ chart.data.registerProvider('binance', new BinanceProvider());
 | `downColor` | string | the theme's down color (`#f23645`, red, in the built-in themes) | Bearish candle color (native renderer). Set, it stays through theme switches. |
 | `priceStyle` | `'candles' \| 'bars' \| 'line' \| 'linemarkers' \| 'stepline' \| 'area' \| 'baseline' \| 'columns' \| 'heikinashi'`, or a registered chart-type id | `'candles'` | How the base price series is drawn (native renderer). See [Price styles](./renderer-features.md#appearance). A symbol whose source has one value per bar (`SymbolInfo.ohlc: false`) is drawn as a line with markers instead of candles, bars or Heikin Ashi; the chosen style stays and comes back on the next symbol. |
 | `drawings` | `boolean \| { toolbar?, tools?, groups? }` | **toolbar shown** | Interactive [drawing tools](./drawing-tools.md). `true`/omitted ⇒ toolbar visible; `false` ⇒ toolbar hidden (the `chart.drawings` API still works headlessly); object customizes it (see below). Capability-gated (native renderer only). |
-| `settings` | `{ hidden?: string[], layout?: 'rail' \| 'cards' }` | **all visible, `'rail'`** | Chart-settings dialog policy: setting ids to hide — a whole tab, a group, or a single row — and the dialog's layout (see below). |
+| `settings` | `{ hidden?: string[], layout?: 'rail' \| 'cards', preview?: boolean }` | **all visible, `'rail'`, no preview** | Chart-settings dialog policy: setting ids to hide — a whole tab, a group, or a single row — the dialog's layout, and its live preview (see below). |
 | `priceAxis` | `{ ticks?: (ctx) => PriceAxisTick[] \| null }` | built-in ticks | Your own price-axis ladder (native renderer): `ticks` returns each pane's ticks, and the axis labels and horizontal gridlines both follow them (see below). |
 
 \* `defaultLanguage` falls back to the first injected engine's language if you don't set it.
@@ -186,6 +186,15 @@ new VelaWorkspace('#chart', { settings: { layout: 'cards' } });
 ```
 
 The mobile presentation is the same under both.
+
+`settings.preview: true` adds a preview column to the cards layout: a small chart of the
+chart's latest bars that redraws with every change made in the dialog, so a color or a
+style can be judged without moving the dialog off the chart. It zooms and pans like any
+chart and is dropped when the host is too narrow for both columns:
+
+```js
+new VelaWorkspace('#chart', { settings: { layout: 'cards', preview: true } });
+```
 
 Ids are dot-separated paths: `<tab>`, `<tab>.<group>`, `<tab>.<group>.<row>`. Enumerate
 every addressable id of a live chart with `chart.renderer.listSettingsIds()` (plugin

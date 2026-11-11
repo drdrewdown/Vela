@@ -123,6 +123,8 @@
     "chart.settings.panMomentumHint": "Keep gliding briefly after a drag release, and ease scroll-to-latest and keyboard pans.",
     "chart.settings.paneSeparatorColor": "Panel separator color",
     "chart.settings.percent": "Percent",
+    "chart.settings.preview": "Preview",
+    "chart.settings.previewNote": "Scroll to zoom, drag to pan.",
     "chart.settings.priceScale": "Price scale",
     "chart.settings.rangeChips": "Visible range high/low labels",
     "chart.settings.rangeMax": "{label} — max",

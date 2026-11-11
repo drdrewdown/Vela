@@ -252,6 +252,9 @@ export interface SettingsVisibilityPolicy {
      *  and one column of rows. `'cards'`: tabs across the top and each titled group of
      *  rows a card, in two columns. The mobile presentation is the same under both. */
     layout?: SettingsDialogLayout;
+    /** Show a live preview beside the rows (the `'cards'` layout only): a small chart of
+     *  the latest bars that redraws with every change made in the dialog. Default off. */
+    preview?: boolean;
 }
 
 /** A settings-dialog layout (see `SettingsVisibilityPolicy.layout`). */
