@@ -36,7 +36,7 @@ import type { Pane } from '../../core/model/scene';
 import type { IndicatorModel, PaneAxisBand } from '../../core/model/indicator';
 import type { ScenePatch } from '../../core/model/patch';
 import type { InputValue, SymbolPickerFn } from '../../core/model/inputs';
-import type { RendererDisplayOptions, NativeBackend, PriceStyle, MoveTarget, ThemeId, IntroAnimation, IntroStyle, PriceAxisTicksFn, FreePanTrigger, PriceAxisSymbolTagFn, SettingsDialogLayout, SettingsTemplateStore, SettingsVisibilityPolicy } from '../../core/options';
+import type { RendererDisplayOptions, NativeBackend, PriceStyle, MoveTarget, ThemeId, IntroAnimation, IntroStyle, PriceAxisTicksFn, FreePanTrigger, PriceAxisSymbolTagFn, SettingsDialogLayout, SettingsDialogPlacement, SettingsTemplateStore, SettingsVisibilityPolicy } from '../../core/options';
 import type { SymbolFacts } from '../../core/ports/MarketDataFeed';
 import { priceStyleApplies, shownPriceStyle } from '../../chart-types/applicability';
 import {
@@ -397,6 +397,7 @@ export class NativeRenderer implements IChartRenderer {
     private hiddenSettings: readonly string[] = [];
     private settingsLayout: SettingsDialogLayout = 'rail';
     private settingsPreview = false;
+    private settingsPlacement: SettingsDialogPlacement = 'top';
     private settingsTemplates: SettingsTemplateStore | null = null;
     private readonly settingsPreviewFactory = (host: HTMLElement): SettingsPreview => this.mountSettingsPreview(host);
     /** Where modal dialogs mount — a HOST override (multi-chart shells pass their root
@@ -1315,6 +1316,7 @@ export class NativeRenderer implements IChartRenderer {
         );
         this.settingsDialog.setHiddenSettings(this.hiddenSettings);
         this.settingsDialog.setLayout(this.settingsLayout);
+        this.settingsDialog.setPlacement(this.settingsPlacement);
         this.settingsDialog.setPreview(this.settingsPreview ? this.settingsPreviewFactory : null);
         this.settingsDialog.setTemplates(this.settingsTemplates, () => this.getConfig());
         this.settingsDialog.setPriceStyleState(() => ({ shown: this.scene.priceStyle, unavailable: this.unavailablePriceStyles() }));
@@ -2767,6 +2769,8 @@ export class NativeRenderer implements IChartRenderer {
         this.hiddenSettings = [...(policy.hidden ?? [])];
         this.settingsLayout = policy.layout ?? 'rail';
         this.settingsPreview = policy.preview === true;
+        this.settingsPlacement = policy.placement ?? 'top';
+        this.settingsDialog?.setPlacement(this.settingsPlacement);
         this.settingsDialog?.setHiddenSettings(this.hiddenSettings);
         this.settingsDialog?.setLayout(this.settingsLayout);
         this.settingsDialog?.setPreview(this.settingsPreview ? this.settingsPreviewFactory : null);

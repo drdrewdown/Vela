@@ -2,7 +2,7 @@ import { msg, withValues } from '../../../core/i18n/message';
 import { sourceText, textOf } from '../../../core/i18n/text';
 import type { MessageArgs, MessageLike, Translator } from '../../../core/i18n/types';
 import { PRICE_STYLE_UNAVAILABLE, priceStyleMessage } from '../../../chart-types/labels';
-import type { VelaTheme, ThemeId, SettingsDialogLayout, SettingsTemplateStore } from '../../../core/options';
+import type { VelaTheme, ThemeId, SettingsDialogLayout, SettingsDialogPlacement, SettingsTemplateStore } from '../../../core/options';
 import { registeredThemes } from '../../../core/theme';
 import type { ChartConfig } from '../core/chartConfig';
 import {
@@ -52,6 +52,7 @@ import { DropdownMenu, type MenuItemDescriptor } from '@luxalgo/vela-ui/dropdown
 import { Input } from '@luxalgo/vela-ui/input';
 import { downloadText } from '../../../core/util/download';
 import { parseSettingsTemplates, settingsTemplatesDocument } from './settings-templates';
+import { viewportOffset } from './settings-placement';
 import { css } from '@luxalgo/vela-ui/css';
 import { disposeWithin } from '@luxalgo/vela-ui/dispose';
 import { t } from '@luxalgo/vela-ui/t';
@@ -427,6 +428,37 @@ export class SettingsDialog {
         this.reopenIfLive();
     }
 
+    private placement: SettingsDialogPlacement = 'top';
+    /** Stops following the window's size (the `'viewport'` placement of an open dialog). */
+    private offResize: (() => void) | null = null;
+
+    /** Choose where the dialog opens (`SettingsVisibilityPolicy.placement`) — an open dialog rebuilds there. */
+    setPlacement(placement: SettingsDialogPlacement): void {
+        if (placement === this.placement) return;
+        this.placement = placement;
+        this.reopenIfLive();
+    }
+
+    /**
+     * Shift a centred dialog from its host's centre to the viewport's, as far as the host
+     * allows. The positioner centres the panel in its content box, so padding one side by
+     * twice the offset moves the centre by the offset — and leaves the panel's own
+     * transform to a drag.
+     */
+    private placeOnViewport(): void {
+        const ui = this.ui;
+        if (!ui) return;
+        const s = ui.positioner.style;
+        // Measured unshifted: a padded positioner is a narrower box, and would squeeze the panel it is measuring.
+        s.padding = '0';
+        const panel = ui.panel.getBoundingClientRect();
+        const { x, y } = viewportOffset(this.container.getBoundingClientRect(), panel, { width: window.innerWidth, height: window.innerHeight });
+        s.paddingLeft = `${Math.max(0, 2 * x)}px`;
+        s.paddingRight = `${Math.max(0, -2 * x)}px`;
+        s.paddingTop = `${Math.max(0, 2 * y)}px`;
+        s.paddingBottom = `${Math.max(0, -2 * y)}px`;
+    }
+
     private previewFactory: SettingsPreviewFactory | null = null;
     /** The open dialog's preview column and the chart in it (mounted once the dialog shows). */
     private preview: { el: HTMLElement; chartHost: HTMLElement; chart: SettingsPreview | null } | null = null;
@@ -757,7 +789,7 @@ export class SettingsDialog {
             // legend, and the body-portaled popovers (color picker, select lists).
             modal: false,
             contained: true,
-            align: 'top',
+            align: mobile || this.placement === 'top' ? 'top' : 'center',
             draggable: !mobile,
             flush: true,
             variant: 'settings',
@@ -795,7 +827,8 @@ export class SettingsDialog {
         if (mobile) ui.positioner.classList.add('vela-sd-mobile');
         if (this.cards) ui.panel.classList.add('vela-sd-cards');
         if (this.cards && this.previewFactory) ui.panel.classList.add('vela-sd-previewed');
-        ui.positioner.style.paddingTop = mobile ? '0' : this.cards ? '6vh' : '8vh';
+        if (mobile) ui.positioner.style.paddingTop = '0';
+        else if (this.placement === 'top') ui.positioner.style.paddingTop = this.cards ? '6vh' : '8vh';
 
         this.root = ui.positioner;
         this.ui = ui;
@@ -804,6 +837,19 @@ export class SettingsDialog {
         ui.show();
         this.layoutPanes(panes);
         this.mountPreview();
+        if (!mobile && this.placement === 'viewport') {
+            // Placed once it has a size, and again whenever the window or the host changes size
+            // (a side panel folding away moves the host's centre without resizing the window).
+            this.placeOnViewport();
+            const onResize = (): void => this.placeOnViewport();
+            window.addEventListener('resize', onResize);
+            const hostSize = new ResizeObserver(onResize);
+            hostSize.observe(this.container);
+            this.offResize = () => {
+                window.removeEventListener('resize', onResize);
+                hostSize.disconnect();
+            };
+        }
     }
 
     /**
@@ -1308,6 +1354,8 @@ export class SettingsDialog {
         closeOpenPopovers();
         closeWidthPopover();
         const ui = this.ui;
+        this.offResize?.();
+        this.offResize = null;
         this.ui = null;
         this.root = null;
         this.toggleRail = null;

@@ -67,7 +67,7 @@ chart.data.registerProvider('binance', new BinanceProvider());
 | `downColor` | string | the theme's down color (`#f23645`, red, in the built-in themes) | Bearish candle color (native renderer). Set, it stays through theme switches. |
 | `priceStyle` | `'candles' \| 'bars' \| 'line' \| 'linemarkers' \| 'stepline' \| 'area' \| 'baseline' \| 'columns' \| 'heikinashi'`, or a registered chart-type id | `'candles'` | How the base price series is drawn (native renderer). See [Price styles](./renderer-features.md#appearance). A symbol whose source has one value per bar (`SymbolInfo.ohlc: false`) is drawn as a line with markers instead of candles, bars or Heikin Ashi; the chosen style stays and comes back on the next symbol. |
 | `drawings` | `boolean \| { toolbar?, tools?, groups? }` | **toolbar shown** | Interactive [drawing tools](./drawing-tools.md). `true`/omitted ⇒ toolbar visible; `false` ⇒ toolbar hidden (the `chart.drawings` API still works headlessly); object customizes it (see below). Capability-gated (native renderer only). |
-| `settings` | `{ hidden?: string[], layout?: 'rail' \| 'cards', preview?: boolean }` | **all visible, `'rail'`, no preview** | Chart-settings dialog policy: setting ids to hide — a whole tab, a group, or a single row — the dialog's layout, and its live preview (see below). |
+| `settings` | `{ hidden?: string[], layout?: 'rail' \| 'cards', preview?: boolean, placement?: 'top' \| 'center' \| 'viewport' }` | **all visible, `'rail'`, no preview, `'top'`** | Chart-settings dialog policy: setting ids to hide — a whole tab, a group, or a single row — the dialog's layout, and its live preview (see below). |
 | `priceAxis` | `{ ticks?: (ctx) => PriceAxisTick[] \| null, symbolTag?: (symbol) => string \| null }` | built-in ticks and tag | Your own price-axis ladder (native renderer): `ticks` returns each pane's ticks, and the axis labels and horizontal gridlines both follow them; `symbolTag` names the market on the current-price chip (see below). |
 | `freePan` | `boolean \| 'drag' \| 'alt' \| 'shift' \| 'mod' \| ((e) => boolean)` | `false` | Free panning (native renderer): dragging an auto-scaled pane unlocks manual scaling once the drag starts so one gesture pans time and price together (`true` / `'drag'` for plain left-drag, `'alt'` / `'shift'` / `'mod'` for modifier + left-drag, or a custom predicate). Seeds the `freePan` feature and `priceScale.freePan`. |
 
@@ -200,6 +200,13 @@ chart and is dropped when the host is too narrow for both columns:
 ```js
 new VelaWorkspace('#chart', { settings: { layout: 'cards', preview: true } });
 ```
+
+`settings.placement` says where the dialog opens in its host: `'top'` (the default)
+centred across it near the top, `'center'` centred in it both ways, `'viewport'` centred
+on the viewport as far as the host allows. Use `'viewport'` when the chart shares the
+page with other panels, so that the host's centre is not the screen's: the dialog moves
+toward the screen's centre and stops short of the host's edge, and follows the window
+and the host as they change size.
 
 #### Settings templates
 

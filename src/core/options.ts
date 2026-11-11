@@ -285,6 +285,11 @@ export interface SettingsVisibilityPolicy {
      *  and one column of rows. `'cards'`: tabs across the top and each titled group of
      *  rows a card, in two columns. The mobile presentation is the same under both. */
     layout?: SettingsDialogLayout;
+    /** Where the dialog opens in its host. `'top'` (default): centred across it, near its
+     *  top. `'center'`: centred in it both ways. `'viewport'`: centred on the viewport, as
+     *  far as its host allows — for a chart that shares the page with other panels, where
+     *  the host's centre is not the screen's. The mobile presentation fills its host. */
+    placement?: SettingsDialogPlacement;
     /** Show a live preview beside the rows (the `'cards'` layout only): a small chart of
      *  the latest bars that redraws with every change made in the dialog. Default off. */
     preview?: boolean;
@@ -313,6 +318,9 @@ export interface SettingsTemplateStore {
      *  Move up / Move down. */
     move?(name: string, toIndex: number): void;
 }
+
+/** Where the settings dialog opens (see `SettingsVisibilityPolicy.placement`). */
+export type SettingsDialogPlacement = 'top' | 'center' | 'viewport';
 
 /** A settings-dialog layout (see `SettingsVisibilityPolicy.layout`). */
 export type SettingsDialogLayout = 'rail' | 'cards';
