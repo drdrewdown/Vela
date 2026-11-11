@@ -43,6 +43,9 @@ export interface VelaShellOptions {
     bottombar?: boolean;
     /** The indicator-template strip in the bottom bar's middle (default true; needs the bottom bar). */
     indicatorTemplateStrip?: boolean;
+    /** The Template menu in the chart settings dialog: the chart's settings saved under a
+     *  name and applied to any chart, kept in the state document (default true). */
+    settingsTemplates?: boolean;
     /** Declarative topbar composition: `{ left, right }` lists of the VISIBLE entries,
      *  in render order — built-in ids (`'symbol'`, `'timeframes'`, `'style'`,
      *  `'layout'`, `'indicators'`, `'actions'`, `'undo-redo'`, `'alerts'`, `'panels'`,

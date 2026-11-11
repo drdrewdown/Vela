@@ -95,6 +95,23 @@ export interface IndicatorTemplate {
     updatedAt: number;
 }
 
+/** The most settings templates a document keeps — the dialog's Template menu lists them all. */
+export const MAX_SETTINGS_TEMPLATES = 20;
+
+/**
+ * One saved look: a chart's config document (`chart.renderer.getConfig()`) under a name — a
+ * SHARED preference like the indicator templates, one list per shell. Applying it is an
+ * `applyConfig` of the document on the chart whose settings dialog picked it.
+ */
+export interface SettingsTemplate {
+    name: string;
+    /** The chart config document, as `getConfig()` returned it. */
+    config: Record<string, unknown>;
+    /** Epoch milliseconds. */
+    createdAt: number;
+    updatedAt: number;
+}
+
 /** Per-chart (per-cell) state: the market, the display prefs, the content documents,
  *  and the indicator ledger. The widget's whole chart state is ONE of these. */
 export interface CellState {
@@ -173,6 +190,8 @@ export interface WorkspaceState {
     drawingTools?: DrawingToolsState;
     /** Saved indicator templates — a SHARED preference, at most {@link MAX_INDICATOR_TEMPLATES}. */
     indicatorTemplates?: IndicatorTemplate[];
+    /** Saved chart-settings templates — a SHARED preference, at most {@link MAX_SETTINGS_TEMPLATES}. */
+    settingsTemplates?: SettingsTemplate[];
     /** The docked side panels: which one is open, and the widths the user dragged. */
     panels?: PanelsState;
     /** Per-chart state, one entry per SLOT (a single `c1` entry for the widget).
@@ -243,6 +262,8 @@ export function sanitizeState(doc: unknown): WorkspaceState | null {
     if (tools) out.drawingTools = tools;
     const templates = sanitizeIndicatorTemplates(d.indicatorTemplates);
     if (templates) out.indicatorTemplates = templates;
+    const looks = sanitizeSettingsTemplates(d.settingsTemplates);
+    if (looks) out.settingsTemplates = looks;
     const sync = sanitizeSync(d.sync);
     if (sync) out.sync = sync;
     const tracks = sanitizeTrackSizes(d.trackSizes);
@@ -402,6 +423,33 @@ export function sanitizeIndicatorTemplates(raw: unknown): IndicatorTemplate[] | 
         if (typeof t.timeframe === 'string' && t.timeframe) entry.timeframe = t.timeframe;
         if (typeof t.symbol === 'string' && t.symbol) entry.symbol = t.symbol;
         out.push(entry);
+    }
+    return out.length > 0 ? out : null;
+}
+
+/** The saved settings templates, in order: an entry needs a non-empty name and a config
+ *  object (its contents are validated when it is applied, as any config document is); the
+ *  name is unique case-insensitively (the first wins); the timestamps default to now; the
+ *  list is cut at {@link MAX_SETTINGS_TEMPLATES}. Null when nothing survives. */
+export function sanitizeSettingsTemplates(raw: unknown): SettingsTemplate[] | null {
+    if (!Array.isArray(raw)) return null;
+    const out: SettingsTemplate[] = [];
+    const seen = new Set<string>();
+    for (const item of raw as unknown[]) {
+        if (out.length >= MAX_SETTINGS_TEMPLATES) break;
+        if (item == null || typeof item !== 'object') continue;
+        const t = item as Record<string, unknown>;
+        const name = typeof t.name === 'string' ? t.name.trim() : '';
+        const config = t.config;
+        if (!name || config == null || typeof config !== 'object' || Array.isArray(config) || seen.has(name.toLowerCase())) continue;
+        seen.add(name.toLowerCase());
+        const now = Date.now();
+        out.push({
+            name,
+            config: config as Record<string, unknown>,
+            createdAt: typeof t.createdAt === 'number' && Number.isFinite(t.createdAt) ? t.createdAt : now,
+            updatedAt: typeof t.updatedAt === 'number' && Number.isFinite(t.updatedAt) ? t.updatedAt : now,
+        });
     }
     return out.length > 0 ? out : null;
 }

@@ -2327,6 +2327,7 @@
     "workspace.settings.timeZoneRow": "Time zone",
     "workspace.settings.tradingSession": "Trading session",
     "workspace.settings.watermark": "Watermark",
+    "workspace.settingsTemplates.full": "{count} templates already — remove one first",
     "workspace.sync.crosshair": "Crosshair",
     "workspace.sync.interval": "Interval",
     "workspace.sync.style": "Style",

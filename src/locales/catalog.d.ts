@@ -2331,6 +2331,7 @@ export interface VelaCoreMessageCatalog {
     'workspace.settings.timeZoneRow': string;
     'workspace.settings.tradingSession': string;
     'workspace.settings.watermark': string;
+    'workspace.settingsTemplates.full': string;
     'workspace.sync.crosshair': string;
     'workspace.sync.interval': string;
     'workspace.sync.style': string;

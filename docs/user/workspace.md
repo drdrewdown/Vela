@@ -370,6 +370,23 @@ the same triplet (`getState`/`applyState`/`state:changed`) and writes the same d
 with one `c1` cell — a saved single chart drops into a grid slot as-is, and a cell's
 state restores into a single-chart shell.
 
+### Settings templates
+
+The chart settings dialog's **Template** menu (see
+[options](./options.md#settings-templates)) is on in a workspace, and the workspace keeps
+what it saves: a shared list of named chart config documents, at most 20, in the state
+document under `settingsTemplates` — saved on one chart, there on every chart.
+
+```js
+ws.saveSettingsTemplate('Night', ws.cell('c1').chart.renderer.getConfig());  // false: empty name or a full list
+ws.applySettingsTemplate('Night', { cellId: 'c2' });                        // the active cell by default
+ws.removeSettingsTemplate('Night');
+ws.settingsTemplates();                                                      // copies, in order
+ws.on('settings:templates', () => {});                                       // saved, removed or restored
+```
+
+Pass `settingsTemplates: false` to leave the dialog its Reset defaults button.
+
 ### The `persist` option and the storage interface
 
 ```ts

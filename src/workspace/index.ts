@@ -27,5 +27,5 @@ export type { LayoutDefinition, LayoutRegistration, LayoutShape, TrackSizes } fr
 export { evenTracks, resizeTracks, trackOffsets } from './splitters';
 export { syncTargets, rangesWithin } from './sync';
 export type { SyncKind, SyncSetting, SyncOptions } from './sync';
-export { encodeState, decodeState, sanitizeState, memoryStorageAdapter, MAX_INDICATOR_TEMPLATES } from './persist';
-export type { WorkspaceState, CellState, ChartState, PanelsState, DrawingToolsState, IndicatorTemplate, WorkspaceStorage } from './persist';
+export { encodeState, decodeState, sanitizeState, memoryStorageAdapter, MAX_INDICATOR_TEMPLATES, MAX_SETTINGS_TEMPLATES } from './persist';
+export type { WorkspaceState, CellState, ChartState, PanelsState, DrawingToolsState, IndicatorTemplate, SettingsTemplate, WorkspaceStorage } from './persist';

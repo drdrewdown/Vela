@@ -7,7 +7,7 @@
 // layout change — its state then round-trips through the workspace pool, so shrinking
 // 4 → 2 → 4 restores the third and fourth exactly, indicators and drawings included).
 import { Vela } from '../Vela';
-import { normalizeSession, type MarketSession, type NativeBackend, type VelaOptions, type VelaTheme } from '../core/options';
+import { normalizeSession, type MarketSession, type NativeBackend, type SettingsTemplateStore, type VelaOptions, type VelaTheme } from '../core/options';
 import type { OHLCV } from '../core/model/ohlcv';
 import type { VisibleRangePreset } from '../core/visible-range';
 import type { VisibleRange } from '../core/ports/IChartRenderer';
@@ -178,6 +178,8 @@ export interface CellDeps {
     theme: VelaTheme;
     live: boolean;
     volume: boolean;
+    /** Where the settings dialog's Template menu keeps its templates (absent: no menu). */
+    settingsTemplates?: SettingsTemplateStore;
     statusline: boolean;
     watermark: boolean;
     /** Geometry backend for cells under the current layout (the WebGL budget policy). */
@@ -429,6 +431,7 @@ export class ChartCell {
         // in-chart mark; the workspace mounts the single grid-level mark that satisfies
         // the NOTICE's equivalent-visible-attribution requirement.
         this.inner.renderer.set('attribution', false);
+        if (deps.settingsTemplates) this.inner.renderer.setSettingsTemplates(deps.settingsTemplates);
         // Modal dialogs (chart settings, indicator settings) escape the cell's
         // overflow clip and center over the whole grid.
         this.inner.renderer.set('dialogHost', deps.dialogHost);

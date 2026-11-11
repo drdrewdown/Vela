@@ -9,7 +9,7 @@
 // undo-history are per-cell; everything else is shared.
 import type { DataProvider } from '../core/ports/DataProvider';
 import type { ScriptingEngine } from '../core/ports/ScriptingEngine';
-import type { VelaTheme, NativeBackend, VelaOptions } from '../core/options';
+import type { VelaTheme, NativeBackend, SettingsTemplateStore, VelaOptions } from '../core/options';
 import type { VelaShellOptions } from '../widget/shell-options';
 import { resolveTheme } from '../core/theme';
 import { TypedEventBus } from '../core/events/EventBus';
@@ -62,7 +62,7 @@ import { registerBuiltinChartTypes } from '../chart-types/builtins';
 import { PRICE_STYLE_UNAVAILABLE } from '../chart-types/labels';
 import { parseSymbol } from '../data/ProviderRegistry';
 import { syncTargets, rangesWithin, styleConfigPatch, SYNC_KINDS, type SyncKind, type SyncOptions, type SyncSetting } from './sync';
-import { encodeState, decodeState, sanitizeState, sanitizeIndicatorTemplates, MAX_INDICATOR_TEMPLATES, type DrawingToolsState, type IndicatorTemplate, type WorkspaceState, type WorkspaceStorage } from './persist';
+import { encodeState, decodeState, sanitizeState, sanitizeIndicatorTemplates, MAX_INDICATOR_TEMPLATES, MAX_SETTINGS_TEMPLATES, type DrawingToolsState, type IndicatorTemplate, type SettingsTemplate, type WorkspaceState, type WorkspaceStorage } from './persist';
 import { getNativeIndicator } from '../core/native-indicators/NativeIndicator';
 import type { TemplateChipRow, TemplateStripOptions } from '../widget/template-strip';
 import type { IndicatorLedger } from '../widget/indicators';
@@ -78,6 +78,7 @@ import {
     type IndicatorTemplateApplyResult,
     type IndicatorTemplateSaveResult,
 } from './indicator-templates';
+import { cloneSettingsTemplate } from './settings-templates';
 import { localStorageAdapter } from '../widget/persist';
 import { ChartCell, seedDefaults, cellChartDefaults, type CellSeed, type CellBoot, type PooledCellState } from './ChartCell';
 import { buildContext, type WorkspaceWidgetContext } from './context';
@@ -188,6 +189,9 @@ export interface WorkspaceEventMap extends Record<string, unknown> {
     /** The saved indicator templates changed — saved, updated, renamed, removed, or restored
      *  with a document. Re-read `indicatorTemplates()`. */
     'indicators:templates': undefined;
+    /** The saved settings templates changed — saved, updated, removed, or restored with a
+     *  document. Re-read `settingsTemplates()`. */
+    'settings:templates': undefined;
     /** The shared drawing toolbar collapsed to its strip or expanded (the chevron or the API). */
     'drawingToolbar:collapsed': { collapsed: boolean };
     'cell:destroyed': { id: string };
@@ -304,6 +308,7 @@ export function declaredOrder(cells: Record<string, unknown> | undefined): strin
 
 const TEXT = {
     syncSymbol: msg('workspace.sync.symbol', 'Symbol'),
+    settingsTemplatesFull: msg('workspace.settingsTemplates.full', '{count} templates already — remove one first'),
     syncInterval: msg('workspace.sync.interval', 'Interval'),
     syncCrosshair: msg('workspace.sync.crosshair', 'Crosshair'),
     syncStyle: msg('workspace.sync.style', 'Style'),
@@ -466,6 +471,15 @@ export class VelaWorkspace {
     private toolTemplates: Record<string, unknown> = {};
     /** The saved indicator templates — a SHARED preference, persisted with the document. */
     private templates: IndicatorTemplate[] = [];
+    /** The saved settings templates (the chart settings dialog's Template menu). */
+    private looks: SettingsTemplate[] = [];
+    /** What every cell's settings dialog reads and writes them through. */
+    private readonly settingsTemplateStore: SettingsTemplateStore = {
+        names: () => this.looks.map((t) => t.name),
+        read: (name) => this.looks.find((t) => sameTemplateName(t.name, name))?.config ?? null,
+        save: (name, config) => this.saveSettingsTemplate(name, config),
+        remove: (name) => void this.removeSettingsTemplate(name),
+    };
     /** The host's read-only presets (`indicatorTemplates` option). */
     private readonly builtInTemplates: readonly IndicatorTemplate[];
     /** The template each cell last applied, by cell id — what a drifted chart is read against. */
@@ -610,6 +624,7 @@ export class VelaWorkspace {
             ? (sanitizeState({ version: 1, layout: '1', charts: [], indicatorTemplates: opts.indicatorTemplates })?.indicatorTemplates ?? [])
             : [];
         if (boot?.indicatorTemplates) this.templates = boot.indicatorTemplates.map(cloneTemplate);
+        if (boot?.settingsTemplates) this.looks = boot.settingsTemplates.map(cloneSettingsTemplate);
         this.timezone = boot?.timezone ?? opts.timezone ?? 'Etc/UTC';
         if (boot?.favorites) this.favs = [...boot.favorites];
         if (boot?.timeframeFavorites) this.tfFavs = [...boot.timeframeFavorites];
@@ -1321,6 +1336,7 @@ export class VelaWorkspace {
         const tools = this.drawingToolsState();
         if (tools) state.drawingTools = tools;
         if (this.templates.length > 0) state.indicatorTemplates = this.templates.map(cloneTemplate);
+        if (this.looks.length > 0) state.settingsTemplates = this.looks.map(cloneSettingsTemplate);
         if (this.trackSizes.size > 0) state.trackSizes = Object.fromEntries([...this.trackSizes].map(([k, v]) => [k, { ...v }]));
         const panels = this.dock.getState();
         if (panels) state.panels = panels;
@@ -1365,6 +1381,10 @@ export class VelaWorkspace {
             this.lastAppliedTemplate.clear();
             this.events.emit('indicators:templates', undefined);
             this.refreshTemplateStrip();
+        }
+        if (st.settingsTemplates) {
+            this.looks = st.settingsTemplates.map(cloneSettingsTemplate);
+            this.events.emit('settings:templates', undefined);
         }
         if (st.timeframeFavorites) {
             this.tfFavs = [...st.timeframeFavorites];
@@ -1645,6 +1665,59 @@ export class VelaWorkspace {
      *  the chevron's programmatic twin; `drawingToolbar:collapsed` follows either way. */
     setDrawingToolbarCollapsed(collapsed: boolean): void {
         this.drawToolbar?.setCollapsed(collapsed);
+    }
+
+    // ── Settings templates ───────────────────────────────────────────────────────────────
+
+    /** The saved settings templates, in order (copies — edit through the methods below). */
+    settingsTemplates(): SettingsTemplate[] {
+        return this.looks.map(cloneSettingsTemplate);
+    }
+
+    /**
+     * Keep a chart config document (`chart.renderer.getConfig()`) under `name`: a template of
+     * that name (case-insensitively) is replaced in place, a new one joins while the list is
+     * under {@link MAX_SETTINGS_TEMPLATES}. False for an empty name, a document that is not
+     * an object, or a full list (with a toast). The settings dialog's Save as… comes here.
+     */
+    saveSettingsTemplate(name: string, config: unknown): boolean {
+        const clean = name.trim();
+        if (!clean || config == null || typeof config !== 'object' || Array.isArray(config)) return false;
+        const now = Date.now();
+        const at = this.looks.findIndex((t) => sameTemplateName(t.name, clean));
+        if (at < 0 && this.looks.length >= MAX_SETTINGS_TEMPLATES) {
+            this.toast(this.t(TEXT.settingsTemplatesFull, { count: this.looks.length }), 'error');
+            return false;
+        }
+        const entry = cloneSettingsTemplate({ name: clean, config: config as Record<string, unknown>, createdAt: at < 0 ? now : this.looks[at]!.createdAt, updatedAt: now });
+        this.looks = at < 0 ? [...this.looks, entry] : this.looks.map((t, i) => (i === at ? entry : t));
+        this.settingsTemplatesChanged();
+        return true;
+    }
+
+    /** Apply a saved settings template to a cell's chart (the active cell's by default);
+     *  false when the name or the cell is unknown. */
+    applySettingsTemplate(name: string, opts: { cellId?: string } = {}): boolean {
+        const template = this.looks.find((t) => sameTemplateName(t.name, name));
+        const cell = opts.cellId ? this.cellsById.get(opts.cellId) : this.activeId ? this.cellsById.get(this.activeId) : undefined;
+        if (!template || !cell) return false;
+        cell.chart.renderer.applyConfig(cloneSettingsTemplate(template).config);
+        this.markStateDirty();
+        return true;
+    }
+
+    /** Drop a saved settings template; false when no template carries the name. */
+    removeSettingsTemplate(name: string): boolean {
+        const next = this.looks.filter((t) => !sameTemplateName(t.name, name));
+        if (next.length === this.looks.length) return false;
+        this.looks = next;
+        this.settingsTemplatesChanged();
+        return true;
+    }
+
+    private settingsTemplatesChanged(): void {
+        this.events.emit('settings:templates', undefined);
+        this.markStateDirty();
     }
 
     // ── Indicator templates ──────────────────────────────────────────────────────────────
@@ -2284,6 +2357,7 @@ export class VelaWorkspace {
                 theme,
                 live: this.opts.live ?? false,
                 volume: this.opts.volume ?? true,
+                ...(this.opts.settingsTemplates !== false ? { settingsTemplates: this.settingsTemplateStore } : {}),
                 statusline: this.opts.statusline !== false,
                 watermark: this.opts.watermark !== false,
                 nativeBackend: this.cellBackend,
