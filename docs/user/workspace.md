@@ -381,6 +381,10 @@ document under `settingsTemplates` — saved on one chart, there on every chart.
 ws.saveSettingsTemplate('Night', ws.cell('c1').chart.renderer.getConfig());  // false: empty name or a full list
 ws.applySettingsTemplate('Night', { cellId: 'c2' });                        // the active cell by default
 ws.removeSettingsTemplate('Night');
+ws.renameSettingsTemplate('Night', 'Dusk');                                  // false: empty or taken
+ws.moveSettingsTemplate('Dusk', 0);                                          // to the top of the menu
+const file = ws.exportSettingsTemplates();                                   // { version, settingsTemplates }
+ws.importSettingsTemplates(file, 'merge');                                   // or 'replace'; { added, replaced, rejected }
 ws.settingsTemplates();                                                      // copies, in order
 ws.on('settings:templates', () => {});                                       // saved, removed or restored
 ```

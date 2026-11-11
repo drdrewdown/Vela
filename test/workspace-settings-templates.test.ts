@@ -135,6 +135,65 @@ describe('workspace settings templates', () => {
         expect((ws.settingsTemplates()[1]!.config as { series: { spacing: number } }).series.spacing).toBe(4);
     });
 
+    it('renames a template, refusing an empty or a taken name', () => {
+        const { ws } = mount();
+        ws.saveSettingsTemplate('Night', { a: 1 });
+        ws.saveSettingsTemplate('Day', { b: 2 });
+        expect(ws.renameSettingsTemplate('night', ' Dusk ')).toBe(true);
+        expect(ws.renameSettingsTemplate('Dusk', 'DAY')).toBe(false);
+        expect(ws.renameSettingsTemplate('Dusk', '  ')).toBe(false);
+        expect(ws.renameSettingsTemplate('gone', 'x')).toBe(false);
+        expect(ws.renameSettingsTemplate('Dusk', 'DUSK')).toBe(true); // its own name in another case
+        expect(ws.settingsTemplates().map((t) => [t.name, t.config])).toEqual([['DUSK', { a: 1 }], ['Day', { b: 2 }]]);
+    });
+
+    it('moves a template within the list', () => {
+        const { ws } = mount();
+        for (const n of ['A', 'B', 'C']) ws.saveSettingsTemplate(n, {});
+        expect(ws.moveSettingsTemplate('a', 2)).toBe(true);
+        expect(names(ws)).toEqual(['B', 'C', 'A']);
+        expect(ws.moveSettingsTemplate('A', 99)).toBe(false); // already last
+        expect(ws.moveSettingsTemplate('A', -5)).toBe(true);
+        expect(names(ws)).toEqual(['A', 'B', 'C']);
+        expect(ws.moveSettingsTemplate('gone', 0)).toBe(false);
+    });
+
+    it('exports the list as a document and imports one, merging or replacing', () => {
+        const { ws } = mount();
+        ws.saveSettingsTemplate('Night', { a: 1 });
+        ws.saveSettingsTemplate('Day', { b: 2 });
+        const file = ws.exportSettingsTemplates();
+        expect((JSON.parse(file) as { version: number; settingsTemplates: Array<{ name: string }> }).settingsTemplates.map((t) => t.name)).toEqual(['Night', 'Day']);
+
+        const other = mount().ws;
+        other.saveSettingsTemplate('night', { mine: true });
+        other.saveSettingsTemplate('Keep', { c: 3 });
+        expect(other.importSettingsTemplates(file)).toEqual({ added: 1, replaced: 1, rejected: 0 });
+        expect(other.settingsTemplates().map((t) => [t.name, t.config])).toEqual([['Night', { a: 1 }], ['Keep', { c: 3 }], ['Day', { b: 2 }]]);
+        expect(other.importSettingsTemplates(file, 'replace')).toEqual({ added: 2, replaced: 0, rejected: 0 });
+        expect(names(other)).toEqual(['Night', 'Day']);
+        expect(other.importSettingsTemplates('not json')).toEqual({ added: 0, replaced: 0, rejected: 0 });
+        expect(other.importSettingsTemplates(JSON.stringify([{ name: 'Bad' }, { name: 'Good', config: {} }]))).toEqual({ added: 1, replaced: 0, rejected: 1 });
+    });
+
+    it('offers Rename and Move in every cell\'s Template menu', async () => {
+        const { ws, host } = mount();
+        ws.saveSettingsTemplate('A', {});
+        ws.saveSettingsTemplate('B', {});
+        ws.cell('c1')!.chart.renderer.openSettings();
+        host.querySelector<HTMLButtonElement>('.vela-sd-tpl-btn')!.click();
+        await tick();
+        const ids = [...document.querySelectorAll<HTMLElement>('[role=menuitem]')].map((el) => el.dataset.value);
+        expect(ids).toEqual(expect.arrayContaining(['rename:A', 'up:B', 'down:A', 'remove:B', 'import', 'export']));
+        for (const id of ['manage', 'manage:A']) {
+            document.querySelector<HTMLElement>(`[role=menuitem][data-value$="--${id}:trigger"]`)!.click();
+            await tick();
+        }
+        document.querySelector<HTMLElement>('[role=menuitem][data-value="down:A"]')!.click();
+        await tick();
+        expect(names(ws)).toEqual(['B', 'A']);
+    });
+
     it('leaves the dialog its Reset defaults button under `settingsTemplates: false`', () => {
         const { ws, host } = mount({ settingsTemplates: false });
         ws.cell('c1')!.chart.renderer.openSettings();

@@ -62,7 +62,7 @@ import { registerBuiltinChartTypes } from '../chart-types/builtins';
 import { PRICE_STYLE_UNAVAILABLE } from '../chart-types/labels';
 import { parseSymbol } from '../data/ProviderRegistry';
 import { syncTargets, rangesWithin, styleConfigPatch, SYNC_KINDS, type SyncKind, type SyncOptions, type SyncSetting } from './sync';
-import { encodeState, decodeState, sanitizeState, sanitizeIndicatorTemplates, MAX_INDICATOR_TEMPLATES, MAX_SETTINGS_TEMPLATES, type DrawingToolsState, type IndicatorTemplate, type SettingsTemplate, type WorkspaceState, type WorkspaceStorage } from './persist';
+import { encodeState, decodeState, sanitizeState, sanitizeIndicatorTemplates, MAX_INDICATOR_TEMPLATES, MAX_SETTINGS_TEMPLATES, sanitizeSettingsTemplates, type DrawingToolsState, type IndicatorTemplate, type SettingsTemplate, type WorkspaceState, type WorkspaceStorage } from './persist';
 import { getNativeIndicator } from '../core/native-indicators/NativeIndicator';
 import type { TemplateChipRow, TemplateStripOptions } from '../widget/template-strip';
 import type { IndicatorLedger } from '../widget/indicators';
@@ -479,6 +479,8 @@ export class VelaWorkspace {
         read: (name) => this.looks.find((t) => sameTemplateName(t.name, name))?.config ?? null,
         save: (name, config) => this.saveSettingsTemplate(name, config),
         remove: (name) => void this.removeSettingsTemplate(name),
+        rename: (from, to) => this.renameSettingsTemplate(from, to),
+        move: (name, toIndex) => void this.moveSettingsTemplate(name, toIndex),
     };
     /** The host's read-only presets (`indicatorTemplates` option). */
     private readonly builtInTemplates: readonly IndicatorTemplate[];
@@ -1713,6 +1715,73 @@ export class VelaWorkspace {
         this.looks = next;
         this.settingsTemplatesChanged();
         return true;
+    }
+
+    /** Rename a saved settings template; false when `from` is unknown, `to` is empty, or
+     *  `to` is another template's name (a change of case alone is a rename). */
+    renameSettingsTemplate(from: string, to: string): boolean {
+        const clean = to.trim();
+        const at = this.looks.findIndex((t) => sameTemplateName(t.name, from));
+        if (at < 0 || !clean || this.looks.some((t, i) => i !== at && sameTemplateName(t.name, clean))) return false;
+        this.looks = this.looks.map((t, i) => (i === at ? { ...t, name: clean, updatedAt: Date.now() } : t));
+        this.settingsTemplatesChanged();
+        return true;
+    }
+
+    /** Move a saved settings template to `toIndex` in the list (clamped to it); false when
+     *  the name is unknown or it is already there. */
+    moveSettingsTemplate(name: string, toIndex: number): boolean {
+        const from = this.looks.findIndex((t) => sameTemplateName(t.name, name));
+        const to = Math.max(0, Math.min(this.looks.length - 1, Math.trunc(toIndex)));
+        if (from < 0 || from === to) return false;
+        const next = [...this.looks];
+        const [entry] = next.splice(from, 1);
+        next.splice(to, 0, entry!);
+        this.looks = next;
+        this.settingsTemplatesChanged();
+        return true;
+    }
+
+    /** The saved settings templates as a JSON document (`{ version, settingsTemplates }`) —
+     *  the file the settings dialog's Export… writes, with each template's timestamps. */
+    exportSettingsTemplates(): string {
+        return JSON.stringify({ version: 1, settingsTemplates: this.looks.map(cloneSettingsTemplate) }, null, 2);
+    }
+
+    /**
+     * Read templates from such a document (or a bare list). `merge` (default) replaces a
+     * template of the same name and adds the rest while the list is under the cap;
+     * `replace` drops the current list first. Entries that are not templates, and new
+     * names past the cap, are counted as rejected.
+     */
+    importSettingsTemplates(json: string, mode: 'merge' | 'replace' = 'merge'): { added: number; replaced: number; rejected: number } {
+        let raw: unknown;
+        try {
+            raw = JSON.parse(json);
+        } catch {
+            return { added: 0, replaced: 0, rejected: 0 };
+        }
+        const list = Array.isArray(raw) ? raw : raw != null && typeof raw === 'object' ? (raw as { settingsTemplates?: unknown }).settingsTemplates : undefined;
+        if (!Array.isArray(list)) return { added: 0, replaced: 0, rejected: 0 };
+        const clean = sanitizeSettingsTemplates(list) ?? [];
+        const next = mode === 'replace' ? [] : [...this.looks];
+        let added = 0;
+        let replaced = 0;
+        for (const t of clean) {
+            const at = next.findIndex((x) => sameTemplateName(x.name, t.name));
+            if (at >= 0) {
+                next[at] = cloneSettingsTemplate(t);
+                replaced++;
+            } else if (next.length < MAX_SETTINGS_TEMPLATES) {
+                next.push(cloneSettingsTemplate(t));
+                added++;
+            }
+        }
+        if (added + replaced > 0 || mode === 'replace') {
+            this.looks = next;
+            this.settingsTemplatesChanged();
+        }
+        return { added, replaced, rejected: list.length - added - replaced };
     }
 
     private settingsTemplatesChanged(): void {
