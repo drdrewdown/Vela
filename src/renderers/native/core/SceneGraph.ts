@@ -202,6 +202,8 @@ export class SceneGraph {
     mergeChips = true;
     /** The market's display symbol (the current-price chip's ticker tag); set by the core on every series load. */
     symbol = '';
+    /** The tag a host named {@link symbol} with (`priceAxis.symbolTag`); null = the built-in tag. */
+    symbolTag: string | null = null;
     /** Comprehensive cosmetic config (item 15): grid colors, crosshair, candle
      *  border/wick, fonts, separators. Serialized via the renderer's `getConfig()`/
      *  `applyConfig()`; every draw layer reads its knobs from here, falling back to

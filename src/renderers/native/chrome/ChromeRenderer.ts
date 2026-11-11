@@ -557,10 +557,9 @@ export class ChromeRenderer {
         }
 
         // 2. Current Price Line across the chart
-        let rawSym = scene.symbol.replace(/^[a-z]+:/i, "").trim().toUpperCase(); // a provider prefix is not part of the tag
-        if (rawSym && !rawSym.startsWith("$")) rawSym = "$" + rawSym;
-        // A chart that was never told its symbol has no tag: the price box stands alone.
-        const tickerTag = rawSym;
+        // The host's name for the market, or the symbol without its provider prefix. A chart
+        // that was never told its symbol has no tag: the price box stands alone.
+        const tickerTag = scene.symbolTag ?? scene.symbol.replace(/^[a-z]+:/i, "").trim();
 
         // The chip pair, the countdown pill and the range chips paint in the theme's chrome tokens.
         const chrome = resolveChrome(theme);

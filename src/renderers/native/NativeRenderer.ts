@@ -36,7 +36,7 @@ import type { Pane } from '../../core/model/scene';
 import type { IndicatorModel, PaneAxisBand } from '../../core/model/indicator';
 import type { ScenePatch } from '../../core/model/patch';
 import type { InputValue, SymbolPickerFn } from '../../core/model/inputs';
-import type { RendererDisplayOptions, NativeBackend, PriceStyle, MoveTarget, ThemeId, IntroAnimation, IntroStyle, PriceAxisTicksFn, SettingsDialogLayout, SettingsVisibilityPolicy } from '../../core/options';
+import type { RendererDisplayOptions, NativeBackend, PriceStyle, MoveTarget, ThemeId, IntroAnimation, IntroStyle, PriceAxisTicksFn, PriceAxisSymbolTagFn, SettingsDialogLayout, SettingsVisibilityPolicy } from '../../core/options';
 import type { SymbolFacts } from '../../core/ports/MarketDataFeed';
 import { priceStyleApplies, shownPriceStyle } from '../../chart-types/applicability';
 import {
@@ -227,6 +227,8 @@ export class NativeRenderer implements IChartRenderer {
     private userDrawings: UserDrawingController | null = null;
     /** One price-axis tick source for the gridlines (backdrop) and the labels (chrome). */
     private readonly priceAxisTicks = new PriceAxisTickSource();
+    /** Names the market on the current-price chip's tag (`priceAxis.symbolTag`); null = built-in. */
+    private symbolTagHook: PriceAxisSymbolTagFn | null = null;
     private readonly backdropRenderer = new BackdropRenderer(this.priceAxisTicks);
     private readonly volumeRenderer = new VolumeRenderer();
     /** SDK renderer layers instantiated at mount ({@link registerRendererLayer}). */
@@ -459,6 +461,7 @@ export class NativeRenderer implements IChartRenderer {
             this.scene.basePainting = basePaintingOf(opts.priceStyle);
             this.scene.candleOverride = candleOverrideFor(opts.priceStyle, this.scene.style.chartTypes);
             if (typeof opts.priceAxisTicks === 'function') this.priceAxisTicks.setHook(opts.priceAxisTicks);
+            if (typeof opts.priceAxisSymbolTag === 'function') this.symbolTagHook = opts.priceAxisSymbolTag;
         }
         // Seed a theme so getConfig()/applyConfig() work before mount (mount overwrites
         // it with the real, Vela-resolved theme). Candle colors follow opts.
@@ -466,7 +469,7 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     readonly name = 'native';
-    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animScroll', 'animAutoscale', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'invertScale', 'scalePriceOnly', 'paneScales', 'autoScale', 'timezone', 'keyboard', 'historyChords', 'priceStyle', 'shownPriceStyle', 'priceBaseline', 'baselinePrice', 'previousClose', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'marks', 'indicatorTitles', 'indicatorValues', 'crosshairOverride', 'drawingsInteractive', 'priceAxisTicks', 'scaleSide', 'rangeChips', 'indicatorChips', 'mergeChips', 'legendFolded', 'drawingTooltips'];
+    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animScroll', 'animAutoscale', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'invertScale', 'scalePriceOnly', 'paneScales', 'autoScale', 'timezone', 'keyboard', 'historyChords', 'priceStyle', 'shownPriceStyle', 'priceBaseline', 'baselinePrice', 'previousClose', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'marks', 'indicatorTitles', 'indicatorValues', 'crosshairOverride', 'drawingsInteractive', 'priceAxisTicks', 'priceAxisSymbolTag', 'scaleSide', 'rangeChips', 'indicatorChips', 'mergeChips', 'legendFolded', 'drawingTooltips'];
 
     /** Apply a render feature live — mutate the field + invalidate, no engine re-run. */
     applyFeature(key: string, value: unknown): void {
@@ -644,6 +647,12 @@ export class NativeRenderer implements IChartRenderer {
                 // even the same function — drops the memoized ticks, so a host can refresh them.
                 this.priceAxisTicks.setHook(typeof value === 'function' ? (value as PriceAxisTicksFn) : null);
                 break;
+            case 'priceAxisSymbolTag':
+                // Runtime-only, like `priceAxisTicks`. Setting it renames the current symbol at once.
+                this.symbolTagHook = typeof value === 'function' ? (value as PriceAxisSymbolTagFn) : null;
+                this.refreshSymbolTag();
+                this.scheduler?.invalidate(InvalidateLevel.Chrome);
+                return;
             case 'keyboard':
                 this.setKeyboardEnabled(Boolean(value));
                 return; // owns its own DOM (focus/listeners/live region)
@@ -758,6 +767,7 @@ export class NativeRenderer implements IChartRenderer {
             case 'crosshairOverride': return this.scene.crosshairOverride ? { ...this.scene.crosshairOverride } : null;
             case 'drawingsInteractive': return this.drawingsInteractive;
             case 'priceAxisTicks': return this.priceAxisTicks.hook;
+            case 'priceAxisSymbolTag': return this.symbolTagHook;
             case 'keyboard': return this.keyboardEnabled;
             case 'historyChords': return this.historyChordsEnabled;
             case 'settings': return this.settingsEnabled;
@@ -1185,6 +1195,7 @@ export class NativeRenderer implements IChartRenderer {
         const chart = new NativeRenderer();
         chart.mount(host, this.appTheme);
         for (const feature of ['settings', 'attribution', 'keyboard', 'drawingsInteractive']) chart.applyFeature(feature, false);
+        chart.applyFeature('priceAxisSymbolTag', this.symbolTagHook);
         chart.setMarketSymbol(this.scene.symbol);
         chart.setSymbolFacts(this.symbolFacts);
         chart.applyConfig(this.getConfig());
@@ -2581,7 +2592,22 @@ export class NativeRenderer implements IChartRenderer {
     setMarketSymbol(symbol: string): void {
         if (this.scene.symbol === symbol) return;
         this.scene.symbol = symbol;
+        this.refreshSymbolTag();
         this.scheduler?.invalidate(InvalidateLevel.Chrome);
+    }
+
+    /** Ask the host's hook (`priceAxisSymbolTag`) to name the current symbol. Anything but a
+     *  string — no hook, `null`, a throw — leaves the built-in tag. */
+    private refreshSymbolTag(): void {
+        let tag: unknown = null;
+        if (this.symbolTagHook && this.scene.symbol) {
+            try {
+                tag = this.symbolTagHook(this.scene.symbol);
+            } catch (err) {
+                console.warn('[vela] the priceAxisSymbolTag function threw — the default tag is used instead.', err);
+            }
+        }
+        this.scene.symbolTag = typeof tag === 'string' ? tag.trim() : null;
     }
 
     setSymbolPicker(picker: SymbolPickerFn | null): void {

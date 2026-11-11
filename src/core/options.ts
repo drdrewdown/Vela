@@ -199,7 +199,20 @@ export interface PriceAxisOptions {
      *  changes. Returning `null`/`undefined` keeps the built-in ticks. Seeds the native
      *  renderer's runtime `priceAxisTicks` feature; `null` (the default) = built-in ticks. */
     ticks?: PriceAxisTicksFn | null;
+    /** Names the market on the current-price chip's tag. Called with the chart's symbol as
+     *  the core holds it (provider prefix included) whenever the symbol changes. Returning
+     *  `null`/`undefined` keeps the built-in tag (the symbol without its provider prefix);
+     *  an empty string draws no tag. Seeds the native renderer's runtime
+     *  `priceAxisSymbolTag` feature; `null` (the default) = the built-in tag. */
+    symbolTag?: PriceAxisSymbolTagFn | null;
 }
+
+/**
+ * Names a market on the current-price chip's tag. Return the text to draw (an empty string
+ * draws no tag), or `null`/`undefined` to keep the built-in one; a function that throws
+ * falls back to the built-in tag.
+ */
+export type PriceAxisSymbolTagFn = (symbol: string) => string | null | undefined;
 
 /** One price-axis tick: a gridline at `price` and its axis label. */
 export interface PriceAxisTick {
@@ -424,6 +437,8 @@ export interface RendererDisplayOptions {
     priceStyle: PriceStyle;
     /** Host price-axis ticks (`VelaOptions.priceAxis.ticks`); absent/null = built-in ticks. */
     priceAxisTicks?: PriceAxisTicksFn | null;
+    /** Host symbol tag (`VelaOptions.priceAxis.symbolTag`); absent/null = the built-in tag. */
+    priceAxisSymbolTag?: PriceAxisSymbolTagFn | null;
 }
 
 /**

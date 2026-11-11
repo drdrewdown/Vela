@@ -68,7 +68,7 @@ chart.data.registerProvider('binance', new BinanceProvider());
 | `priceStyle` | `'candles' \| 'bars' \| 'line' \| 'linemarkers' \| 'stepline' \| 'area' \| 'baseline' \| 'columns' \| 'heikinashi'`, or a registered chart-type id | `'candles'` | How the base price series is drawn (native renderer). See [Price styles](./renderer-features.md#appearance). A symbol whose source has one value per bar (`SymbolInfo.ohlc: false`) is drawn as a line with markers instead of candles, bars or Heikin Ashi; the chosen style stays and comes back on the next symbol. |
 | `drawings` | `boolean \| { toolbar?, tools?, groups? }` | **toolbar shown** | Interactive [drawing tools](./drawing-tools.md). `true`/omitted ⇒ toolbar visible; `false` ⇒ toolbar hidden (the `chart.drawings` API still works headlessly); object customizes it (see below). Capability-gated (native renderer only). |
 | `settings` | `{ hidden?: string[], layout?: 'rail' \| 'cards', preview?: boolean }` | **all visible, `'rail'`, no preview** | Chart-settings dialog policy: setting ids to hide — a whole tab, a group, or a single row — the dialog's layout, and its live preview (see below). |
-| `priceAxis` | `{ ticks?: (ctx) => PriceAxisTick[] \| null }` | built-in ticks | Your own price-axis ladder (native renderer): `ticks` returns each pane's ticks, and the axis labels and horizontal gridlines both follow them (see below). |
+| `priceAxis` | `{ ticks?: (ctx) => PriceAxisTick[] \| null, symbolTag?: (symbol) => string \| null }` | built-in ticks and tag | Your own price-axis ladder (native renderer): `ticks` returns each pane's ticks, and the axis labels and horizontal gridlines both follow them; `symbolTag` names the market on the current-price chip (see below). |
 
 \* `defaultLanguage` falls back to the first injected engine's language if you don't set it.
 
@@ -398,6 +398,22 @@ it later with `chart.renderer.set('priceAxisTicks', fn)` or `null` (see
 [Renderer features](./renderer-features.md#axes--scale)). A function is never part of
 `getConfig()`. On a [workspace](./workspace.md), the top-level `priceAxis` is the default
 of every cell, including cells a later layout change creates.
+
+`priceAxis.symbolTag` names the market on the tag beside the current-price chip. By
+default the tag is the chart's symbol without its provider prefix (`binance:BTCUSDT`
+reads `BTCUSDT`), and a chart with no symbol has no tag. The function receives the
+symbol as the chart holds it, prefix included, each time the symbol changes:
+
+```js
+new Vela('#chart', {
+  symbol: 'binance:BTCUSDT',
+  priceAxis: { symbolTag: (symbol) => (symbol.endsWith('BTCUSDT') ? 'Bitcoin' : null) },
+});
+```
+
+Return the text to draw, an empty string for no tag, or `null`/`undefined` to keep the
+built-in tag; a function that throws also keeps it. It seeds the runtime
+`priceAxisSymbolTag` feature (`chart.renderer.set('priceAxisSymbolTag', fn)` or `null`).
 
 ### Non-obvious defaults, called out
 

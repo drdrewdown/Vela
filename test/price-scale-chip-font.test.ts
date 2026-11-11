@@ -84,7 +84,7 @@ describe('price-scale chips share one font', () => {
             return hit!.font;
         };
         const fonts = {
-            ticker: chip((t) => t === '$MES'),
+            ticker: chip((t) => t === 'MES'),
             indicator: chip((t) => t === 'EMA9'),
             high: chip((t) => t.startsWith('H ')),
             low: chip((t) => t.startsWith('L ')),
