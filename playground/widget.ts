@@ -31,6 +31,7 @@ const ws = new VelaWorkspace('#chart', {
     symbol: 'BTCUSDT', // bare = first declared provider (binance); 'coinbase:BTC-USD' pins a venue
     timeframe: '60',
     live: true,
+    settings: { layout: new URLSearchParams(location.search).get('settings') === 'cards' ? 'cards' : 'rail' },
     theme: 'dark',
     autofocus: true, // the chart IS the page — shortcuts work from the first keystroke
     persist: 'vela-widget', // → 'vela-play:vela-widget' in devtools (the page's historical key)

@@ -79,6 +79,7 @@ export interface VelaCoreMessageCatalog {
     'chart.settings.animateZoom': string;
     'chart.settings.animateZoomHint': string;
     'chart.settings.animation': string;
+    'chart.settings.appliesInstantly': string;
     'chart.settings.area': string;
     'chart.settings.axisLabels': string;
     'chart.settings.background': string;
@@ -103,6 +104,7 @@ export interface VelaCoreMessageCatalog {
     'chart.settings.countdownToBarClose': string;
     'chart.settings.crosshair': string;
     'chart.settings.dashed': string;
+    'chart.settings.done': string;
     'chart.settings.dotted': string;
     'chart.settings.events': string;
     'chart.settings.fillBottomArea': string;

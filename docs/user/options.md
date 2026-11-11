@@ -67,7 +67,7 @@ chart.data.registerProvider('binance', new BinanceProvider());
 | `downColor` | string | the theme's down color (`#f23645`, red, in the built-in themes) | Bearish candle color (native renderer). Set, it stays through theme switches. |
 | `priceStyle` | `'candles' \| 'bars' \| 'line' \| 'linemarkers' \| 'stepline' \| 'area' \| 'baseline' \| 'columns' \| 'heikinashi'`, or a registered chart-type id | `'candles'` | How the base price series is drawn (native renderer). See [Price styles](./renderer-features.md#appearance). A symbol whose source has one value per bar (`SymbolInfo.ohlc: false`) is drawn as a line with markers instead of candles, bars or Heikin Ashi; the chosen style stays and comes back on the next symbol. |
 | `drawings` | `boolean \| { toolbar?, tools?, groups? }` | **toolbar shown** | Interactive [drawing tools](./drawing-tools.md). `true`/omitted ⇒ toolbar visible; `false` ⇒ toolbar hidden (the `chart.drawings` API still works headlessly); object customizes it (see below). Capability-gated (native renderer only). |
-| `settings` | `{ hidden?: string[] }` | **all visible** | Chart-settings dialog visibility policy: setting ids to hide — a whole tab, a group, or a single row (see below). |
+| `settings` | `{ hidden?: string[], layout?: 'rail' \| 'cards' }` | **all visible, `'rail'`** | Chart-settings dialog policy: setting ids to hide — a whole tab, a group, or a single row — and the dialog's layout (see below). |
 | `priceAxis` | `{ ticks?: (ctx) => PriceAxisTick[] \| null }` | built-in ticks | Your own price-axis ladder (native renderer): `ticks` returns each pane's ticks, and the axis labels and horizontal gridlines both follow them (see below). |
 
 \* `defaultLanguage` falls back to the first injected engine's language if you don't set it.
@@ -175,6 +175,17 @@ which is exactly what makes "force an option, hide its control" work. The policy
 instance state, not chart config: it never rides `getConfig()`/`applyConfig()` into
 exported templates. It can also be set at runtime with
 `chart.renderer.setSettingsVisibility({ hidden: [...] })`.
+
+`settings.layout` picks how the dialog arranges what is shown. `'rail'` (the default) is
+a tab rail down the side and one column of rows. `'cards'` runs the tabs across the top
+and makes each titled group of rows a card, in two columns, with on/off rows as switches
+and a **Done** button in the footer:
+
+```js
+new VelaWorkspace('#chart', { settings: { layout: 'cards' } });
+```
+
+The mobile presentation is the same under both.
 
 Ids are dot-separated paths: `<tab>`, `<tab>.<group>`, `<tab>.<group>.<row>`. Enumerate
 every addressable id of a live chart with `chart.renderer.listSettingsIds()` (plugin

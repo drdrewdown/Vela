@@ -3,6 +3,7 @@ import type { Unsubscribe } from './util/types';
 import type { WallClock } from './util/wall-clock';
 import type { SymbolPickerFn } from './model/inputs';
 import type { MessageLike } from './i18n/types';
+import type { SettingsVisibilityPolicy } from './options';
 
 /**
  * The public control surface for the active renderer — `chart.renderer`. A thin
@@ -265,9 +266,10 @@ export class RendererControl {
      * (`'canvas.grid.vertical'`); an id hides its whole subtree, and a tab with nothing
      * left disappears from the rail. Presentation-only: hidden values keep being stored
      * and applied (e.g. hide `'advanced'` while forcing the widget's `bars` option).
+     * `layout` picks the dialog's arrangement (`'rail'` when left out).
      * Seeded from `VelaOptions.settings`; silent no-op without a settings dialog.
      */
-    setSettingsVisibility(policy: { hidden?: readonly string[] }): this {
+    setSettingsVisibility(policy: SettingsVisibilityPolicy): this {
         this.renderer.setSettingsVisibility?.(policy);
         return this;
     }

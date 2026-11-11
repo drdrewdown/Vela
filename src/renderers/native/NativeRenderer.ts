@@ -36,7 +36,7 @@ import type { Pane } from '../../core/model/scene';
 import type { IndicatorModel, PaneAxisBand } from '../../core/model/indicator';
 import type { ScenePatch } from '../../core/model/patch';
 import type { InputValue, SymbolPickerFn } from '../../core/model/inputs';
-import type { RendererDisplayOptions, NativeBackend, PriceStyle, MoveTarget, ThemeId, IntroAnimation, IntroStyle, PriceAxisTicksFn } from '../../core/options';
+import type { RendererDisplayOptions, NativeBackend, PriceStyle, MoveTarget, ThemeId, IntroAnimation, IntroStyle, PriceAxisTicksFn, SettingsDialogLayout, SettingsVisibilityPolicy } from '../../core/options';
 import type { SymbolFacts } from '../../core/ports/MarketDataFeed';
 import { priceStyleApplies, shownPriceStyle } from '../../chart-types/applicability';
 import {
@@ -390,6 +390,7 @@ export class NativeRenderer implements IChartRenderer {
     /** The host's visibility policy (setting ids hidden from the dialog) — instance
      *  state, never part of the persisted config. */
     private hiddenSettings: readonly string[] = [];
+    private settingsLayout: SettingsDialogLayout = 'rail';
     /** Where modal dialogs mount — a HOST override (multi-chart shells pass their root
      *  so dialogs center globally instead of clipping inside one cell). Null = the plot. */
     private dialogHost: HTMLElement | null = null;
@@ -1272,6 +1273,7 @@ export class NativeRenderer implements IChartRenderer {
             (id) => markGroupOwnVisible(this.scene.marks.groups, id, this.scene.markGroups),
         );
         this.settingsDialog.setHiddenSettings(this.hiddenSettings);
+        this.settingsDialog.setLayout(this.settingsLayout);
         this.settingsDialog.setPriceStyleState(() => ({ shown: this.scene.priceStyle, unavailable: this.unavailablePriceStyles() }));
         this.syncThemeControl();
         this.settingsDialog.toggle(
@@ -2693,9 +2695,11 @@ export class NativeRenderer implements IChartRenderer {
         this.settingsDialog?.setHostSections(sections);
     }
 
-    setSettingsVisibility(policy: { hidden?: readonly string[] }): void {
+    setSettingsVisibility(policy: SettingsVisibilityPolicy): void {
         this.hiddenSettings = [...(policy.hidden ?? [])];
+        this.settingsLayout = policy.layout ?? 'rail';
         this.settingsDialog?.setHiddenSettings(this.hiddenSettings);
+        this.settingsDialog?.setLayout(this.settingsLayout);
     }
 
     listSettingsIds(): string[] {

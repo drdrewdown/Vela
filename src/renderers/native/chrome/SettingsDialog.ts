@@ -2,7 +2,7 @@ import { msg, withValues } from '../../../core/i18n/message';
 import { sourceText, textOf } from '../../../core/i18n/text';
 import type { MessageArgs, MessageLike, Translator } from '../../../core/i18n/types';
 import { PRICE_STYLE_UNAVAILABLE, priceStyleMessage } from '../../../chart-types/labels';
-import type { VelaTheme, ThemeId } from '../../../core/options';
+import type { VelaTheme, ThemeId, SettingsDialogLayout } from '../../../core/options';
 import { registeredThemes } from '../../../core/theme';
 import type { ChartConfig } from '../core/chartConfig';
 import {
@@ -47,6 +47,7 @@ import {
 import type { MarkGroup } from '../../../core/marks/types';
 import { markGroupRows } from '../../../core/marks/visibility';
 import { withKitTranslator } from '@luxalgo/vela-ui/kit-text';
+import { createSwitch } from '@luxalgo/vela-ui/switch';
 import { css } from '@luxalgo/vela-ui/css';
 import { disposeWithin } from '@luxalgo/vela-ui/dispose';
 import { t } from '@luxalgo/vela-ui/t';
@@ -56,6 +57,8 @@ const TEXT = {
     sections: msg('chart.settings.sections', 'Sections'),
     chartSettings: msg('chart.settings.chartSettings', 'Chart settings'),
     resetDefaults: msg('chart.settings.resetDefaults', 'Reset defaults'),
+    done: msg('chart.settings.done', 'Done'),
+    appliesInstantly: msg('chart.settings.appliesInstantly', 'Changes apply instantly'),
     symbol: msg('chart.settings.symbol', 'Symbol'),
     chartType: msg('chart.settings.chartType', 'Chart type'),
     type: msg('chart.settings.type', 'Type'),
@@ -201,7 +204,7 @@ const TEXT_STRIP = {
 };
 
 const SD_STYLE_ID = 'vela-settings-controls';
-const SD_STYLE_REV = '6';
+const SD_STYLE_REV = '7';
 
 /**
  * The dialog's surface palette. It follows the STABLE chrome surface (the tokens written on
@@ -301,6 +304,24 @@ ${overlayScrollbarCss('.vela-sd-pane')}
    column is max-content), capped so a long option still ellipsizes before the label. */
 .vela-sd-mobile .vela-select-trigger .vela-select-label{white-space:nowrap !important;}
 .vela-sd-mobile .vela-select:not([data-fill]){width:auto;min-width:100px;max-width:min(220px,55vw);}
+/* ── cards layout (.vela-sd-cards on the panel) ──
+   The tabs run across the top, each titled group of rows is a card, and the cards fill
+   two balanced columns. Inside a card the label takes the free width and the control
+   sits at the card's end edge, so the controls of a column line up. */
+.vela-sd-cards{width:min(760px,94vw);max-width:min(760px,94vw);max-height:84vh;}
+.vela-sd-cards .vela-sd-rail{flex:0 0 auto;display:flex;flex-direction:row;gap:4px;padding:10px 14px;border-bottom:1px solid ${t.border};overflow-x:auto;scrollbar-width:none;}
+.vela-sd-cards .vela-sd-rail::-webkit-scrollbar{display:none;}
+.vela-sd-cards .vela-sd-tab{flex:0 0 auto;padding:8px 14px;white-space:nowrap;}
+.vela-sd-cards .vela-sd-tab-sub{padding-inline-start:14px;}
+.vela-sd-cards .vela-sd-pane{padding:16px 18px;}
+.vela-sd-deck{columns:2 240px;column-gap:14px;}
+.vela-sd-card{break-inside:avoid;margin-bottom:14px;padding:14px 16px;background:${t.surface.sunken};border:1px solid ${t.border};border-radius:${t.radius.lg};}
+.vela-sd-card .vela-field-section{margin-top:0;}
+.vela-sd-card .vela-field-cell{justify-content:flex-end;}
+.vela-sd-card .vela-field-cell>.vela-hint{order:-1;}
+.vela-sd-foot-note{flex:1 1 auto;text-align:center;color:${t.fg.muted};font-size:12px;}
+.vela-sd-btn-primary{color:${t.surface};background:${t.fg.bright};border-color:${t.fg.bright};font-weight:600;}
+.vela-sd-btn-primary:hover{color:${t.surface};background:${t.fg};border-color:${t.fg};}
 }`;
     if (!existing) document.head.appendChild(st);
 }
@@ -348,6 +369,19 @@ export class SettingsDialog {
 
     /** The visibility policy: setting ids hidden by the host (subtree semantics). */
     private hiddenSettings: ReadonlySet<string> = new Set();
+    private layout: SettingsDialogLayout = 'rail';
+
+    /** Choose the layout (`SettingsVisibilityPolicy.layout`) — an open dialog rebuilds in it. */
+    setLayout(layout: SettingsDialogLayout): void {
+        if (layout === this.layout) return;
+        this.layout = layout;
+        this.reopenIfLive();
+    }
+
+    /** Whether this build is laid out as cards: the layout asked for, off the mobile chrome. */
+    private get cards(): boolean {
+        return this.layout === 'cards' && !this.mobileLayout;
+    }
 
     /** Host-app sections (e.g. the widget's Status line tab) — re-shown on next open. */
     setHostSections(sections: HostSettingsSection[]): void {
@@ -496,6 +530,16 @@ export class SettingsDialog {
                 resetBtn.className = 'vela-sd-btn';
                 resetBtn.addEventListener('click', () => this.onReset?.());
                 foot.appendChild(resetBtn);
+                if (!this.cards) return;
+                const note = document.createElement('span');
+                note.className = 'vela-sd-foot-note';
+                note.textContent = this.t(TEXT.appliesInstantly);
+                const doneBtn = document.createElement('button');
+                doneBtn.type = 'button';
+                doneBtn.textContent = this.t(TEXT.done);
+                doneBtn.className = 'vela-sd-btn vela-sd-btn-primary';
+                doneBtn.addEventListener('click', () => this.close());
+                foot.append(note, doneBtn);
             },
             // A close signal may only close ITS OWN dialog: the machine reports the exit
             // asynchronously, so a close-then-reopen in one tick would otherwise see the
@@ -503,7 +547,8 @@ export class SettingsDialog {
             onOpenChange: (open) => { if (!open && this.ui === ui) this.close(); },
         });
         if (mobile) ui.positioner.classList.add('vela-sd-mobile');
-        ui.positioner.style.paddingTop = mobile ? '0' : '8vh';
+        if (this.cards) ui.panel.classList.add('vela-sd-cards');
+        ui.positioner.style.paddingTop = mobile ? '0' : this.cards ? '6vh' : '8vh';
 
         this.root = ui.positioner;
         this.ui = ui;
@@ -539,7 +584,8 @@ export class SettingsDialog {
         for (const el of panes) {
             const hosts = [...el.querySelectorAll('[data-sd-rows-host]')] as HTMLElement[];
             if (hosts.length === 0) {
-                this.layoutSettingsGrids(el);
+                if (this.cards) this.layoutCards(el);
+                else this.layoutSettingsGrids(el);
                 continue;
             }
             for (const h of hosts) this.layoutSettingsGrids(h);
@@ -879,17 +925,24 @@ export class SettingsDialog {
         }
 
         // ── Split the linear sections into a left tab rail + one pane per section ──
+        const cards = this.cards;
         const shell = document.createElement('div');
         shell.style.cssText = mobile
             ? 'display:flex;min-height:0;flex:1 1 auto;position:relative;overflow:hidden;'
-            : 'display:flex;min-height:360px;max-height:calc(70vh - 100px);flex:1 1 auto;';
+            : cards
+                // A fixed height: the dialog keeps its size from tab to tab.
+                ? 'display:flex;flex-direction:column;height:min(560px,calc(84vh - 120px));flex:1 1 auto;'
+                : 'display:flex;min-height:360px;max-height:calc(70vh - 100px);flex:1 1 auto;';
         const rail = document.createElement('div');
         rail.className = 'vela-sd-rail';
         // Mobile: the class rules turn the rail into the slide-in sidebar; the inline
-        // styles here carry only its inner layout. Desktop keeps the fixed column.
-        rail.style.cssText = mobile
-            ? 'display:flex;flex-direction:column;gap:2px;padding:10px 8px;overflow-y:auto;'
-            : `flex:0 0 170px;display:flex;flex-direction:column;gap:2px;padding:10px 8px;border-right:1px solid ${SETTINGS_BORDER};overflow-y:auto;`;
+        // styles here carry only its inner layout. Desktop keeps the fixed column, and
+        // the cards layout styles its strip from the stylesheet.
+        if (!cards) {
+            rail.style.cssText = mobile
+                ? 'display:flex;flex-direction:column;gap:2px;padding:10px 8px;overflow-y:auto;'
+                : `flex:0 0 170px;display:flex;flex-direction:column;gap:2px;padding:10px 8px;border-right:1px solid ${SETTINGS_BORDER};overflow-y:auto;`;
+        }
         let railScrim: HTMLElement | null = null;
         if (mobile) {
             railScrim = document.createElement('div');
@@ -905,7 +958,11 @@ export class SettingsDialog {
         paneHost.className = 'vela-sd-pane';
         // overflow-anchor off: Chrome's scroll anchoring can jump this scroller when a
         // body-portaled popover (select list, color picker) is swapped in one gesture.
-        paneHost.style.cssText = mobile ? 'flex:1;min-width:0;overflow-y:auto;overflow-anchor:none;padding:6px 14px calc(14px + env(safe-area-inset-bottom, 0px));' : 'flex:1;overflow-y:auto;overflow-anchor:none;padding:6px 18px 14px;';
+        paneHost.style.cssText = mobile
+            ? 'flex:1;min-width:0;overflow-y:auto;overflow-anchor:none;padding:6px 14px calc(14px + env(safe-area-inset-bottom, 0px));'
+            : cards
+                ? 'flex:1;min-width:0;min-height:0;overflow-y:auto;overflow-anchor:none;'
+                : 'flex:1;overflow-y:auto;overflow-anchor:none;padding:6px 18px 14px;';
 
         const panes: Array<{ title: string; label: string; el: HTMLElement; tab: HTMLButtonElement; style?: string; visibility?: string }> = [];
         let current: HTMLElement | null = null;
@@ -1419,6 +1476,39 @@ export class SettingsDialog {
         }
     }
 
+    /**
+     * Lay a pane out as cards: every section title opens a card holding the rows up to the
+     * next title, each on its own field grid. A group (one price style's rows) becomes a
+     * card itself, so the gate that hides the group hides the card with it.
+     */
+    private layoutCards(pane: HTMLElement): void {
+        if (pane.childElementCount === 0) return;
+        const deck = document.createElement('div');
+        deck.className = 'vela-sd-deck';
+        const cardGrid = (card: HTMLElement): HTMLElement => {
+            const grid = fieldGrid({ variant: 'settings' });
+            // The label takes the free width, so every control sits at the card's end edge.
+            grid.style.gridTemplateColumns = 'minmax(0,1fr) max-content';
+            card.classList.add('vela-sd-card');
+            card.appendChild(grid);
+            deck.appendChild(card);
+            return grid;
+        };
+        let grid: HTMLElement | null = null;
+        for (const kid of [...pane.children] as HTMLElement[]) {
+            if (kid.dataset.sdGroup !== undefined) {
+                const rows = [...kid.children];
+                kid.style.display = '';
+                cardGrid(kid).append(...rows);
+                grid = null;
+                continue;
+            }
+            if (!grid || kid.classList.contains('vela-field-section')) grid = cardGrid(document.createElement('div'));
+            grid.appendChild(kid);
+        }
+        pane.appendChild(deck);
+    }
+
     /** `display:contents` groups dissolve so their children land on the pane grid. */
     private flattenGroup(group: HTMLElement, grid: HTMLElement): void {
         group.style.display = 'contents';
@@ -1482,6 +1572,11 @@ export class SettingsDialog {
     /** A toggle row: the checkbox sits to the LEFT of its label (never in the control area).
      *  `info` (see {@link hint}) rides after the label. */
     private boolRow(label: MessageLike, value: boolean, onChange: (v: boolean) => void, info?: HTMLElement): HTMLElement {
+        // In a card the row reads label first with a switch at the card's end edge.
+        if (this.cards) {
+            const sw = createSwitch({ defaultChecked: value, size: 'sm', label: this.t(label), onCheckedChange: onChange });
+            return fieldRow({ label: this.t(label), labelSize: 'sm', fit: true, info, control: sw.el, className: 'vela-sd-row' });
+        }
         return this.toggleRow(label, value, onChange, [], undefined, info);
     }
 

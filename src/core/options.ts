@@ -185,7 +185,7 @@ export interface VelaOptions extends MarketConfig, LocalizationOptions {
      *  nothing left disappears from the rail. Hiding is presentation-only: hidden
      *  values keep being stored and applied. Enumerate the addressable ids of a live
      *  chart with `chart.renderer.listSettingsIds()`; the catalog is documented in
-     *  docs/user/options.md. */
+     *  docs/user/options.md. `layout` picks how the dialog arranges what is left. */
     settings?: SettingsVisibilityPolicy;
     /** Price-axis customization (native renderer): `ticks` replaces the built-in tick
      *  ladder of every pane's price axis — labels and horizontal gridlines together. */
@@ -248,7 +248,14 @@ export type PriceAxisTicksFn = (ctx: PriceAxisTickContext) => readonly PriceAxis
 export interface SettingsVisibilityPolicy {
     /** Setting ids to hide — a tab, a group, or a row; an id hides its subtree. */
     hidden?: readonly string[];
+    /** How the dialog lays its sections out. `'rail'` (default): a tab rail down the side
+     *  and one column of rows. `'cards'`: tabs across the top and each titled group of
+     *  rows a card, in two columns. The mobile presentation is the same under both. */
+    layout?: SettingsDialogLayout;
 }
+
+/** A settings-dialog layout (see `SettingsVisibilityPolicy.layout`). */
+export type SettingsDialogLayout = 'rail' | 'cards';
 
 /**
  * Per-feature native-renderer animation settings. Every eased motion takes
