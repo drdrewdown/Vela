@@ -112,6 +112,7 @@ export interface VelaCoreMessageCatalog {
     'chart.settings.exportTemplates': string;
     'chart.settings.fillBottomArea': string;
     'chart.settings.fillTopArea': string;
+    'chart.settings.freePan': string;
     'chart.settings.grid': string;
     'chart.settings.horizontal': string;
     'chart.settings.importTemplates': string;
@@ -249,6 +250,9 @@ export interface VelaCoreMessageCatalog {
     'drawing.bat.patternName': string;
     'drawing.box.fillColor': string;
     'drawing.box.label': string;
+    'drawing.box.midline': string;
+    'drawing.box.midlineColor': string;
+    'drawing.box.midlineStyle': string;
     'drawing.butterfly.label': string;
     'drawing.butterfly.patternName': string;
     'drawing.callout.label': string;
